@@ -112,6 +112,14 @@ jobs:
       - name: Build combined debug APK
         run: ./gradlew --no-daemon :app:assembleCombinedDebug
 
+      - name: Upload debug APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: expert-record-chat-download
+          path: app/build/outputs/apk/combined/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Publish latest debug APK
         env:
           GH_TOKEN: ${{ github.token }}
