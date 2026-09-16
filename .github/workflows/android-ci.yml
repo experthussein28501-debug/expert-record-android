@@ -28,7 +28,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   tests:
@@ -112,10 +112,14 @@ jobs:
       - name: Build combined debug APK
         run: ./gradlew --no-daemon :app:assembleCombinedDebug
 
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: expert-record-combined-debug
-          path: app/build/outputs/apk/combined/debug/*.apk
-          if-no-files-found: error
-          retention-days: 14
+      - name: Publish latest debug APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find app/build/outputs/apk -type f -name '*.apk' | head -n 1)"
+          test -n "$APK"
+          cp "$APK" expert-record-debug.apk
+          gh release delete dev-latest --yes --cleanup-tag || true
+          gh release create dev-latest expert-record-debug.apk             --target "$GITHUB_SHA"             --title "Expert Record - Latest Debug APK"             --notes "Automated debug build from main."             --prerelease
