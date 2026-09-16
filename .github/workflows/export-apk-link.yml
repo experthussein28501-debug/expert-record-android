@@ -14,7 +14,7 @@ jobs:
   export:
     runs-on: ubuntu-24.04
     steps:
-      - name: Resolve private release asset
+      - name: Resolve and verify private release asset
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -22,4 +22,6 @@ jobs:
           set -euo pipefail
           API="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/assets/568593324"
           URL="$(curl -sS -L -o /dev/null -w '%{url_effective}'             -H "Authorization: Bearer ${GH_TOKEN}"             -H "Accept: application/octet-stream"             -H "X-GitHub-Api-Version: 2022-11-28"             "${API}")"
-          echo "SIGNED_APK_URL=${URL}"
+          CLEAN="${URL%%&jwt=*}"
+          echo "SIGNED_APK_URL_CLEAN=${CLEAN}"
+          curl -sS -L -o /dev/null -w 'VERIFY_HTTP=%{http_code} VERIFY_SIZE=%{size_download}\n' "${CLEAN}"
