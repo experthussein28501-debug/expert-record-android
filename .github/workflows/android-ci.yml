@@ -2,6 +2,9 @@ name: Android CI
 
 on:
   workflow_dispatch:
+  workflow_run:
+    workflows: [ "Import Source ZIP" ]
+    types: [ completed ]
   push:
     branches: [ "main" ]
     paths:
@@ -23,12 +26,15 @@ permissions:
 
 jobs:
   build:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
