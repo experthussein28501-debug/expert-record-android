@@ -1,0 +1,8 @@
+{
+  "name": "khabir-gemini-vision-proxy",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check worker.js"
+  }
+}

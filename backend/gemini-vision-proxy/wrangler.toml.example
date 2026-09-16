@@ -1,0 +1,7 @@
+name = "khabir-gemini-vision"
+main = "worker.js"
+compatibility_date = "2026-08-27"
+
+# Store these as encrypted deployment secrets, never as plain text here:
+# GEMINI_API_KEY
+# GATEWAY_BEARER_TOKEN (optional; use a stronger app-attestation layer for production)

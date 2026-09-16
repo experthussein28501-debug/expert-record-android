@@ -1,0 +1,692 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 11,
+    "identityHash": "5f7e121400a4398279690dbe839d04ea",
+    "entities": [
+      {
+        "tableName": "cases",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `incomingNo` TEXT NOT NULL, `incomingDateEpochDay` INTEGER NOT NULL, `caseNo` TEXT NOT NULL, `caseYear` TEXT NOT NULL, `court` TEXT NOT NULL, `caseType` TEXT NOT NULL, `adminNotes` TEXT NOT NULL, `createdAtEpochMillis` INTEGER NOT NULL, `updatedAtEpochMillis` INTEGER NOT NULL, `isArchived` INTEGER NOT NULL, `isDeleted` INTEGER NOT NULL, `syncVersion` INTEGER NOT NULL, `receiptDateEpochDay` INTEGER, `preliminaryJudgmentDateEpochDay` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "incomingNo",
+            "columnName": "incomingNo",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "incomingDateEpochDay",
+            "columnName": "incomingDateEpochDay",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "caseNo",
+            "columnName": "caseNo",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "caseYear",
+            "columnName": "caseYear",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "court",
+            "columnName": "court",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "caseType",
+            "columnName": "caseType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "adminNotes",
+            "columnName": "adminNotes",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtEpochMillis",
+            "columnName": "createdAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMillis",
+            "columnName": "updatedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isArchived",
+            "columnName": "isArchived",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "isDeleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncVersion",
+            "columnName": "syncVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "receiptDateEpochDay",
+            "columnName": "receiptDateEpochDay",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "preliminaryJudgmentDateEpochDay",
+            "columnName": "preliminaryJudgmentDateEpochDay",
+            "affinity": "INTEGER",
+            "notNull": false
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "parties",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `caseId` INTEGER NOT NULL, `firstName` TEXT NOT NULL, `restName` TEXT NOT NULL, `role` TEXT NOT NULL, `address` TEXT NOT NULL, `orderIndex` INTEGER NOT NULL, FOREIGN KEY(`caseId`) REFERENCES `cases`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "caseId",
+            "columnName": "caseId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "firstName",
+            "columnName": "firstName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "restName",
+            "columnName": "restName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "role",
+            "columnName": "role",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "address",
+            "columnName": "address",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "orderIndex",
+            "columnName": "orderIndex",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_parties_caseId",
+            "unique": false,
+            "columnNames": [
+              "caseId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_parties_caseId` ON `${TABLE_NAME}` (`caseId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "cases",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "caseId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "expert_profile",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `ministryOrSector` TEXT NOT NULL, `department` TEXT NOT NULL, `expertName` TEXT NOT NULL, `specialization` TEXT NOT NULL, `officeAddress` TEXT NOT NULL, `jobTitle` TEXT NOT NULL, `attendancePhrase` TEXT NOT NULL, `phone` TEXT NOT NULL, `email` TEXT NOT NULL, `updatedAtEpochMillis` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ministryOrSector",
+            "columnName": "ministryOrSector",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "department",
+            "columnName": "department",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expertName",
+            "columnName": "expertName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "specialization",
+            "columnName": "specialization",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "officeAddress",
+            "columnName": "officeAddress",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "jobTitle",
+            "columnName": "jobTitle",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attendancePhrase",
+            "columnName": "attendancePhrase",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "phone",
+            "columnName": "phone",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "email",
+            "columnName": "email",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMillis",
+            "columnName": "updatedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "notification_batches",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `appointmentDateEpochDay` INTEGER NOT NULL, `appointmentTime` TEXT NOT NULL, `appointmentLocation` TEXT NOT NULL, `requestedDocuments` TEXT NOT NULL, `expertNameSnapshot` TEXT NOT NULL, `officeAddressSnapshot` TEXT NOT NULL, `ministryOrSectorSnapshot` TEXT NOT NULL, `departmentSnapshot` TEXT NOT NULL, `expertJobTitleSnapshot` TEXT NOT NULL, `attendancePhraseSnapshot` TEXT NOT NULL, `createdAtEpochMillis` INTEGER NOT NULL, `isReprint` INTEGER NOT NULL, `sourceBatchId` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "appointmentDateEpochDay",
+            "columnName": "appointmentDateEpochDay",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "appointmentTime",
+            "columnName": "appointmentTime",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "appointmentLocation",
+            "columnName": "appointmentLocation",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requestedDocuments",
+            "columnName": "requestedDocuments",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expertNameSnapshot",
+            "columnName": "expertNameSnapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "officeAddressSnapshot",
+            "columnName": "officeAddressSnapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ministryOrSectorSnapshot",
+            "columnName": "ministryOrSectorSnapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "departmentSnapshot",
+            "columnName": "departmentSnapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expertJobTitleSnapshot",
+            "columnName": "expertJobTitleSnapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attendancePhraseSnapshot",
+            "columnName": "attendancePhraseSnapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtEpochMillis",
+            "columnName": "createdAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isReprint",
+            "columnName": "isReprint",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceBatchId",
+            "columnName": "sourceBatchId",
+            "affinity": "INTEGER",
+            "notNull": false
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "notification_recipients",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `batchId` INTEGER NOT NULL, `caseId` INTEGER, `partyId` INTEGER, `caseNoSnapshot` TEXT NOT NULL, `caseYearSnapshot` TEXT NOT NULL, `courtSnapshot` TEXT NOT NULL, `partyFirstNameSnapshot` TEXT NOT NULL, `partyRestNameSnapshot` TEXT NOT NULL, `partyRoleSnapshot` TEXT NOT NULL, `partyAddressSnapshot` TEXT NOT NULL, `plaintiffsSummarySnapshot` TEXT NOT NULL, `defendantsSummarySnapshot` TEXT NOT NULL, `orderInBatch` INTEGER NOT NULL, FOREIGN KEY(`batchId`) REFERENCES `notification_batches`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "batchId",
+            "columnName": "batchId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "caseId",
+            "columnName": "caseId",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "partyId",
+            "columnName": "partyId",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "caseNoSnapshot",
+            "columnName": "caseNoSnapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "caseYearSnapshot",
+            "columnName": "caseYearSnapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "courtSnapshot",
+            "columnName": "courtSnapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "partyFirstNameSnapshot",
+            "columnName": "partyFirstNameSnapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "partyRestNameSnapshot",
+            "columnName": "partyRestNameSnapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "partyRoleSnapshot",
+            "columnName": "partyRoleSnapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "partyAddressSnapshot",
+            "columnName": "partyAddressSnapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "plaintiffsSummarySnapshot",
+            "columnName": "plaintiffsSummarySnapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "defendantsSummarySnapshot",
+            "columnName": "defendantsSummarySnapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "orderInBatch",
+            "columnName": "orderInBatch",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_notification_recipients_batchId",
+            "unique": false,
+            "columnNames": [
+              "batchId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_notification_recipients_batchId` ON `${TABLE_NAME}` (`batchId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "notification_batches",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "batchId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "reports",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `caseId` INTEGER, `caseNo` TEXT NOT NULL, `caseYear` TEXT NOT NULL, `court` TEXT NOT NULL, `manualHeader` TEXT NOT NULL, `templateId` TEXT NOT NULL, `templateName` TEXT NOT NULL, `templateSectionsSpec` TEXT NOT NULL, `customSectionContentsSpec` TEXT NOT NULL, `partiesSummary` TEXT NOT NULL, `subjectOfCase` TEXT NOT NULL, `assignment` TEXT NOT NULL, `proceedings` TEXT NOT NULL, `partyStatements` TEXT NOT NULL, `witnessStatements` TEXT NOT NULL, `inspection` TEXT NOT NULL, `documentsSubmitted` TEXT NOT NULL, `facts` TEXT NOT NULL, `research` TEXT NOT NULL, `technicalOpinion` TEXT NOT NULL, `calculationsTable` TEXT NOT NULL, `conclusion` TEXT NOT NULL, `attachmentsNote` TEXT NOT NULL, `depositDateEpochDay` INTEGER, `createdAtEpochMillis` INTEGER NOT NULL, `updatedAtEpochMillis` INTEGER NOT NULL, FOREIGN KEY(`caseId`) REFERENCES `cases`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "caseId",
+            "columnName": "caseId",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "caseNo",
+            "columnName": "caseNo",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "caseYear",
+            "columnName": "caseYear",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "court",
+            "columnName": "court",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "manualHeader",
+            "columnName": "manualHeader",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "templateId",
+            "columnName": "templateId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "templateName",
+            "columnName": "templateName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "templateSectionsSpec",
+            "columnName": "templateSectionsSpec",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "customSectionContentsSpec",
+            "columnName": "customSectionContentsSpec",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "partiesSummary",
+            "columnName": "partiesSummary",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "subjectOfCase",
+            "columnName": "subjectOfCase",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "assignment",
+            "columnName": "assignment",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "proceedings",
+            "columnName": "proceedings",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "partyStatements",
+            "columnName": "partyStatements",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "witnessStatements",
+            "columnName": "witnessStatements",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "inspection",
+            "columnName": "inspection",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "documentsSubmitted",
+            "columnName": "documentsSubmitted",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "facts",
+            "columnName": "facts",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "research",
+            "columnName": "research",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "technicalOpinion",
+            "columnName": "technicalOpinion",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "calculationsTable",
+            "columnName": "calculationsTable",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "conclusion",
+            "columnName": "conclusion",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attachmentsNote",
+            "columnName": "attachmentsNote",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "depositDateEpochDay",
+            "columnName": "depositDateEpochDay",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "createdAtEpochMillis",
+            "columnName": "createdAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMillis",
+            "columnName": "updatedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_reports_caseId",
+            "unique": true,
+            "columnNames": [
+              "caseId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_reports_caseId` ON `${TABLE_NAME}` (`caseId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "cases",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "caseId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      }
+    ],
+    "views": [],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '5f7e121400a4398279690dbe839d04ea')"
+    ]
+  }
+}

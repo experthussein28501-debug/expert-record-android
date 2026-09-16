@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    شعار "سجل الخبير" — ملف قضية رسمي بختم نحاسي، بألوان الهوية
+    (Ink #14213D خلفية، Paper #FBF9F4 ورقة، Brass #9C7A3C ختم).
+    الختم هنا علامة صح داخل دائرة — يرمز لاعتماد السجل وتوثيقه.
+    هذا أيقونة التطبيق الرئيسي (أرشيف القضايا). report-app وnotification-app
+    يستخدمان نفس التكوين مع علامة مختلفة داخل الختم لتمييزهما بصريًا.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- الخلفية -->
+    <path android:fillColor="#14213D" android:pathData="M0,0h108v108h-108z"/>
+
+    <!-- ملف/مستند مائل قليلًا -->
+    <path
+        android:fillColor="#FBF9F4"
+        android:pathData="M28,20 L74,20 L82,28 L82,86 L28,86 Z"/>
+    <path
+        android:fillColor="#F2EEE4"
+        android:pathData="M74,20 L74,28 L82,28 Z"/>
+
+    <!-- شريط عنوان الملف -->
+    <path android:fillColor="#9C7A3C" android:pathData="M36,32h38v5h-38z"/>
+
+    <!-- أسطر نص الملف -->
+    <path android:fillColor="#3C4A63" android:pathData="M36,45h34v4h-34z"/>
+    <path android:fillColor="#3C4A63" android:pathData="M36,54h34v4h-34z"/>
+    <path android:fillColor="#3C4A63" android:pathData="M36,63h22v4h-22z"/>
+
+    <!-- الختم النحاسي -->
+    <path
+        android:fillColor="#9C7A3C"
+        android:pathData="M77,63m-15,0a15,15 0,1 1,30 0a15,15 0,1 1,-30 0"/>
+    <path
+        android:fillColor="#14213D"
+        android:pathData="M77,63m-11,0a11,11 0,1 1,22 0a11,11 0,1 1,-22 0"/>
+
+    <!-- علامة الاعتماد داخل الختم -->
+    <path
+        android:fillColor="#F1E6CE"
+        android:pathData="M70,63.5 L75,68.5 L85,56.5 L82.5,54.3 L75,63.3 L72.3,60.6 Z"/>
+
+    <!-- ذيلا الشريط أسفل الختم -->
+    <path android:fillColor="#6E5527" android:pathData="M69,76 L77,71 L73,84 Z"/>
+    <path android:fillColor="#6E5527" android:pathData="M85,76 L77,71 L81,84 Z"/>
+</vector>

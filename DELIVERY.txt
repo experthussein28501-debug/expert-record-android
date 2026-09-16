@@ -1,0 +1,10 @@
+Source revision: 986cd5de16463372eda5e180630e63ad2b06ac79
+APK: khabir-integrated-0.9.0-optimized.apk
+Package: com.khabir.app.combined.trial
+Size: 37287103 bytes
+SHA256: 207071eedcf68bd680fa8a3980b7aa63c115ccd4c42393d1db41749a91fcc5c5
+CI run: 34773582271, SUCCESS
+Verified: unit tests, activation service tests, optimized UI navigation, offline Arabic OCR on the optimized APK, unchanged APK after instrumentation, Android v2 signature.
+All 21 native-library and OCR-model files match version 0.8.0 byte-for-byte.
+Camera, microphone and live AI-provider requests still require device/account testing.
+Build with JDK 17, Android SDK 36 and Gradle 8.13. Restore ci-assets/ara.traineddata.gz to app/src/main/assets/tessdata/ara.traineddata, then run: gradle -PKHABIR_TEST_BUILD_TYPE=trial :app:assembleCombinedTrial
