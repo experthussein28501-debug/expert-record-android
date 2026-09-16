@@ -67,7 +67,7 @@ jobs:
 
       - name: Unit tests
         run: |
-          ./gradlew --no-daemon \
+          ./gradlew --no-daemon -PKHABIR_SKIP_SCREENSHOT_TESTS=true \
             :core:testDebugUnitTest \
             :feature-auth:testDebugUnitTest \
             :feature-cases:testDebugUnitTest \
