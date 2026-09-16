@@ -21,6 +21,10 @@ on:
   pull_request:
     branches: [ "main" ]
 
+concurrency:
+  group: android-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -61,7 +65,14 @@ jobs:
         run: chmod +x gradlew
 
       - name: Unit tests
-        run: ./gradlew --no-daemon test
+        run: |
+          ./gradlew --no-daemon \
+            :core:testDebugUnitTest \
+            :feature-auth:testDebugUnitTest \
+            :feature-cases:testDebugUnitTest \
+            :feature-notifications:testDebugUnitTest \
+            :feature-reports:testDebugUnitTest \
+            :app:testCombinedDebugUnitTest
 
       - name: Build combined debug APK
         run: ./gradlew --no-daemon :app:assembleCombinedDebug
