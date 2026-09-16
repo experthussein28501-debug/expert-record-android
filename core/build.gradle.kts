@@ -1,6 +1,7 @@
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.dagger.hilt.android")
     id("com.google.devtools.ksp")
     id("app.cash.paparazzi")
@@ -20,7 +21,6 @@ android {
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true; buildConfig = true }
-    composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
     testOptions.unitTests.isIncludeAndroidResources = true
 }
 ksp { arg("room.schemaLocation", "$projectDir/schemas") }
