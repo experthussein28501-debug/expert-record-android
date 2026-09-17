@@ -8,6 +8,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.khabir.agenda.AgendaScreen
 import com.khabir.app.BuildConfig
 import com.khabir.app.data.auth.EntryGateStore
 import com.khabir.app.presentation.archive.ArchiveHomeScreen
@@ -31,6 +32,7 @@ private object Routes {
     const val CASE_FORM = "cases/form?caseId={caseId}"
     const val NOTIFICATIONS = "notifications"
     const val REGISTERS = "registers"
+    const val AGENDA = "agenda"
     const val EXPERT_PROFILE = "settings/expert-profile"
     const val BACKUP = "settings/backup"
     const val REPORTS_HUB = "reports"
@@ -89,6 +91,7 @@ fun KhabirNavHost() {
                     onOpenReports = { navController.navigate(Routes.REPORTS_HUB) },
                     onOpenRegisters = { navController.navigate(Routes.REGISTERS) },
                     onOpenWorkMinutes = { navController.navigate(Routes.WORK_MINUTES_HUB) },
+                    onOpenAgenda = { navController.navigate(Routes.AGENDA) },
                     onOpenExpertProfile = { navController.navigate(Routes.EXPERT_PROFILE) },
                     onOpenBackup = { navController.navigate(Routes.BACKUP) },
                     notificationsEnabled = notificationsEnabled,
@@ -127,6 +130,8 @@ fun KhabirNavHost() {
                 CompleteNotificationBatchScreen(onBack = { navController.popBackStack() })
             }
         }
+
+        composable(Routes.AGENDA) { AgendaScreen(onBack = { navController.popBackStack() }) }
 
         composable(Routes.EXPERT_PROFILE) {
             ExpertProfileScreen(
