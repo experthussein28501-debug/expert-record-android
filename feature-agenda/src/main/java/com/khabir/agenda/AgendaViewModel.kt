@@ -65,7 +65,8 @@ class AgendaViewModel @Inject constructor(
                             AgendaEvent(
                                 date = date,
                                 title = caseLabel(record.caseNo, record.caseYear),
-                                location = record.court,
+                                time = entry.scheduledFollowUpTime,
+                                location = entry.scheduledFollowUpLocation.ifBlank { record.court },
                                 details = "موعد تالٍ مثبت بمحضر الأعمال رقم ${entry.number}",
                                 source = AgendaEventSource.WORK_MINUTES
                             )
