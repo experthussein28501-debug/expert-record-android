@@ -14,13 +14,13 @@ import com.khabir.app.presentation.archive.ArchiveHomeScreen
 import com.khabir.app.presentation.auth.LoginScreen
 import com.khabir.app.presentation.cases.CaseFormScreen
 import com.khabir.app.presentation.cases.CaseListScreen
-import com.khabir.app.presentation.home.HomeScreen
+import com.khabir.app.presentation.home.CompleteHomeScreen
 import com.khabir.app.presentation.notifications.NotificationBatchScreen
 import com.khabir.app.presentation.registers.RegisterScreen
 import com.khabir.app.presentation.reports.ReportScreen
 import com.khabir.app.presentation.reports.ReportsHubScreen
-import com.khabir.app.presentation.settings.ExpertProfileScreen
 import com.khabir.app.presentation.settings.BackupScreen
+import com.khabir.app.presentation.settings.ExpertProfileScreen
 import com.khabir.app.presentation.workminutes.WorkMinutesHubScreen
 import com.khabir.app.presentation.workminutes.WorkMinutesScreen
 
@@ -52,10 +52,10 @@ fun KhabirNavHost() {
     val entryGate = remember(context) { EntryGateStore(context.applicationContext) }
     val moduleMode = BuildConfig.MODULE_MODE
     val archiveOnly = moduleMode == "ARCHIVE"
-    val combinedMode = moduleMode == "COMBINED"
     val notificationsEnabled = notificationsEnabledFor(moduleMode)
     val reportsEnabled = reportsEnabledFor(moduleMode)
     val startDestination = remember { if (entryGate.hasPassedGate()) Routes.HOME else Routes.LOGIN }
+
     fun enterApp(markPassed: () -> Unit) {
         markPassed()
         navController.navigate(Routes.HOME) {
@@ -63,6 +63,7 @@ fun KhabirNavHost() {
             launchSingleTop = true
         }
     }
+
     NavHost(navController = navController, startDestination = startDestination) {
         composable(Routes.LOGIN) {
             LoginScreen(
@@ -71,6 +72,7 @@ fun KhabirNavHost() {
                 onActivationSuccess = { enterApp(entryGate::markActivated) }
             )
         }
+
         composable(Routes.HOME) {
             if (archiveOnly) {
                 ArchiveHomeScreen(
@@ -80,21 +82,21 @@ fun KhabirNavHost() {
                     onOpenBackup = { navController.navigate(Routes.BACKUP) }
                 )
             } else {
-                HomeScreen(
+                CompleteHomeScreen(
                     onOpenCases = { navController.navigate(Routes.CASE_LIST) },
                     onNewCase = { navController.navigate(Routes.caseForm(0L)) },
                     onOpenNotifications = { navController.navigate(Routes.NOTIFICATIONS) },
                     onOpenReports = { navController.navigate(Routes.REPORTS_HUB) },
                     onOpenRegisters = { navController.navigate(Routes.REGISTERS) },
+                    onOpenWorkMinutes = { navController.navigate(Routes.WORK_MINUTES_HUB) },
                     onOpenExpertProfile = { navController.navigate(Routes.EXPERT_PROFILE) },
                     onOpenBackup = { navController.navigate(Routes.BACKUP) },
-                    stageOneOnly = false,
-                    combinedMode = combinedMode,
                     notificationsEnabled = notificationsEnabled,
                     reportsEnabled = reportsEnabled
                 )
             }
         }
+
         composable(Routes.CASE_LIST) {
             CaseListScreen(
                 onBack = { navController.popBackStack() },
@@ -107,6 +109,7 @@ fun KhabirNavHost() {
                 showNotificationsAction = notificationsEnabled
             )
         }
+
         composable(
             route = Routes.CASE_FORM,
             arguments = listOf(navArgument("caseId") { type = NavType.LongType; defaultValue = 0L })
@@ -118,9 +121,13 @@ fun KhabirNavHost() {
                 showReportAction = reportsEnabled
             )
         }
+
         if (notificationsEnabled) {
-            composable(Routes.NOTIFICATIONS) { NotificationBatchScreen(onBack = { navController.popBackStack() }) }
+            composable(Routes.NOTIFICATIONS) {
+                NotificationBatchScreen(onBack = { navController.popBackStack() })
+            }
         }
+
         composable(Routes.EXPERT_PROFILE) {
             ExpertProfileScreen(
                 onBack = { navController.popBackStack() },
@@ -133,27 +140,30 @@ fun KhabirNavHost() {
                 }
             )
         }
+
         composable(Routes.BACKUP) { BackupScreen(onBack = { navController.popBackStack() }) }
         composable(Routes.REGISTERS) { RegisterScreen(onBack = { navController.popBackStack() }) }
+
         if (reportsEnabled) {
-        composable(Routes.REPORTS_HUB) {
-            ReportsHubScreen(
-                onBack = { navController.popBackStack() },
-                onOpenRegisteredReport = { caseId -> navController.navigate(Routes.reportForCase(caseId)) },
-                onOpenSavedReport = { reportId -> navController.navigate(Routes.independentReport(reportId)) },
-                onStartIndependentReport = { navController.navigate(Routes.independentReport()) }
-            )
+            composable(Routes.REPORTS_HUB) {
+                ReportsHubScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenRegisteredReport = { caseId -> navController.navigate(Routes.reportForCase(caseId)) },
+                    onOpenSavedReport = { reportId -> navController.navigate(Routes.independentReport(reportId)) },
+                    onStartIndependentReport = { navController.navigate(Routes.independentReport()) }
+                )
+            }
+            composable(
+                route = Routes.REPORT_EDITOR,
+                arguments = listOf(
+                    navArgument("reportId") { type = NavType.LongType; defaultValue = 0L },
+                    navArgument("caseId") { type = NavType.LongType; defaultValue = 0L }
+                )
+            ) {
+                ReportScreen(onBack = { navController.popBackStack() })
+            }
         }
-        composable(
-            route = Routes.REPORT_EDITOR,
-            arguments = listOf(
-                navArgument("reportId") { type = NavType.LongType; defaultValue = 0L },
-                navArgument("caseId") { type = NavType.LongType; defaultValue = 0L }
-            )
-        ) {
-            ReportScreen(onBack = { navController.popBackStack() })
-        }
-        }
+
         composable(Routes.WORK_MINUTES_HUB) {
             WorkMinutesHubScreen(
                 onBack = { navController.popBackStack() },
@@ -162,6 +172,7 @@ fun KhabirNavHost() {
                 onStartIndependentRecord = { navController.navigate(Routes.independentWorkMinutes()) }
             )
         }
+
         composable(
             route = Routes.WORK_MINUTES_EDITOR,
             arguments = listOf(
@@ -173,7 +184,6 @@ fun KhabirNavHost() {
         }
     }
 }
-
 
 internal fun notificationsEnabledFor(moduleMode: String): Boolean =
     moduleMode in setOf("COMBINED", "NOTIFICATIONS", "SIRKIS")
