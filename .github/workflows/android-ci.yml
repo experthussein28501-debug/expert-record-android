@@ -76,6 +76,7 @@ jobs:
               :feature-cases:testDebugUnitTest \
               :feature-notifications:testDebugUnitTest \
               :feature-reports:testDebugUnitTest \
+              :feature-agenda:testDebugUnitTest \
               :app:testCombinedDebugUnitTest; then
               exit 0
             fi
