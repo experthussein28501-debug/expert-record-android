@@ -1,7 +1,5 @@
 package com.khabir.app.presentation.settings
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -27,12 +25,6 @@ fun ExpertProfileScreen(
     viewModel: ExpertProfileViewModel = hiltViewModel()
 ) {
     val s by viewModel.uiState.collectAsState()
-    val createBackupLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/octet-stream")
-    ) { uri -> uri?.let(viewModel::exportBackup) }
-    val restoreBackupLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri -> uri?.let(viewModel::restoreBackup) }
 
     Scaffold(
         topBar = {
@@ -70,6 +62,7 @@ fun ExpertProfileScreen(
                 label = { Text("عبارة الحضور إلى المكتب") },
                 minLines = 2
             )
+
             KhabirSectionHeader("مزود الذكاء الاصطناعي")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AiProvider.entries.forEach { provider ->
@@ -117,6 +110,7 @@ fun ExpertProfileScreen(
             if (s.hasPersonalAiKey) {
                 KhabirSecondaryButton(text = "حذف المفتاح الشخصي", onClick = viewModel::clearPersonalAiKey)
             }
+
             HorizontalDivider(Modifier.padding(top = 8.dp))
             KhabirSectionHeader("تعليمات إضافية للذكاء الاصطناعي — اختيارية")
             Text(
@@ -130,6 +124,7 @@ fun ExpertProfileScreen(
                 placeholder = { Text("مثال: عند بحث المستندات اذكر تاريخ كل مستند وما يثبته، ولا تكتب رأيًا فنيًا قبل طلبه.") },
                 minLines = 5
             )
+
             val validationMessage = s.validationMessage
             if (validationMessage != null) {
                 Text(validationMessage, color = MaterialTheme.colorScheme.error)
@@ -144,51 +139,10 @@ fun ExpertProfileScreen(
             }
 
             HorizontalDivider(Modifier.padding(top = 8.dp))
-            KhabirSectionHeader("نسخة احتياطية شخصية مشفرة")
             Text(
-                "تُحفظ القضايا والتقارير ومحاضر الأعمال والإخطارات وبيانات الخبير والرسومات في ملف مشفر بكلمة مرور. عند اختيار مكان الحفظ يمكنك اختيار Google Drive أو OneDrive أو Dropbox أو ذاكرة الهاتف من شاشة أندرويد نفسها؛ التطبيق لا يحتفظ بحساب سحابي مركزي.",
+                "النسخ الاحتياطي المشفر موجود في شاشة مستقلة من الصفحة الرئيسية حتى تظل بيانات الخبير مركزة ولا تتكرر نفس الوظيفة في مكانين.",
                 style = MaterialTheme.typography.bodySmall
             )
-            Text(
-                "مفتاح الذكاء الاصطناعي الشخصي لا يُنسخ إلى النسخة الاحتياطية لأسباب أمنية، ويُدخل من جديد عند تغيير الهاتف.",
-                style = MaterialTheme.typography.bodySmall
-            )
-            KhabirTextField(
-                value = s.backupPassword,
-                onValueChange = viewModel::onBackupPasswordChanged,
-                label = { Text("كلمة مرور النسخة الاحتياطية") },
-                placeholder = { Text("6 أحرف على الأقل — لا يمكن استرجاعها إذا نُسيت") },
-                visualTransformation = PasswordVisualTransformation(),
-                singleLine = true
-            )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = { createBackupLauncher.launch("سجل_الخبير_نسخة_احتياطية.khabirbackup") },
-                    enabled = !s.isBackupWorking && s.backupPassword.length >= 6,
-                    modifier = Modifier.weight(1f)
-                ) { Text(if (s.isBackupWorking) "جارٍ التنفيذ..." else "حفظ نسخة") }
-                OutlinedButton(
-                    onClick = { restoreBackupLauncher.launch(arrayOf("application/octet-stream", "application/zip", "*/*")) },
-                    enabled = !s.isBackupWorking && s.backupPassword.isNotBlank(),
-                    modifier = Modifier.weight(1f)
-                ) { Text("استعادة نسخة") }
-            }
-            s.backupMessage?.let { message ->
-                Text(
-                    message,
-                    color = if (message.contains("تعذر") || message.contains("غير صحيحة") || message.contains("تالف")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-            if (s.backupRestartRequired) {
-                Text(
-                    "لإكمال الاستعادة: أغلق سجل الخبير من التطبيقات الحديثة ثم افتحه مرة أخرى. يتم استبدال البيانات قبل فتح قاعدة البيانات.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.tertiary
-                )
-            }
-
-            HorizontalDivider(Modifier.padding(top = 8.dp))
             KhabirSecondaryButton(text = "إظهار شاشة تسجيل الدخول مرة أخرى", onClick = onShowLoginAgain)
         }
     }
