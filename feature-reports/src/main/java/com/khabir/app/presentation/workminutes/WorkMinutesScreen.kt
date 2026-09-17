@@ -1,6 +1,8 @@
 package com.khabir.app.presentation.workminutes
 
 import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -32,6 +34,8 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
+private const val WORD_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WorkMinutesScreen(onBack: () -> Unit, viewModel: WorkMinutesViewModel = hiltViewModel()) {
@@ -40,12 +44,22 @@ fun WorkMinutesScreen(onBack: () -> Unit, viewModel: WorkMinutesViewModel = hilt
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     val screenHeightDp = LocalConfiguration.current.screenHeightDp.dp
+    var fileMenuExpanded by remember { mutableStateOf(false) }
+
+    val smartTemplateLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            viewModel.onSelectWordTemplate(it)
+        }
+    }
 
     LaunchedEffect(state.exportedFileUri) {
         val uri = state.exportedFileUri ?: return@LaunchedEffect
         runCatching {
             context.startActivity(Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                setDataAndType(uri, WORD_MIME)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
             })
         }
@@ -133,12 +147,77 @@ fun WorkMinutesScreen(onBack: () -> Unit, viewModel: WorkMinutesViewModel = hilt
                 onClick = viewModel::onExport,
                 enabled = !state.isExporting && state.entries.isNotEmpty()
             )
+            Box {
+                OutlinedButton(
+                    onClick = { fileMenuExpanded = true },
+                    enabled = !state.isExporting && state.entries.isNotEmpty(),
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("استخدام قالب Word خارجي") }
+                DropdownMenu(expanded = fileMenuExpanded, onDismissRequest = { fileMenuExpanded = false }) {
+                    DropdownMenuItem(
+                        text = { Text("تعبئة قالب Word بنفس التنسيق") },
+                        onClick = { fileMenuExpanded = false; smartTemplateLauncher.launch(arrayOf(WORD_MIME)) }
+                    )
+                    if (state.savedWordTemplateUri.isNotBlank()) {
+                        DropdownMenuItem(
+                            text = { Text("استخدام قالبي الشخصي لمحاضر الأعمال") },
+                            onClick = { fileMenuExpanded = false; viewModel.onUseSavedWordTemplate() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("حذف القالب الشخصي") },
+                            onClick = { fileMenuExpanded = false; viewModel.onForgetWordTemplate() }
+                        )
+                    }
+                }
+            }
             if (state.autoSaveStatus.isNotBlank()) {
                 Text(state.autoSaveStatus, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
             }
             Spacer(Modifier.height(24.dp))
         }
     }
+
+    state.pendingTemplateUri?.let {
+        WorkMinutesTemplateMappingDialog(uriKey = it, state = state, viewModel = viewModel)
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun WorkMinutesTemplateMappingDialog(uriKey: Any, state: WorkMinutesUiState, viewModel: WorkMinutesViewModel) {
+    var mapping by remember(uriKey) { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var selectedField by remember(uriKey) { mutableStateOf("محاضر الأعمال") }
+    val knownFields = listOf(
+        "محاضر الأعمال", "رقم الدعوى", "السنة", "المحكمة", "المرفوعة من", "ضد", "الوارد", "اسم الخبير", "القطاع", "الإدارة"
+    )
+    AlertDialog(
+        onDismissRequest = viewModel::onCancelTemplateMapping,
+        title = { Text("تحويل نموذج Word إلى قالب محاضر أعمال") },
+        text = {
+            Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState())) {
+                Text("اختر اسم الحقل ثم اضغط الفقرة القديمة التي تريد استبدالها به. باقي النموذج يبقى كما هو. راجع أي بيانات قديمة قبل مشاركة الناتج.")
+                KhabirTextField(selectedField, { selectedField = it }, label = { Text("اسم الحقل") })
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    knownFields.forEach { field ->
+                        TextButton(onClick = { selectedField = field }) { Text(field) }
+                    }
+                }
+                state.templateParagraphs.distinct().forEach { paragraph ->
+                    OutlinedButton(onClick = {
+                        mapping = if (mapping.containsKey(paragraph)) mapping - paragraph
+                        else mapping + (paragraph to selectedField.trim())
+                    }, modifier = Modifier.fillMaxWidth()) {
+                        Text((mapping[paragraph]?.let { field -> "[$field] " } ?: "") + paragraph)
+                    }
+                }
+            }
+        },
+        confirmButton = { Button(enabled = mapping.isNotEmpty(), onClick = { viewModel.onApplyTemplateMapping(mapping) }) { Text("اعتماد الربط وتعبئة نسخة") } },
+        dismissButton = { TextButton(onClick = viewModel::onCancelTemplateMapping) { Text("إلغاء") } }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
