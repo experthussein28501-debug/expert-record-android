@@ -35,8 +35,8 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         minSdk = 26
         targetSdk = 36
-        versionCode = 92
-        versionName = "0.9.3-work-minutes-complete"
+        versionCode = 93
+        versionName = "0.9.4-complete-ui-map-sketch"
         buildConfigField("String", "ACTIVATION_ENDPOINT", "\"${activationEndpoint.replace("\"", "\\\"")}\"")
         buildConfigField("String", "GEMINI_VISION_ENDPOINT", "\"${geminiVisionEndpoint.replace("\"", "\\\"")}\"")
         buildConfigField("String", "FIREBASE_API_KEY", "\"${firebaseApiKey.replace("\"", "\\\"")}\"")
@@ -59,8 +59,6 @@ android {
 
     buildTypes {
         debug {
-            // A separate install identity prevents signature/version conflicts with
-            // any older test APK already present on the user's phone.
             applicationIdSuffix = ".test.modular"
         }
         create("trial") {
@@ -95,7 +93,7 @@ android {
             applicationIdSuffix = ".combined"
             versionNameSuffix = "-combined"
             buildConfigField("String", "MODULE_MODE", "\"COMBINED\"")
-            manifestPlaceholders["appLabel"] = "سجل الخبير — النسخة المجمعة 0.9.3"
+            manifestPlaceholders["appLabel"] = "سجل الخبير — النسخة المجمعة 0.9.4"
         }
         create("notifications") {
             dimension = "module"
@@ -136,9 +134,6 @@ android {
 
 ksp { arg("room.schemaLocation", "$projectDir/schemas") }
 
-// KSP can retain its internal byRounds snapshots beside the final generated
-// sources on a fresh build. They contain the same Java classes, so exclude the
-// snapshots before javac to keep clean and CI builds deterministic.
 tasks.withType<JavaCompile>().configureEach {
     doFirst {
         delete(fileTree(layout.buildDirectory.dir("generated/ksp")) {
@@ -175,15 +170,11 @@ dependencies {
     implementation("com.google.firebase:firebase-auth:23.0.0")
     implementation("com.google.firebase:firebase-common:21.0.0")
 
-    // The internal camera is the default. Google Lens is an explicit optional action.
     val cameraXVersion = "1.3.4"
     implementation("androidx.camera:camera-core:$cameraXVersion")
     implementation("androidx.camera:camera-camera2:$cameraXVersion")
     implementation("androidx.camera:camera-lifecycle:$cameraXVersion")
     implementation("androidx.camera:camera-view:$cameraXVersion")
-
-    // Gemini uses a protected HTTPS gateway configured at build time. The API key
-    // remains on the protected gateway and is never packaged inside this app.
 
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
@@ -195,7 +186,6 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 
-    // Tesseract 5 LSTM engine matching the bundled offline Arabic model.
     implementation("cz.adaptech.tesseract4android:tesseract4android:4.9.0")
 
     testImplementation("junit:junit:4.13.2")
