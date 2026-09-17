@@ -8,11 +8,20 @@ data class AgendaPoint(val x: Float, val y: Float)
 
 data class AgendaStroke(val points: List<AgendaPoint>)
 
+/** موعد يدوي منظم يضيفه المستخدم داخل يوم الأجندة. */
+data class AgendaManualAppointment(
+    val title: String = "",
+    val time: String = "",
+    val location: String = "",
+    val details: String = ""
+)
+
 data class AgendaDayNote(
     val date: LocalDate,
     val text: String = "",
     val strokes: List<AgendaStroke> = emptyList(),
     val imagePaths: List<String> = emptyList(),
+    val manualAppointments: List<AgendaManualAppointment> = emptyList(),
     val updatedAt: Long = System.currentTimeMillis()
 )
 
