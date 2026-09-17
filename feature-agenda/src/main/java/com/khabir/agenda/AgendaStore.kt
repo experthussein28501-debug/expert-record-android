@@ -30,7 +30,7 @@ class AgendaStore @Inject constructor(@ApplicationContext context: Context) {
         ) {
             prefs.edit().remove(key).apply()
         } else {
-            prefs.edit().putString(key, encode(record)).apply()
+            prefs.edit().putString(key, AgendaDayCodec.encode(record)).apply()
         }
         _records.value = loadAll()
     }
@@ -43,14 +43,16 @@ class AgendaStore @Inject constructor(@ApplicationContext context: Context) {
     private fun loadAll(): Map<Long, AgendaDayNote> = prefs.all.mapNotNull { (key, value) ->
         val epoch = key.toLongOrNull() ?: return@mapNotNull null
         val spec = value as? String ?: return@mapNotNull null
-        decode(LocalDate.ofEpochDay(epoch), spec)?.let { epoch to it }
+        AgendaDayCodec.decode(LocalDate.ofEpochDay(epoch), spec)?.let { epoch to it }
     }.toMap()
+}
 
-    /**
-     * العمود الخامس أضيف للمواعيد اليدوية فقط؛ السجلات القديمة ذات 4 أعمدة
-     * تظل قابلة للقراءة كما هي.
-     */
-    private fun encode(record: AgendaDayNote): String = listOf(
+/**
+ * ترميز مستقل قابل للاختبار. العمود الخامس أضيف للمواعيد اليدوية فقط؛
+ * السجلات القديمة ذات 4 أعمدة تظل قابلة للقراءة كما هي.
+ */
+internal object AgendaDayCodec {
+    fun encode(record: AgendaDayNote): String = listOf(
         b64(record.text),
         b64(encodeStrokes(record.strokes)),
         b64(record.imagePaths.joinToString("\n")),
@@ -58,7 +60,7 @@ class AgendaStore @Inject constructor(@ApplicationContext context: Context) {
         b64(encodeManualAppointments(record.manualAppointments))
     ).joinToString("\t")
 
-    private fun decode(date: LocalDate, spec: String): AgendaDayNote? = runCatching {
+    fun decode(date: LocalDate, spec: String): AgendaDayNote? = runCatching {
         val parts = spec.split("\t")
         AgendaDayNote(
             date = date,
