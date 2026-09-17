@@ -69,6 +69,14 @@ fun LoginScreen(
     var busy by remember { mutableStateOf(false) }
     var activating by remember { mutableStateOf(false) }
     val activationClient = remember(context) { ActivationClient(context) }
+    val googleConfigured = remember {
+        isGoogleSignInConfigured(
+            BuildConfig.GOOGLE_WEB_CLIENT_ID,
+            BuildConfig.FIREBASE_API_KEY,
+            BuildConfig.FIREBASE_APP_ID,
+            BuildConfig.FIREBASE_PROJECT_ID
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -81,7 +89,7 @@ fun LoginScreen(
         verticalArrangement = Arrangement.Center
     ) {
         Surface(shape = CircleShape, color = LoginGold.copy(alpha = 0.14f)) {
-            Icon(Icons.Filled.Balance, null, Modifier.padding(24.dp), tint = LoginGold)
+            Icon(Icons.Filled.Balance, "ميزان العدالة", Modifier.padding(24.dp), tint = LoginGold)
         }
         Spacer(Modifier.height(18.dp))
         Text("سجل الخبير", color = LoginGold, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
@@ -93,18 +101,28 @@ fun LoginScreen(
                 busy = true
                 message = null
                 scope.launch {
+                    signInWithGoogle(context)
+                        .onSuccess { onGoogleSuccess() }
+                        .onFailure { message = it.message ?: "تعذر تسجيل الدخول باستخدام Google" }
                     busy = false
-                    message = "تسجيل Google قريبًا؛ استخدم الدخول للتجربة"
                 }
             },
-            enabled = false,
+            enabled = !busy && !activating && googleConfigured,
             colors = ButtonDefaults.buttonColors(containerColor = LoginGold, contentColor = Color.Black),
             modifier = Modifier.fillMaxWidth()
         ) {
             if (busy) CircularProgressIndicator(Modifier.size(20.dp), color = Color.Black, strokeWidth = 2.dp)
             else Icon(Icons.Filled.AccountCircle, null)
             Spacer(Modifier.width(8.dp))
-            Text("تسجيل الدخول باستخدام Google — قريبًا")
+            Text("تسجيل الدخول باستخدام Google")
+        }
+        if (!googleConfigured) {
+            Text(
+                "تسجيل Google غير مفعّل في إعدادات البناء الحالية؛ يمكن استخدام كود التفعيل أو التخطي.",
+                color = Color.White.copy(alpha = 0.62f),
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 8.dp)
+            )
         }
 
         Spacer(Modifier.height(22.dp))
@@ -147,15 +165,11 @@ fun LoginScreen(
         message?.let { Text(it, color = Color(0xFFFFB4AB), modifier = Modifier.padding(top = 12.dp)) }
         Spacer(Modifier.height(28.dp))
         OutlinedButton(onClick = onSkip, enabled = !busy && !activating, modifier = Modifier.fillMaxWidth()) {
-            Text("تخطي والدخول للتجربة", color = LoginGold)
+            Text("تخطي", color = LoginGold)
         }
     }
 }
 
-/**
- * هل بيانات Firebase/Google المطلوبة لتسجيل الدخول مكتملة — منطق صرف بلا
- * شبكة ولا Context، قابل للاختبار مباشرة.
- */
 internal fun isGoogleSignInConfigured(
     googleWebClientId: String,
     firebaseApiKey: String,
