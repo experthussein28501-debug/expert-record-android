@@ -13,15 +13,51 @@ permissions:
 jobs:
   package-upload:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 45
     steps:
-      - name: Download verified APK from signed CDN
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Install Android 36 SDK
         shell: bash
         run: |
           set -euo pipefail
-          URL='https://release-assets.githubusercontent.com/github-production-release-asset/1373448064/a5d795c2-4426-4b8f-85c0-01e3ad556433?sp=r&sv=2018-11-09&sr=b&spr=https&se=2026-09-17T05%3A32%3A37Z&rscd=attachment%3B+filename%3Dexpert-record-debug.apk&rsct=application%2Fvnd.android.package-archive&skoid=96c2d410-5711-43a1-aedd-ab1947aa7ab0&sktid=398a6654-997b-47e9-b12b-9515b896b4de&skt=2026-09-17T04%3A31%3A53Z&ske=2026-09-17T05%3A32%3A37Z&sks=b&skv=2018-11-09&sig=eNJpOt5E42CEmKh8hXK6pGWgs%2BUtLSOXSBeKs%2FkvrLo%3D&jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmVsZWFzZS1hc3NldHMuZ2l0aHVidXNlcmNvbnRlbnQuY29tIiwia2V5Ijoia2V5MSIsImV4cCI6MTc4OTYyMjYxNywibmJmIjoxNzg5NjIwODE3LCJwYXRoIjoicmVsZWFzZWFzc2V0cHJvZHVjdGlvbi5ibG9iLmNvcmUud2luZG93cy5uZXQifQ.SAMNGaA97y5_TvXndP54E8Llwl5gYGtWQNLreNqKlw0&response-content-disposition=attachment%3B%20filename%3Dexpert-record-debug.apk&response-content-type=application%2Fvnd.android.package-archive'
-          curl -L --fail --retry 2 --max-time 180 "$URL" -o expert-record-debug.apk
-          test "$(stat -c%s expert-record-debug.apk)" -eq 49930149
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | sort -V | tail -n 1)"
+          fi
+          test -n "$SDKMANAGER"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Build APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          for attempt in 1 2 3; do
+            if ./gradlew --no-daemon :app:assembleCombinedDebug; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then exit 1; fi
+            ./gradlew --stop || true
+            sleep 5
+          done
+          APK="$(find app/build/outputs/apk -type f -name '*.apk' | head -n 1)"
+          test -n "$APK"
+          cp "$APK" expert-record-debug.apk
+          SIZE="$(stat -c%s expert-record-debug.apk)"
+          echo "APK_SIZE=$SIZE"
+          test "$SIZE" -gt 49000000
 
       - name: Zip and verify
         shell: bash
@@ -29,16 +65,42 @@ jobs:
           set -euo pipefail
           zip -9 expert-record-0.9.2-fixed.zip expert-record-debug.apk
           unzip -t expert-record-0.9.2-fixed.zip
-          echo "ZIP_SIZE=$(stat -c%s expert-record-0.9.2-fixed.zip)"
+          echo "APK_SHA256=$(sha256sum expert-record-debug.apk | awk '{print $1}')"
           echo "ZIP_SHA256=$(sha256sum expert-record-0.9.2-fixed.zip | awk '{print $1}')"
+          echo "ZIP_SIZE=$(stat -c%s expert-record-0.9.2-fixed.zip)"
 
-      - name: Upload ZIP to file.io
+      - name: Upload ZIP with fallbacks
         shell: bash
         run: |
           set -euo pipefail
           FILE='expert-record-0.9.2-fixed.zip'
-          RESP="$(curl -sS -L --fail --max-time 240 -F "file=@${FILE}" 'https://file.io/?expires=1d')"
-          echo "FILEIO_RESPONSE=$RESP"
-          URL="$(printf '%s' "$RESP" | jq -r '.link // empty')"
+          URL=''
+
+          echo 'Trying transfer.sh...'
+          URL="$(curl -sS --fail --max-time 300 --upload-file "$FILE" "https://transfer.sh/$FILE" || true)"
+          if ! printf '%s' "$URL" | grep -Eq '^https?://'; then
+            URL=''
+          fi
+
+          if [ -z "$URL" ]; then
+            echo 'Trying 0x0.st...'
+            URL="$(curl -sS --fail --max-time 300 -F "file=@${FILE}" https://0x0.st || true)"
+            if ! printf '%s' "$URL" | grep -Eq '^https?://'; then
+              URL=''
+            fi
+          fi
+
+          if [ -z "$URL" ]; then
+            echo 'Trying Litterbox...'
+            URL="$(curl -sS --fail --max-time 300 \
+              -F 'reqtype=fileupload' \
+              -F 'time=24h' \
+              -F "fileToUpload=@${FILE}" \
+              https://litterbox.catbox.moe/resources/internals/api.php || true)"
+            if ! printf '%s' "$URL" | grep -Eq '^https?://'; then
+              URL=''
+            fi
+          fi
+
           test -n "$URL"
           echo "DIRECT_ZIP_URL=$URL"
