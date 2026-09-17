@@ -131,15 +131,30 @@ jobs:
             sleep 5
           done
 
-      - name: Publish latest debug APK
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Prepare chat APK
         shell: bash
         run: |
           set -euo pipefail
           APK="$(find app/build/outputs/apk -type f -name '*.apk' | head -n 1)"
           test -n "$APK"
           cp "$APK" expert-record-debug.apk
+
+      - name: Upload APK for chat transfer
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: expert-record-chat-download
+          path: expert-record-debug.apk
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Publish latest debug APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
           gh release delete dev-latest --yes --cleanup-tag || true
           gh release create dev-latest expert-record-debug.apk \
             --target "$GITHUB_SHA" \
