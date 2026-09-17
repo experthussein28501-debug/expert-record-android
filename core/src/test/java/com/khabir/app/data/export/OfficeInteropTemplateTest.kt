@@ -36,6 +36,20 @@ class OfficeInteropTemplateTest {
         assertTrue(output.contains("w:val=\"start\""))
     }
 
+    @Test fun workMinutesBlankHeadingsAreRecognizedAndFilledAutomatically() {
+        val xml = """<w:document><w:body>
+            <w:p><w:r><w:t>رقم الدعوى :</w:t></w:r></w:p><w:p></w:p>
+            <w:p><w:r><w:t>محاضر الأعمال</w:t></w:r></w:p><w:p></w:p>
+        </w:body></w:document>""".trimIndent()
+        val (output, count) = service().injectReportFieldsAfterBlankHeadings(
+            xml,
+            mapOf("رقم الدعوى" to "105", "محاضر الأعمال" to "محضر اعمال رقم (1)")
+        )
+        assertEquals(2, count)
+        assertTrue(output.contains("105"))
+        assertTrue(output.contains("محضر اعمال رقم (1)"))
+    }
+
     @Test fun existingCaseTextIsNeverOverwrittenByAutomaticTemplateFill() {
         val xml = """<w:document><w:body><w:p><w:r><w:t>المأمورية</w:t></w:r></w:p><w:p><w:r><w:t>نص قضية قديمة</w:t></w:r></w:p></w:body></w:document>"""
         val (output, count) = service().injectReportFieldsAfterBlankHeadings(xml, mapOf("المأمورية" to "مأمورية جديدة"))
