@@ -1,8 +1,11 @@
 pluginManagement {
     resolutionStrategy {
         eachPlugin {
-            if (requested.id.id == "com.android.application") {
-                useModule("com.android.tools.build:gradle:${requested.version}")
+            when (requested.id.id) {
+                "com.android.application", "com.android.library" ->
+                    useModule("com.android.tools.build:gradle:${requested.version}")
+                "com.google.dagger.hilt.android" ->
+                    useModule("com.google.dagger:hilt-android-gradle-plugin:${requested.version}")
             }
         }
     }
