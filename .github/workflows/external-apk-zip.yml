@@ -69,3 +69,5 @@ jobs:
 
           test -n "$URL"
           echo "DIRECT_ZIP_URL=$URL"
+
+# refresh latest APK package 2026-09-17
