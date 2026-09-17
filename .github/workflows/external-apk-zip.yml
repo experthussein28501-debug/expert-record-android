@@ -21,9 +21,7 @@ jobs:
           set -euo pipefail
           URL='https://release-assets.githubusercontent.com/github-production-release-asset/1373448064/a5d795c2-4426-4b8f-85c0-01e3ad556433?sp=r&sv=2018-11-09&sr=b&spr=https&se=2026-09-17T05%3A32%3A37Z&rscd=attachment%3B+filename%3Dexpert-record-debug.apk&rsct=application%2Fvnd.android.package-archive&skoid=96c2d410-5711-43a1-aedd-ab1947aa7ab0&sktid=398a6654-997b-47e9-b12b-9515b896b4de&skt=2026-09-17T04%3A31%3A53Z&ske=2026-09-17T05%3A32%3A37Z&sks=b&skv=2018-11-09&sig=eNJpOt5E42CEmKh8hXK6pGWgs%2BUtLSOXSBeKs%2FkvrLo%3D&jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmVsZWFzZS1hc3NldHMuZ2l0aHVidXNlcmNvbnRlbnQuY29tIiwia2V5Ijoia2V5MSIsImV4cCI6MTc4OTYyMjYxNywibmJmIjoxNzg5NjIwODE3LCJwYXRoIjoicmVsZWFzZWFzc2V0cHJvZHVjdGlvbi5ibG9iLmNvcmUud2luZG93cy5uZXQifQ.SAMNGaA97y5_TvXndP54E8Llwl5gYGtWQNLreNqKlw0&response-content-disposition=attachment%3B%20filename%3Dexpert-record-debug.apk&response-content-type=application%2Fvnd.android.package-archive'
           curl -L --fail --retry 2 --max-time 180 "$URL" -o expert-record-debug.apk
-          SIZE="$(stat -c%s expert-record-debug.apk)"
-          echo "APK_SIZE=$SIZE"
-          test "$SIZE" -eq 49930149
+          test "$(stat -c%s expert-record-debug.apk)" -eq 49930149
 
       - name: Zip and verify
         shell: bash
@@ -31,18 +29,16 @@ jobs:
           set -euo pipefail
           zip -9 expert-record-0.9.2-fixed.zip expert-record-debug.apk
           unzip -t expert-record-0.9.2-fixed.zip
-          echo "APK_SHA256=$(sha256sum expert-record-debug.apk | awk '{print $1}')"
-          echo "ZIP_SHA256=$(sha256sum expert-record-0.9.2-fixed.zip | awk '{print $1}')"
           echo "ZIP_SIZE=$(stat -c%s expert-record-0.9.2-fixed.zip)"
+          echo "ZIP_SHA256=$(sha256sum expert-record-0.9.2-fixed.zip | awk '{print $1}')"
 
-      - name: Upload ZIP to PixelDrain
+      - name: Upload ZIP to file.io
         shell: bash
         run: |
           set -euo pipefail
           FILE='expert-record-0.9.2-fixed.zip'
-          RESP="$(curl -sS --fail --max-time 240 -T "$FILE" https://pixeldrain.com/api/file/)"
-          echo "PIXELDRAIN_RESPONSE=$RESP"
-          ID="$(printf '%s' "$RESP" | jq -r '.id // empty')"
-          test -n "$ID"
-          URL="https://pixeldrain.com/api/file/${ID}?download"
+          RESP="$(curl -sS -L --fail --max-time 240 -F "file=@${FILE}" 'https://file.io/?expires=1d')"
+          echo "FILEIO_RESPONSE=$RESP"
+          URL="$(printf '%s' "$RESP" | jq -r '.link // empty')"
+          test -n "$URL"
           echo "DIRECT_ZIP_URL=$URL"
