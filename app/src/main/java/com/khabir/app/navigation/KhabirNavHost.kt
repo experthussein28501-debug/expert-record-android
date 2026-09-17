@@ -15,7 +15,7 @@ import com.khabir.app.presentation.auth.LoginScreen
 import com.khabir.app.presentation.cases.CaseFormScreen
 import com.khabir.app.presentation.cases.CaseListScreen
 import com.khabir.app.presentation.home.CompleteHomeScreen
-import com.khabir.app.presentation.notifications.NotificationBatchScreen
+import com.khabir.app.presentation.notifications.CompleteNotificationBatchScreen
 import com.khabir.app.presentation.registers.RegisterScreen
 import com.khabir.app.presentation.reports.ReportScreen
 import com.khabir.app.presentation.reports.ReportsHubScreen
@@ -124,7 +124,7 @@ fun KhabirNavHost() {
 
         if (notificationsEnabled) {
             composable(Routes.NOTIFICATIONS) {
-                NotificationBatchScreen(onBack = { navController.popBackStack() })
+                CompleteNotificationBatchScreen(onBack = { navController.popBackStack() })
             }
         }
 
