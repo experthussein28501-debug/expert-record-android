@@ -17,12 +17,12 @@ import com.khabir.app.presentation.cases.CaseListScreen
 import com.khabir.app.presentation.home.CompleteHomeScreen
 import com.khabir.app.presentation.notifications.CompleteNotificationBatchScreen
 import com.khabir.app.presentation.registers.RegisterScreen
-import com.khabir.app.presentation.reports.ReportScreen
 import com.khabir.app.presentation.reports.ReportsHubScreen
 import com.khabir.app.presentation.settings.BackupScreen
 import com.khabir.app.presentation.settings.ExpertProfileScreen
+import com.khabir.app.presentation.templates.TemplateAwareReportScreen
+import com.khabir.app.presentation.templates.TemplateAwareWorkMinutesScreen
 import com.khabir.app.presentation.workminutes.WorkMinutesHubScreen
-import com.khabir.app.presentation.workminutes.WorkMinutesScreen
 
 private object Routes {
     const val LOGIN = "login"
@@ -160,7 +160,7 @@ fun KhabirNavHost() {
                     navArgument("caseId") { type = NavType.LongType; defaultValue = 0L }
                 )
             ) {
-                ReportScreen(onBack = { navController.popBackStack() })
+                TemplateAwareReportScreen(onBack = { navController.popBackStack() })
             }
         }
 
@@ -180,7 +180,7 @@ fun KhabirNavHost() {
                 navArgument("caseId") { type = NavType.LongType; defaultValue = 0L }
             )
         ) {
-            WorkMinutesScreen(onBack = { navController.popBackStack() })
+            TemplateAwareWorkMinutesScreen(onBack = { navController.popBackStack() })
         }
     }
 }
