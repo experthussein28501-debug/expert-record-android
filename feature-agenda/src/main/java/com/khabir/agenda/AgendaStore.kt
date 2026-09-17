@@ -22,7 +22,12 @@ class AgendaStore @Inject constructor(@ApplicationContext context: Context) {
 
     fun save(record: AgendaDayNote) {
         val key = record.date.toEpochDay().toString()
-        if (record.text.isBlank() && record.strokes.isEmpty() && record.imagePaths.isEmpty()) {
+        if (
+            record.text.isBlank() &&
+            record.strokes.isEmpty() &&
+            record.imagePaths.isEmpty() &&
+            record.manualAppointments.isEmpty()
+        ) {
             prefs.edit().remove(key).apply()
         } else {
             prefs.edit().putString(key, encode(record)).apply()
@@ -41,11 +46,16 @@ class AgendaStore @Inject constructor(@ApplicationContext context: Context) {
         decode(LocalDate.ofEpochDay(epoch), spec)?.let { epoch to it }
     }.toMap()
 
+    /**
+     * العمود الخامس أضيف للمواعيد اليدوية فقط؛ السجلات القديمة ذات 4 أعمدة
+     * تظل قابلة للقراءة كما هي.
+     */
     private fun encode(record: AgendaDayNote): String = listOf(
         b64(record.text),
         b64(encodeStrokes(record.strokes)),
         b64(record.imagePaths.joinToString("\n")),
-        record.updatedAt.toString()
+        record.updatedAt.toString(),
+        b64(encodeManualAppointments(record.manualAppointments))
     ).joinToString("\t")
 
     private fun decode(date: LocalDate, spec: String): AgendaDayNote? = runCatching {
@@ -55,7 +65,8 @@ class AgendaStore @Inject constructor(@ApplicationContext context: Context) {
             text = unb64(parts.getOrNull(0).orEmpty()),
             strokes = decodeStrokes(unb64(parts.getOrNull(1).orEmpty())),
             imagePaths = unb64(parts.getOrNull(2).orEmpty()).split("\n").filter(String::isNotBlank),
-            updatedAt = parts.getOrNull(3)?.toLongOrNull() ?: 0L
+            updatedAt = parts.getOrNull(3)?.toLongOrNull() ?: 0L,
+            manualAppointments = decodeManualAppointments(unb64(parts.getOrNull(4).orEmpty()))
         )
     }.getOrNull()
 
@@ -75,6 +86,32 @@ class AgendaStore @Inject constructor(@ApplicationContext context: Context) {
             }
             points.takeIf { it.isNotEmpty() }?.let(::AgendaStroke)
         }
+
+    private fun encodeManualAppointments(items: List<AgendaManualAppointment>): String =
+        items.joinToString("\n") { item ->
+            listOf(
+                b64(item.title),
+                b64(item.time),
+                b64(item.location),
+                b64(item.details)
+            ).joinToString("|")
+        }
+
+    private fun decodeManualAppointments(spec: String): List<AgendaManualAppointment> =
+        spec.split("\n")
+            .filter(String::isNotBlank)
+            .mapNotNull { line ->
+                val parts = line.split("|")
+                val appointment = AgendaManualAppointment(
+                    title = unb64(parts.getOrNull(0).orEmpty()),
+                    time = unb64(parts.getOrNull(1).orEmpty()),
+                    location = unb64(parts.getOrNull(2).orEmpty()),
+                    details = unb64(parts.getOrNull(3).orEmpty())
+                )
+                appointment.takeIf {
+                    it.title.isNotBlank() || it.time.isNotBlank() || it.location.isNotBlank() || it.details.isNotBlank()
+                }
+            }
 
     private fun b64(value: String): String = Base64.getUrlEncoder().withoutPadding()
         .encodeToString(value.toByteArray(StandardCharsets.UTF_8))
