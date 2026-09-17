@@ -35,15 +35,14 @@ jobs:
           echo "ZIP_SHA256=$(sha256sum expert-record-0.9.2-fixed.zip | awk '{print $1}')"
           echo "ZIP_SIZE=$(stat -c%s expert-record-0.9.2-fixed.zip)"
 
-      - name: Upload ZIP to alternate host
+      - name: Upload ZIP to PixelDrain
         shell: bash
         run: |
           set -euo pipefail
           FILE='expert-record-0.9.2-fixed.zip'
-          URL="$(curl -sS --fail --max-time 240 \
-            -F 'reqtype=fileupload' \
-            -F "fileToUpload=@${FILE}" \
-            https://catbox.moe/user/api.php)"
-          echo "UPLOAD_RESPONSE=$URL"
-          printf '%s' "$URL" | grep -Eq '^https://'
+          RESP="$(curl -sS --fail --max-time 240 -T "$FILE" https://pixeldrain.com/api/file/)"
+          echo "PIXELDRAIN_RESPONSE=$RESP"
+          ID="$(printf '%s' "$RESP" | jq -r '.id // empty')"
+          test -n "$ID"
+          URL="https://pixeldrain.com/api/file/${ID}?download"
           echo "DIRECT_ZIP_URL=$URL"
