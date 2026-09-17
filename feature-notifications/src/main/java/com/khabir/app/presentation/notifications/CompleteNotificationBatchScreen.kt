@@ -20,10 +20,7 @@ import com.khabir.app.domain.model.PartyRole
 import com.khabir.app.domain.usecase.notification.AuthorityNoticeDraft
 import com.khabir.app.domain.usecase.notification.NoticeSubject
 
-/**
- * غلاف شاشة الإخطارات للنسخة المجمعة: يبقي زر هيئة قضايا الدولة ظاهرًا دائمًا
- * بدل اختفائه إذا لم يكتشف التطبيق اسم جهة حكومية تلقائيًا.
- */
+/** Keeps the State Lawsuits Authority action visible instead of hiding it behind auto-detection. */
 @Composable
 fun CompleteNotificationBatchScreen(
     onBack: () -> Unit,
@@ -51,7 +48,7 @@ fun CompleteNotificationBatchScreen(
                 )
             }
             Text(
-                "الزر ظاهر دائمًا. لا يعتمد على اكتشاف اسم وزير أو جهة حكومية، ولا يضيف الإخطار إلا بعد مراجعتك واعتمادك.",
+                "الزر ظاهر دائمًا؛ اعتماد الإضافة يتم يدويًا بعد مراجعة العنوان والموضوع وبيانات الدعوى.",
                 style = MaterialTheme.typography.bodySmall
             )
         }
@@ -73,7 +70,7 @@ private fun visibleAuthorityDraft(state: NotificationScreenUiState): AuthorityNo
             .filter { it.role == PartyRole.DEFENDANT }
             .joinToString("، ") { it.reportDisplayName }
         return AuthorityNoticeDraft(
-            key = "visible-case:${selectedCase.id}",
+            key = "case:${selectedCase.id}",
             caseNo = selectedCase.caseNo,
             caseYear = selectedCase.caseYear,
             court = selectedCase.court,
@@ -93,7 +90,7 @@ private fun visibleAuthorityDraft(state: NotificationScreenUiState): AuthorityNo
         .filter { it.role == PartyRole.DEFENDANT }
         .joinToString("، ") { listOf(it.firstName, it.restName).filter(String::isNotBlank).joinToString(" ") }
     return AuthorityNoticeDraft(
-        key = "visible-manual:${state.manualCaseNo}/${state.manualCaseYear}/${state.manualCourt}",
+        key = "manual:${state.manualCaseNo}/${state.manualCaseYear}/${state.manualCourt}",
         caseNo = state.manualCaseNo,
         caseYear = state.manualCaseYear,
         court = state.manualCourt,
