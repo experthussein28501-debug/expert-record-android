@@ -65,16 +65,7 @@ jobs:
           echo "Trying file.io..."
           RESP="$(curl -sS --max-time 180 -F "file=@${FILE}" https://file.io || true)"
           echo "FILEIO_RESPONSE=${RESP}"
-          URL="$(python3 - <<'PY'
-import json, os
-s=os.environ.get('RESP','')
-try:
-    j=json.loads(s)
-    print(j.get('link',''))
-except Exception:
-    print('')
-PY
-          )"
+          URL="$(printf '%s' "$RESP" | jq -r '.link // empty' 2>/dev/null || true)"
           if [ -z "$URL" ]; then
             echo "Trying temp.sh..."
             URL="$(curl -sS --fail --max-time 180 --upload-file "${FILE}" "https://temp.sh/${FILE}" || true)"
@@ -87,5 +78,3 @@ PY
           fi
           test -n "$URL"
           echo "DIRECT_ZIP_URL=$URL"
-        env:
-          RESP: ""
