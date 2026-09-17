@@ -2,6 +2,7 @@ package com.khabir.app.di
 
 import android.content.Context
 import androidx.room.Room
+import com.khabir.app.data.backup.PendingBackupRestore
 import com.khabir.app.data.local.AppDatabase
 import com.khabir.app.data.local.dao.CaseDao
 import com.khabir.app.data.local.dao.ExpertProfileDao
@@ -21,8 +22,11 @@ import javax.inject.Singleton
 object DatabaseModule {
     @Provides
     @Singleton
-    fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
-        Room.databaseBuilder(context, AppDatabase::class.java, AppDatabase.DB_NAME)
+    fun provideDatabase(@ApplicationContext context: Context): AppDatabase {
+        // A restore is staged while the current process is running, then applied here on the
+        // next cold start before Room opens any connection. This avoids replacing a live DB.
+        PendingBackupRestore.applyIfPresent(context)
+        return Room.databaseBuilder(context, AppDatabase::class.java, AppDatabase.DB_NAME)
             .addMigrations(
                 AppDatabase.MIGRATION_1_2,
                 AppDatabase.MIGRATION_2_3,
@@ -42,6 +46,7 @@ object DatabaseModule {
                 AppDatabase.MIGRATION_16_17
             )
             .build()
+    }
 
     @Provides fun provideCaseDao(db: AppDatabase): CaseDao = db.caseDao()
     @Provides fun providePartyDao(db: AppDatabase): PartyDao = db.partyDao()
