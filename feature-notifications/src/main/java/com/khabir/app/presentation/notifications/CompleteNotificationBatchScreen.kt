@@ -1,9 +1,11 @@
 package com.khabir.app.presentation.notifications
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.weight
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -53,7 +55,9 @@ fun CompleteNotificationBatchScreen(
                 style = MaterialTheme.typography.bodySmall
             )
         }
-        NotificationBatchScreen(onBack = onBack, viewModel = viewModel)
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            NotificationBatchScreen(onBack = onBack, viewModel = viewModel)
+        }
     }
 }
 
