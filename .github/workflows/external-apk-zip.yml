@@ -13,93 +13,58 @@ permissions:
 jobs:
   package-upload:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 10
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "17"
-          cache: gradle
-
-      - name: Install Android 36 SDK
+      - name: Download current published APK
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-          if [ ! -x "$SDKMANAGER" ]; then
-            SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | sort -V | tail -n 1)"
-          fi
-          test -n "$SDKMANAGER"
-          test -x "$SDKMANAGER"
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" --install "platform-tools" "platforms;android-36" "build-tools;36.0.0"
-
-      - name: Build APK
-        shell: bash
-        run: |
-          set -euo pipefail
-          chmod +x gradlew
-          for attempt in 1 2 3; do
-            if ./gradlew --no-daemon :app:assembleCombinedDebug; then
-              break
-            fi
-            if [ "$attempt" -eq 3 ]; then exit 1; fi
-            ./gradlew --stop || true
-            sleep 5
-          done
-          APK="$(find app/build/outputs/apk -type f -name '*.apk' | head -n 1)"
-          test -n "$APK"
-          cp "$APK" expert-record-debug.apk
+          gh release download dev-latest \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'expert-record-debug.apk' \
+            --output expert-record-debug.apk
           SIZE="$(stat -c%s expert-record-debug.apk)"
           echo "APK_SIZE=$SIZE"
           test "$SIZE" -gt 49000000
+          echo "APK_SHA256=$(sha256sum expert-record-debug.apk | awk '{print $1}')"
 
       - name: Zip and verify
         shell: bash
         run: |
           set -euo pipefail
-          zip -9 expert-record-0.9.2-fixed.zip expert-record-debug.apk
-          unzip -t expert-record-0.9.2-fixed.zip
-          echo "APK_SHA256=$(sha256sum expert-record-debug.apk | awk '{print $1}')"
-          echo "ZIP_SHA256=$(sha256sum expert-record-0.9.2-fixed.zip | awk '{print $1}')"
-          echo "ZIP_SIZE=$(stat -c%s expert-record-0.9.2-fixed.zip)"
+          FILE='expert-record-0.9.3-work-minutes-complete.zip'
+          zip -9 "$FILE" expert-record-debug.apk
+          unzip -t "$FILE"
+          echo "ZIP_SHA256=$(sha256sum "$FILE" | awk '{print $1}')"
+          echo "ZIP_SIZE=$(stat -c%s "$FILE")"
 
       - name: Upload ZIP with fallbacks
         shell: bash
         run: |
           set -euo pipefail
-          FILE='expert-record-0.9.2-fixed.zip'
+          FILE='expert-record-0.9.3-work-minutes-complete.zip'
           URL=''
 
-          echo 'Trying transfer.sh...'
-          URL="$(curl -sS --fail --max-time 300 --upload-file "$FILE" "https://transfer.sh/$FILE" || true)"
-          if ! printf '%s' "$URL" | grep -Eq '^https?://'; then
-            URL=''
+          echo 'Trying Litterbox...'
+          URL="$(curl -sS --fail --max-time 300 \
+            -F 'reqtype=fileupload' \
+            -F 'time=24h' \
+            -F "fileToUpload=@${FILE}" \
+            https://litterbox.catbox.moe/resources/internals/api.php || true)"
+          if ! printf '%s' "$URL" | grep -Eq '^https?://'; then URL=''; fi
+
+          if [ -z "$URL" ]; then
+            echo 'Trying transfer.sh...'
+            URL="$(curl -sS --fail --max-time 300 --upload-file "$FILE" "https://transfer.sh/$FILE" || true)"
+            if ! printf '%s' "$URL" | grep -Eq '^https?://'; then URL=''; fi
           fi
 
           if [ -z "$URL" ]; then
             echo 'Trying 0x0.st...'
             URL="$(curl -sS --fail --max-time 300 -F "file=@${FILE}" https://0x0.st || true)"
-            if ! printf '%s' "$URL" | grep -Eq '^https?://'; then
-              URL=''
-            fi
-          fi
-
-          if [ -z "$URL" ]; then
-            echo 'Trying Litterbox...'
-            URL="$(curl -sS --fail --max-time 300 \
-              -F 'reqtype=fileupload' \
-              -F 'time=24h' \
-              -F "fileToUpload=@${FILE}" \
-              https://litterbox.catbox.moe/resources/internals/api.php || true)"
-            if ! printf '%s' "$URL" | grep -Eq '^https?://'; then
-              URL=''
-            fi
+            if ! printf '%s' "$URL" | grep -Eq '^https?://'; then URL=''; fi
           fi
 
           test -n "$URL"
