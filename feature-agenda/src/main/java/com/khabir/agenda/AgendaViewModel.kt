@@ -65,8 +65,7 @@ class AgendaViewModel @Inject constructor(
                             AgendaEvent(
                                 date = date,
                                 title = caseLabel(record.caseNo, record.caseYear),
-                                time = extractScheduledTime(entry.bodyText),
-                                location = extractScheduledLocation(entry.bodyText).ifBlank { record.court },
+                                location = record.court,
                                 details = "موعد تالٍ مثبت بمحضر الأعمال رقم ${entry.number}",
                                 source = AgendaEventSource.WORK_MINUTES
                             )
@@ -114,21 +113,5 @@ class AgendaViewModel @Inject constructor(
         caseNo.isNotBlank() && caseYear.isNotBlank() -> "الدعوى $caseNo لسنة $caseYear"
         caseNo.isNotBlank() -> "الدعوى $caseNo"
         else -> "موعد قضية"
-    }
-
-    private fun extractScheduledTime(text: String): String {
-        if (text.isBlank()) return ""
-        val match = Regex("""(?:الساعة|ساعه)\s+(.+?)(?=\s+(?:بالمكتب|بمكتب|بمحكمة|بالمحكمة|لمباشرة|لبدء|وأخطرنا)|[،,.\n]|$)""")
-            .find(text)
-        return match?.groupValues?.getOrNull(1)?.trim().orEmpty()
-    }
-
-    private fun extractScheduledLocation(text: String): String {
-        if (text.isBlank()) return ""
-        val court = Regex("""(?:بمحكمة|بالمحكمة)\s+(.+?)(?=\s+(?:لمباشرة|لبدء|وأخطرنا)|[،,.\n]|$)""")
-            .find(text)?.groupValues?.getOrNull(1)?.trim().orEmpty()
-        if (court.isNotBlank()) return "محكمة $court"
-        if (Regex("""\bبالمكتب\b|\bبمكتب\b""").containsMatchIn(text)) return "المكتب"
-        return ""
     }
 }
