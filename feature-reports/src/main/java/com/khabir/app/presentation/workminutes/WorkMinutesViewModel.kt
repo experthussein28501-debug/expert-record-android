@@ -4,7 +4,10 @@ import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.khabir.app.data.ai.GeminiDocumentVisionService
+import com.khabir.app.data.ai.LegalDocumentPurpose
 import com.khabir.app.data.ai.PersonalAiKeyStore
+import com.khabir.app.data.ocr.MultiPageDocumentReader
 import com.khabir.app.data.export.OfficeInteropService
 import com.khabir.app.domain.model.ReportCoverFields
 import com.khabir.app.domain.model.WorkMinutesEntry
@@ -23,6 +26,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.File
 import java.time.LocalDate
 import javax.inject.Inject
 
@@ -39,12 +43,16 @@ data class WorkMinutesUiState(
     val expandedEntryNumber: Int? = null,
     val isLoading: Boolean = true,
     val isExporting: Boolean = false,
+    val isCaptureProcessing: Boolean = false,
     val autoSaveStatus: String = "",
     val errorMessage: String? = null,
     val exportedFileUri: Uri? = null,
     val savedWordTemplateUri: String = "",
     val pendingTemplateUri: Uri? = null,
-    val templateParagraphs: List<String> = emptyList()
+    val templateParagraphs: List<String> = emptyList(),
+    val captureReviewText: String = "",
+    val captureReviewSource: String = "",
+    val captureTargetEntryNumber: Int? = null
 ) {
     val isIndependent: Boolean get() = caseId == null
 }
@@ -59,6 +67,8 @@ class WorkMinutesViewModel @Inject constructor(
     private val exportRepository: DocumentExportRepository,
     private val officeInterop: OfficeInteropService,
     private val personalAiKeyStore: PersonalAiKeyStore,
+    private val geminiVision: GeminiDocumentVisionService,
+    private val multiPageReader: MultiPageDocumentReader,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(WorkMinutesUiState())
@@ -114,12 +124,10 @@ class WorkMinutesViewModel @Inject constructor(
     fun onPlaintiffsChanged(value: String) = edit { it.copy(plaintiffsSummary = value) }
     fun onDefendantsChanged(value: String) = edit { it.copy(defendantsSummary = value) }
 
-    /** إضافة محضر جديد برقم تسلسلي تلقائي، وتاريخ افتراضي مشتق من قاعدة الاستلام/التحديد الموصوفة. */
     fun onAddEntry() = edit { state ->
         val nextNumber = (state.entries.maxOfOrNull { it.number } ?: 0) + 1
         val previous = state.entries.lastOrNull()
-        val defaultDate = previous?.scheduledFollowUpDate
-            ?: caseReceiptDate.takeIf { state.entries.isEmpty() }
+        val defaultDate = previous?.scheduledFollowUpDate ?: caseReceiptDate.takeIf { state.entries.isEmpty() }
         val newEntry = WorkMinutesEntry(
             number = nextNumber,
             openingDate = defaultDate,
@@ -140,12 +148,77 @@ class WorkMinutesViewModel @Inject constructor(
         state.copy(entries = state.entries.map { if (it.number == number) transform(it) else it })
     }
 
-    fun onCopiesCountChanged(value: Int) = edit { state -> state.copy(copiesCount = value.coerceIn(1, 20)) }
+    fun appendToEntry(number: Int, text: String) {
+        if (text.isBlank()) return
+        onEntryChanged(number) { entry ->
+            val merged = listOf(entry.bodyText.trim(), text.trim()).filter { it.isNotBlank() }.joinToString("\n\n")
+            entry.copy(bodyText = merged)
+        }
+    }
 
+    fun onCopiesCountChanged(value: Int) = edit { state -> state.copy(copiesCount = value.coerceIn(1, 20)) }
     fun onErrorMessageConsumed() = _uiState.update { it.copy(errorMessage = null) }
     fun onExportConsumed() = _uiState.update { it.copy(exportedFileUri = null) }
 
-    /** يحل بيانات غلاف الدعوى (وزارة/قطاع/إدارة/خصوم...) من القضية المرتبطة أو من الحقول اليدوية. */
+    fun refineVoiceTranscript(text: String, onReady: (String) -> Unit) {
+        if (text.isBlank()) return
+        viewModelScope.launch {
+            when (val result = geminiVision.refineTranscript(text, LegalDocumentPurpose.REPORT)) {
+                is GeminiDocumentVisionService.Result.Success -> onReady(result.text)
+                is GeminiDocumentVisionService.Result.Failure -> {
+                    _uiState.update { it.copy(errorMessage = "تعذر تنقيح الصوت: ${result.message}. تم الاحتفاظ بالنص الأصلي.") }
+                    onReady(text)
+                }
+                is GeminiDocumentVisionService.Result.Unavailable -> {
+                    _uiState.update { it.copy(errorMessage = result.message) }
+                    onReady(text)
+                }
+            }
+        }
+    }
+
+    fun onDocumentPagesCaptured(entryNumber: Int, pageFiles: List<File>, useAi: Boolean) {
+        if (pageFiles.isEmpty()) return
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isCaptureProcessing = true,
+                    errorMessage = null,
+                    captureTargetEntryNumber = entryNumber,
+                    captureReviewText = "",
+                    captureReviewSource = ""
+                )
+            }
+            val result = multiPageReader.read(pageFiles.take(10), LegalDocumentPurpose.REPORT, useAi)
+            _uiState.update { state ->
+                if (result.text.isBlank()) state.copy(
+                    isCaptureProcessing = false,
+                    errorMessage = result.warnings.firstOrNull() ?: "لم يتم استخراج نص من صور محضر الأعمال"
+                ) else state.copy(
+                    isCaptureProcessing = false,
+                    captureReviewText = result.text,
+                    captureReviewSource = if (useAi) "AI Vision — ${result.pagesRead} صفحة" else "OCR — ${result.pagesRead} صفحة",
+                    errorMessage = if (result.usedLocalFallback) "استخدم التطبيق OCR المحلي لبعض الصور؛ راجع النص قبل الاعتماد." else null
+                )
+            }
+        }
+    }
+
+    fun onCaptureReviewChanged(value: String) = _uiState.update { it.copy(captureReviewText = value) }
+
+    fun onCaptureReviewDismissed() = _uiState.update {
+        it.copy(captureReviewText = "", captureReviewSource = "", captureTargetEntryNumber = null)
+    }
+
+    fun onCaptureReviewAccepted() {
+        val state = _uiState.value
+        val number = state.captureTargetEntryNumber ?: return
+        val text = state.captureReviewText.trim()
+        if (text.isBlank()) return
+        onCaptureReviewDismissed()
+        appendToEntry(number, text)
+    }
+
     private suspend fun resolveCover(state: WorkMinutesUiState, profile: com.khabir.app.domain.model.ExpertProfile): ReportCoverFields? {
         val linkedCase = state.caseId?.let { caseRepository.getById(it) }
         return when {
@@ -207,12 +280,6 @@ class WorkMinutesViewModel @Inject constructor(
         }
     }
 
-    /**
-     * قالب Word خارجي لمحاضر الأعمال — نفس آلية `OfficeInteropService.fillDocxTemplate`
-     * المستخدمة فعليًا في التقارير: تعبئة تلقائية للخانات الفارغة أسفل عناوين معروفة، أو
-     * `{{الحقل}}`/`«الحقل»` في أي مكان بالقالب، أو ربط يدوي لفقرات موجودة عبر [onApplyTemplateMapping]
-     * لو محتاج القالب يفضل شكله زي ما هو بدون علامات.
-     */
     fun onSelectWordTemplate(uri: Uri) {
         viewModelScope.launch {
             runCatching { officeInterop.templateParagraphs(uri) to officeInterop.canAutoFillBlankReportFields(uri) }
@@ -279,7 +346,8 @@ class WorkMinutesViewModel @Inject constructor(
                     personalAiKeyStore.writeWorkMinutesTemplateMapping(mapping)
                     _uiState.update {
                         it.copy(
-                            recordId = id, isExporting = false,
+                            recordId = id,
+                            isExporting = false,
                             savedWordTemplateUri = uri.toString(),
                             autoSaveStatus = "تم حفظ قالب Word الشخصي لمحاضر الأعمال وإنشاء النسخة",
                             exportedFileUri = outputUri
@@ -301,7 +369,6 @@ class WorkMinutesViewModel @Inject constructor(
         _uiState.update { it.copy(savedWordTemplateUri = "", autoSaveStatus = "تم حذف قالب Word الشخصي لمحاضر الأعمال") }
     }
 
-    /** نفس منطق فتح/غلق المحضر المستخدم فى `WorkMinutesDocxBuilder`، بصيغة نصية عادية بدل XML. */
     private fun entryText(entry: WorkMinutesEntry): String {
         val dateFormat = java.time.format.DateTimeFormatter.ofPattern("d/M/yyyy")
         val sb = StringBuilder("محضر اعمال رقم (${entry.number})\n")
