@@ -285,9 +285,9 @@ internal object BackupCipher {
 
     fun encryptedOutput(output: OutputStream, password: String): OutputStream {
         val salt = ByteArray(SALT_SIZE).also(SecureRandom()::nextBytes)
+        val iv = ByteArray(IV_SIZE).also(SecureRandom()::nextBytes)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, deriveKey(password, salt), GCMParameterSpec(128, cipher.generateIv()))
-        val iv = cipher.iv
+        cipher.init(Cipher.ENCRYPT_MODE, deriveKey(password, salt), GCMParameterSpec(128, iv))
         output.write(MAGIC); output.write(salt); output.write(iv)
         cipher.updateAAD(MAGIC)
         return CipherOutputStream(output, cipher)
@@ -317,11 +317,6 @@ internal object BackupCipher {
         val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
         val spec = PBEKeySpec(password.toCharArray(), salt, ITERATIONS, 256)
         return SecretKeySpec(factory.generateSecret(spec).encoded, "AES")
-    }
-
-    private fun Cipher.generateIv(): java.security.spec.AlgorithmParameterSpec {
-        val iv = ByteArray(IV_SIZE).also(SecureRandom()::nextBytes)
-        return GCMParameterSpec(128, iv)
     }
 
     private fun InputStream.readExactly(size: Int): ByteArray {
