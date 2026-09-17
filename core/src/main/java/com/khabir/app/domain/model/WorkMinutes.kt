@@ -13,7 +13,11 @@ data class WorkMinutesEntry(
     val closingTime: String = "",
     val expertName: String = "",
     /** لو هذا المحضر حدد موعد جلسة/مباشرة جاية، تاريخها هنا — يُستخدم تلقائيًا كتاريخ افتتاح المحضر التالي. */
-    val scheduledFollowUpDate: LocalDate? = null
+    val scheduledFollowUpDate: LocalDate? = null,
+    /** وقت الموعد القادم بصيغة حرة مثل 9 صباحًا أو 09:00. */
+    val scheduledFollowUpTime: String = "",
+    /** مكان الموعد القادم: المكتب أو المحكمة أو أي مكان آخر يكتبه المستخدم. */
+    val scheduledFollowUpLocation: String = ""
 )
 
 /**
@@ -39,6 +43,9 @@ data class WorkMinutesRecord(
  * ترميز/فك ترميز قائمة محاضر الأعمال إلى نص واحد يُخزَّن في عمود واحد —
  * بنفس أسلوب [ReportTemplateCodec]: كل حقل نصي base64، الحقول بينها tab،
  * والمحاضر بينها سطر جديد.
+ *
+ * أُضيف الوقت والمكان في نهاية السطر فقط للحفاظ على التوافق مع البيانات القديمة:
+ * السجلات القديمة التي تحتوي 7 أعمدة تظل قابلة للقراءة كما هي.
  */
 object WorkMinutesCodec {
     private val encoder = Base64.getUrlEncoder().withoutPadding()
@@ -52,7 +59,9 @@ object WorkMinutesCodec {
             encodeText(entry.bodyText),
             encodeText(entry.closingTime),
             encodeText(entry.expertName),
-            entry.scheduledFollowUpDate?.toEpochDay()?.toString().orEmpty()
+            entry.scheduledFollowUpDate?.toEpochDay()?.toString().orEmpty(),
+            encodeText(entry.scheduledFollowUpTime),
+            encodeText(entry.scheduledFollowUpLocation)
         ).joinToString("\t")
     }
 
@@ -66,13 +75,15 @@ object WorkMinutesCodec {
                 bodyText = parts.getOrNull(3)?.let(::decodeText).orEmpty(),
                 closingTime = parts.getOrNull(4)?.let(::decodeText).orEmpty(),
                 expertName = parts.getOrNull(5)?.let(::decodeText).orEmpty(),
-                scheduledFollowUpDate = parts.getOrNull(6)?.takeIf(String::isNotBlank)?.toLongOrNull()?.let(LocalDate::ofEpochDay)
+                scheduledFollowUpDate = parts.getOrNull(6)?.takeIf(String::isNotBlank)?.toLongOrNull()?.let(LocalDate::ofEpochDay),
+                scheduledFollowUpTime = parts.getOrNull(7)?.let(::decodeText).orEmpty(),
+                scheduledFollowUpLocation = parts.getOrNull(8)?.let(::decodeText).orEmpty()
             )
         }
     }.getOrElse { emptyList() }
 
     private fun encodeText(value: String): String = encoder.encodeToString(value.toByteArray(StandardCharsets.UTF_8))
-    private fun decodeText(value: String): String = String(decoder.decode(value), StandardCharsets.UTF_8)
+    private fun decodeText(value: String): String = if (value.isBlank()) "" else String(decoder.decode(value), StandardCharsets.UTF_8)
 }
 
 /** نصوص جاهزة شائعة لمتن محاضر الأعمال — لتسريع الكتابة، قابلة للتعديل دائمًا. */
