@@ -101,7 +101,9 @@ fun AgendaScreen(
         AgendaDayDialog(
             summary = summary,
             onDismiss = viewModel::closeDay,
-            onSave = { text, strokes, images -> viewModel.saveDay(date, text, strokes, images) }
+            onSave = { text, strokes, images, manualAppointments ->
+                viewModel.saveDay(date, text, strokes, images, manualAppointments)
+            }
         )
     }
 }
@@ -190,12 +192,19 @@ private fun AgendaDayCell(summary: AgendaDaySummary, onClick: (LocalDate) -> Uni
 private fun AgendaDayDialog(
     summary: AgendaDaySummary,
     onDismiss: () -> Unit,
-    onSave: (String, List<AgendaStroke>, List<String>) -> Unit
+    onSave: (String, List<AgendaStroke>, List<String>, List<AgendaManualAppointment>) -> Unit
 ) {
     val context = LocalContext.current
     var text by remember(summary.date) { mutableStateOf(summary.note?.text.orEmpty()) }
     val strokes = remember(summary.date) { mutableStateListOf<AgendaStroke>().apply { addAll(summary.note?.strokes.orEmpty()) } }
     val images = remember(summary.date) { mutableStateListOf<String>().apply { addAll(summary.note?.imagePaths.orEmpty()) } }
+    val manualAppointments = remember(summary.date) {
+        mutableStateListOf<AgendaManualAppointment>().apply { addAll(summary.note?.manualAppointments.orEmpty()) }
+    }
+    var manualTitle by remember(summary.date) { mutableStateOf("") }
+    var manualTime by remember(summary.date) { mutableStateOf("") }
+    var manualLocation by remember(summary.date) { mutableStateOf("") }
+    var manualDetails by remember(summary.date) { mutableStateOf("") }
     var currentStroke by remember(summary.date) { mutableStateOf<List<AgendaPoint>>(emptyList()) }
 
     val voiceLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -238,9 +247,112 @@ private fun AgendaDayDialog(
                     Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(top = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    if (summary.events.isNotEmpty()) {
+                    val importedEvents = summary.events.filter { it.source != AgendaEventSource.MANUAL }
+                    if (importedEvents.isNotEmpty()) {
                         Text("المواعيد المستوردة", fontWeight = FontWeight.Bold)
-                        summary.events.forEach { event -> EventCard(event) }
+                        importedEvents.forEach { event -> EventCard(event) }
+                    }
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
+                    ) {
+                        Column(
+                            Modifier.fillMaxWidth().padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(7.dp)
+                        ) {
+                            Text("إضافة موعد يدوي", fontWeight = FontWeight.Bold)
+                            OutlinedTextField(
+                                value = manualTitle,
+                                onValueChange = { manualTitle = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                label = { Text("العنوان أو رقم الدعوى") }
+                            )
+                            OutlinedTextField(
+                                value = manualTime,
+                                onValueChange = { manualTime = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                label = { Text("الساعة — مثال: 9 صباحًا") }
+                            )
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = { manualLocation = "المكتب" },
+                                    modifier = Modifier.weight(1f)
+                                ) { Text("المكتب") }
+                                OutlinedButton(
+                                    onClick = { manualLocation = "المحكمة" },
+                                    modifier = Modifier.weight(1f)
+                                ) { Text("المحكمة") }
+                            }
+                            OutlinedTextField(
+                                value = manualLocation,
+                                onValueChange = { manualLocation = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                label = { Text("المكان") }
+                            )
+                            OutlinedTextField(
+                                value = manualDetails,
+                                onValueChange = { manualDetails = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                minLines = 2,
+                                label = { Text("تفاصيل الموعد — اختياري") }
+                            )
+                            Button(
+                                onClick = {
+                                    if (
+                                        manualTitle.isNotBlank() ||
+                                        manualTime.isNotBlank() ||
+                                        manualLocation.isNotBlank() ||
+                                        manualDetails.isNotBlank()
+                                    ) {
+                                        manualAppointments.add(
+                                            AgendaManualAppointment(
+                                                title = manualTitle.trim(),
+                                                time = manualTime.trim(),
+                                                location = manualLocation.trim(),
+                                                details = manualDetails.trim()
+                                            )
+                                        )
+                                        manualTitle = ""
+                                        manualTime = ""
+                                        manualLocation = ""
+                                        manualDetails = ""
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("إضافة الموعد لليوم") }
+                        }
+                    }
+
+                    if (manualAppointments.isNotEmpty()) {
+                        Text("المواعيد اليدوية", fontWeight = FontWeight.Bold)
+                        manualAppointments.forEachIndexed { index, appointment ->
+                            Card(
+                                Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+                            ) {
+                                Row(
+                                    Modifier.fillMaxWidth().padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(appointment.title.ifBlank { "موعد يدوي" }, fontWeight = FontWeight.Bold)
+                                        if (appointment.time.isNotBlank()) Text("الساعة: ${appointment.time}")
+                                        if (appointment.location.isNotBlank()) Text("المكان: ${appointment.location}")
+                                        if (appointment.details.isNotBlank()) Text(appointment.details, style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    IconButton(onClick = { manualAppointments.removeAt(index) }) {
+                                        Icon(Icons.Filled.Delete, "حذف الموعد")
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     OutlinedTextField(
@@ -312,7 +424,7 @@ private fun AgendaDayDialog(
                     }
                 }
                 Button(
-                    onClick = { onSave(text, strokes.toList(), images.toList()) },
+                    onClick = { onSave(text, strokes.toList(), images.toList(), manualAppointments.toList()) },
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                 ) {
                     Icon(Icons.Filled.Save, null)
@@ -335,7 +447,8 @@ private fun EventCard(event: AgendaEvent) {
                 when (event.source) {
                     AgendaEventSource.NOTIFICATION_APPOINTMENT -> "مستورد من مواعيد الإخطارات"
                     AgendaEventSource.WORK_MINUTES -> "مستورد من محاضر الأعمال"
-                    else -> ""
+                    AgendaEventSource.MANUAL -> "موعد يدوي"
+                    AgendaEventSource.HOLIDAY -> "إجازة رسمية"
                 },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary
