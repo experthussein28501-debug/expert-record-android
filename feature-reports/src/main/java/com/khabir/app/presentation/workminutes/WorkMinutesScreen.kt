@@ -1,6 +1,11 @@
 package com.khabir.app.presentation.workminutes
 
+import android.Manifest
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -9,9 +14,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,13 +31,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.khabir.app.domain.model.WorkMinutesEntry
 import com.khabir.app.domain.model.WorkMinutesPhrases
+import com.khabir.app.presentation.common.InAppCameraCapture
 import com.khabir.app.presentation.components.KhabirCard
 import com.khabir.app.presentation.components.KhabirPrimaryButton
 import com.khabir.app.presentation.components.KhabirTextField
 import kotlinx.coroutines.launch
+import java.io.File
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -45,6 +57,12 @@ fun WorkMinutesScreen(onBack: () -> Unit, viewModel: WorkMinutesViewModel = hilt
     val snackbar = remember { SnackbarHostState() }
     val screenHeightDp = LocalConfiguration.current.screenHeightDp.dp
     var fileMenuExpanded by remember { mutableStateOf(false) }
+    var cameraEntryNumber by remember { mutableStateOf<Int?>(null) }
+    var showCamera by remember { mutableStateOf(false) }
+    var voiceEntryNumber by remember { mutableStateOf<Int?>(null) }
+    var voiceUseAi by remember { mutableStateOf(false) }
+    var pendingVoiceLaunch by remember { mutableStateOf(false) }
+    var importEntryNumber by remember { mutableStateOf<Int?>(null) }
 
     val smartTemplateLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
@@ -52,6 +70,69 @@ fun WorkMinutesScreen(onBack: () -> Unit, viewModel: WorkMinutesViewModel = hilt
                 context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             viewModel.onSelectWordTemplate(it)
+        }
+    }
+
+    val voiceLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val spoken = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
+        val target = voiceEntryNumber
+        if (spoken.isNotBlank() && target != null) {
+            if (voiceUseAi) viewModel.refineVoiceTranscript(spoken) { refined -> viewModel.appendToEntry(target, refined) }
+            else viewModel.appendToEntry(target, spoken)
+        }
+    }
+
+    fun launchArabicVoice() {
+        voiceLauncher.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ar-EG")
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "تحدث بالعربية لإضافة النص إلى محضر الأعمال")
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 600000L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 600000L)
+        })
+    }
+
+    val microphonePermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted && pendingVoiceLaunch) {
+            pendingVoiceLaunch = false
+            launchArabicVoice()
+        } else if (!granted) {
+            pendingVoiceLaunch = false
+            scope.launch { snackbar.showSnackbar("يلزم السماح بالميكروفون للإدخال الصوتي") }
+        }
+    }
+
+    fun startVoice(entryNumber: Int, ai: Boolean) {
+        voiceEntryNumber = entryNumber
+        voiceUseAi = ai
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            launchArabicVoice()
+        } else {
+            pendingVoiceLaunch = true
+            microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) showCamera = cameraEntryNumber != null
+        else scope.launch { snackbar.showSnackbar("يلزم السماح بالكاميرا لتصوير محضر الأعمال") }
+    }
+
+    fun startCamera(entryNumber: Int) {
+        cameraEntryNumber = entryNumber
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            showCamera = true
+        } else cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+    }
+
+    val importImagesLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        val target = importEntryNumber
+        val files = uris.take(10).mapNotNull { copyWorkMinutesImageToCache(context, it) }
+        if (target != null && files.isNotEmpty()) {
+            viewModel.onDocumentPagesCaptured(target, files, true)
+        } else if (uris.isNotEmpty()) {
+            scope.launch { snackbar.showSnackbar("تعذر استيراد الصور المختارة") }
         }
     }
 
@@ -124,6 +205,11 @@ fun WorkMinutesScreen(onBack: () -> Unit, viewModel: WorkMinutesViewModel = hilt
                 IconButton(onClick = { viewModel.onCopiesCountChanged(state.copiesCount + 1) }) { Text("+", style = MaterialTheme.typography.titleLarge) }
             }
 
+            if (state.isCaptureProcessing) {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+                Text("جارٍ تحليل صور محضر الأعمال...", style = MaterialTheme.typography.bodySmall)
+            }
+
             if (state.entries.isEmpty()) {
                 KhabirCard {
                     Text("لا توجد محاضر أعمال بعد. اضغط «محضر جديد» لإضافة أول محضر.", style = MaterialTheme.typography.bodyMedium)
@@ -137,7 +223,14 @@ fun WorkMinutesScreen(onBack: () -> Unit, viewModel: WorkMinutesViewModel = hilt
                     expandedHeight = screenHeightDp * 0.8f,
                     onExpand = { viewModel.onEntryExpand(entry.number) },
                     onChange = { transform -> viewModel.onEntryChanged(entry.number, transform) },
-                    onRemove = { viewModel.onRemoveEntry(entry.number) }
+                    onRemove = { viewModel.onRemoveEntry(entry.number) },
+                    onGoogleVoice = { startVoice(entry.number, false) },
+                    onAiVoice = { startVoice(entry.number, true) },
+                    onCamera = { startCamera(entry.number) },
+                    onImportImages = {
+                        importEntryNumber = entry.number
+                        importImagesLauncher.launch(arrayOf("image/*"))
+                    }
                 )
             }
 
@@ -177,6 +270,42 @@ fun WorkMinutesScreen(onBack: () -> Unit, viewModel: WorkMinutesViewModel = hilt
         }
     }
 
+    if (showCamera && cameraEntryNumber != null) {
+        val target = cameraEntryNumber!!
+        InAppCameraCapture(
+            onDismiss = { showCamera = false },
+            onCaptured = {},
+            onGeminiCaptured = {},
+            onPagesCaptured = { pages, useAi ->
+                showCamera = false
+                viewModel.onDocumentPagesCaptured(target, pages, useAi)
+            },
+            onError = { message -> scope.launch { snackbar.showSnackbar(message) } }
+        )
+    }
+
+    if (state.captureReviewText.isNotBlank() && state.captureTargetEntryNumber != null) {
+        AlertDialog(
+            onDismissRequest = viewModel::onCaptureReviewDismissed,
+            title = { Text("مراجعة النص المستخرج — محضر ${state.captureTargetEntryNumber}") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(state.captureReviewSource, style = MaterialTheme.typography.labelMedium)
+                    KhabirTextField(
+                        value = state.captureReviewText,
+                        onValueChange = viewModel::onCaptureReviewChanged,
+                        label = { Text("راجع النص قبل إضافته") },
+                        minLines = 8,
+                        maxLines = 16
+                    )
+                    Text("لن يُضاف النص للمحضر إلا بعد الضغط على «اعتماد وإضافة».", style = MaterialTheme.typography.bodySmall)
+                }
+            },
+            confirmButton = { Button(onClick = viewModel::onCaptureReviewAccepted) { Text("اعتماد وإضافة") } },
+            dismissButton = { TextButton(onClick = viewModel::onCaptureReviewDismissed) { Text("إلغاء") } }
+        )
+    }
+
     state.pendingTemplateUri?.let {
         WorkMinutesTemplateMappingDialog(uriKey = it, state = state, viewModel = viewModel)
     }
@@ -195,20 +324,17 @@ private fun WorkMinutesTemplateMappingDialog(uriKey: Any, state: WorkMinutesUiSt
         title = { Text("تحويل نموذج Word إلى قالب محاضر أعمال") },
         text = {
             Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState())) {
-                Text("اختر اسم الحقل ثم اضغط الفقرة القديمة التي تريد استبدالها به. باقي النموذج يبقى كما هو. راجع أي بيانات قديمة قبل مشاركة الناتج.")
+                Text("اختر اسم الحقل ثم اضغط الفقرة القديمة التي تريد استبدالها به. باقي النموذج يبقى كما هو.")
                 KhabirTextField(selectedField, { selectedField = it }, label = { Text("اسم الحقل") })
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    knownFields.forEach { field ->
-                        TextButton(onClick = { selectedField = field }) { Text(field) }
-                    }
+                    knownFields.forEach { field -> TextButton(onClick = { selectedField = field }) { Text(field) } }
                 }
                 state.templateParagraphs.distinct().forEach { paragraph ->
                     OutlinedButton(onClick = {
-                        mapping = if (mapping.containsKey(paragraph)) mapping - paragraph
-                        else mapping + (paragraph to selectedField.trim())
+                        mapping = if (mapping.containsKey(paragraph)) mapping - paragraph else mapping + (paragraph to selectedField.trim())
                     }, modifier = Modifier.fillMaxWidth()) {
                         Text((mapping[paragraph]?.let { field -> "[$field] " } ?: "") + paragraph)
                     }
@@ -220,7 +346,7 @@ private fun WorkMinutesTemplateMappingDialog(uriKey: Any, state: WorkMinutesUiSt
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun WorkMinutesEntryCard(
     entry: WorkMinutesEntry,
@@ -228,7 +354,11 @@ private fun WorkMinutesEntryCard(
     expandedHeight: Dp,
     onExpand: () -> Unit,
     onChange: ((WorkMinutesEntry) -> WorkMinutesEntry) -> Unit,
-    onRemove: () -> Unit
+    onRemove: () -> Unit,
+    onGoogleVoice: () -> Unit,
+    onAiVoice: () -> Unit,
+    onCamera: () -> Unit,
+    onImportImages: () -> Unit
 ) {
     var showOpeningDatePicker by remember { mutableStateOf(false) }
     var showFollowUpDatePicker by remember { mutableStateOf(false) }
@@ -247,15 +377,13 @@ private fun WorkMinutesEntryCard(
         }
     }
 
-    KhabirCard(
-        containerColor = if (isExpanded) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
-    ) {
+    KhabirCard(containerColor = if (isExpanded) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface) {
         Column(
             modifier = if (isExpanded) Modifier.fillMaxWidth().height(expandedHeight) else Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("محضر اعمال رقم (${entry.number})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text("محضر أعمال رقم (${entry.number})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 IconButton(onClick = onRemove) { Icon(Icons.Filled.Delete, "حذف المحضر") }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -275,7 +403,7 @@ private fun WorkMinutesEntryCard(
                 )
             }
             Text("نصوص جاهزة", style = MaterialTheme.typography.labelSmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 WorkMinutesPhrases.quickPhrases.forEach { (label, phrase) ->
                     AssistChip(onClick = { onChange { e -> e.copy(bodyText = phrase) } }, label = { Text(label) })
                 }
@@ -283,14 +411,19 @@ private fun WorkMinutesEntryCard(
             KhabirTextField(
                 value = entry.bodyText,
                 onValueChange = { onChange { e -> e.copy(bodyText = it) } },
-                modifier = Modifier
-                    .onFocusChanged { if (it.isFocused) onExpand() }
-                    .let { if (isExpanded) it.weight(1f) else it },
+                modifier = Modifier.onFocusChanged { if (it.isFocused) onExpand() }.let { if (isExpanded) it.weight(1f) else it },
                 label = { Text("نص المحضر") },
                 placeholder = { Text("لإثبات ...") },
                 minLines = 3,
-                maxLines = if (isExpanded) Int.MAX_VALUE else 4
+                maxLines = if (isExpanded) Int.MAX_VALUE else 6
             )
+            Text("إدخال خاص بهذا المحضر فقط", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                AssistChip(onClick = onGoogleVoice, label = { Text("صوت Google") }, leadingIcon = { Icon(Icons.Filled.Mic, null) })
+                AssistChip(onClick = onAiVoice, label = { Text("الصوت بالـAI") }, leadingIcon = { Icon(Icons.Filled.AutoAwesome, null) })
+                AssistChip(onClick = onCamera, label = { Text("كاميرا 1–10") }, leadingIcon = { Icon(Icons.Filled.CameraAlt, null) })
+                AssistChip(onClick = onImportImages, label = { Text("استيراد صور") }, leadingIcon = { Icon(Icons.Filled.PhotoLibrary, null) })
+            }
             KhabirTextField(
                 value = entry.closingTime,
                 onValueChange = { onChange { e -> e.copy(closingTime = it) } },
@@ -327,11 +460,19 @@ private fun WorkMinutesDatePicker(initialDate: LocalDate?, onDismiss: () -> Unit
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(onClick = {
-                picker.selectedDateMillis?.let { millis ->
-                    onSelected(Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate())
-                }
+                picker.selectedDateMillis?.let { millis -> onSelected(Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()) }
             }) { Text("تأكيد") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
     ) { DatePicker(picker) }
 }
+
+private fun copyWorkMinutesImageToCache(context: Context, uri: Uri): File? = runCatching {
+    val directory = File(context.cacheDir, "work_minutes_import").apply { mkdirs() }
+    val file = File.createTempFile("work_minutes_", ".jpg", directory)
+    context.contentResolver.openInputStream(uri).use { input ->
+        requireNotNull(input) { "تعذر فتح الصورة" }
+        file.outputStream().use { output -> input.copyTo(output) }
+    }
+    file
+}.getOrNull()
