@@ -35,8 +35,8 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         minSdk = 26
         targetSdk = 36
-        versionCode = 90
-        versionName = "0.9.0"
+        versionCode = 91
+        versionName = "0.9.2-work-minutes-word-template"
         buildConfigField("String", "ACTIVATION_ENDPOINT", "\"${activationEndpoint.replace("\"", "\\\"")}\"")
         buildConfigField("String", "GEMINI_VISION_ENDPOINT", "\"${geminiVisionEndpoint.replace("\"", "\\\"")}\"")
         buildConfigField("String", "FIREBASE_API_KEY", "\"${firebaseApiKey.replace("\"", "\\\"")}\"")
@@ -95,7 +95,7 @@ android {
             applicationIdSuffix = ".combined"
             versionNameSuffix = "-combined"
             buildConfigField("String", "MODULE_MODE", "\"COMBINED\"")
-            manifestPlaceholders["appLabel"] = "سجل الخبير — النسخة المجمعة 0.9.0"
+            manifestPlaceholders["appLabel"] = "سجل الخبير — النسخة المجمعة 0.9.2"
         }
         create("notifications") {
             dimension = "module"
@@ -205,4 +205,3 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
-
