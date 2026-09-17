@@ -1,0 +1,91 @@
+name: External APK ZIP
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - ".github/workflows/external-apk-zip.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package-upload:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Install Android 36 SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | sort -V | tail -n 1)"
+          fi
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Build APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew --no-daemon :app:assembleCombinedDebug
+          APK="$(find app/build/outputs/apk -type f -name '*.apk' | head -n 1)"
+          cp "$APK" expert-record-debug.apk
+          test "$(stat -c%s expert-record-debug.apk)" -gt 49000000
+
+      - name: Zip and verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          zip -9 expert-record-0.9.2-fixed.zip expert-record-debug.apk
+          unzip -t expert-record-0.9.2-fixed.zip
+          echo "APK_SHA256=$(sha256sum expert-record-debug.apk | awk '{print $1}')"
+          echo "ZIP_SHA256=$(sha256sum expert-record-0.9.2-fixed.zip | awk '{print $1}')"
+          echo "ZIP_SIZE=$(stat -c%s expert-record-0.9.2-fixed.zip)"
+
+      - name: Upload ZIP externally
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE="expert-record-0.9.2-fixed.zip"
+          echo "Trying file.io..."
+          RESP="$(curl -sS --max-time 180 -F "file=@${FILE}" https://file.io || true)"
+          echo "FILEIO_RESPONSE=${RESP}"
+          URL="$(python3 - <<'PY'
+import json, os
+s=os.environ.get('RESP','')
+try:
+    j=json.loads(s)
+    print(j.get('link',''))
+except Exception:
+    print('')
+PY
+          )"
+          if [ -z "$URL" ]; then
+            echo "Trying temp.sh..."
+            URL="$(curl -sS --fail --max-time 180 --upload-file "${FILE}" "https://temp.sh/${FILE}" || true)"
+          fi
+          if [ -z "$URL" ]; then
+            echo "Trying bashupload.com..."
+            OUT="$(curl -sS --fail --max-time 180 "https://bashupload.com/${FILE}" --data-binary "@${FILE}" || true)"
+            echo "$OUT"
+            URL="$(printf '%s\n' "$OUT" | grep -Eo 'https?://[^ ]+' | tail -n 1 || true)"
+          fi
+          test -n "$URL"
+          echo "DIRECT_ZIP_URL=$URL"
+        env:
+          RESP: ""
