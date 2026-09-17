@@ -74,6 +74,20 @@ class AgendaViewModel @Inject constructor(
                     }
                 }
             }
+            manualNotes.values.forEach { note ->
+                note.manualAppointments.forEach { appointment ->
+                    add(
+                        AgendaEvent(
+                            date = note.date,
+                            title = appointment.title.ifBlank { "موعد يدوي" },
+                            time = appointment.time,
+                            location = appointment.location,
+                            details = appointment.details,
+                            source = AgendaEventSource.MANUAL
+                        )
+                    )
+                }
+            }
         }.distinctBy { listOf(it.date.toString(), it.title, it.time, it.location, it.source.name).joinToString("|") }
             .groupBy { it.date }
 
@@ -97,13 +111,20 @@ class AgendaViewModel @Inject constructor(
     fun selectDate(date: LocalDate) { selectedDate.value = date }
     fun closeDay() { selectedDate.value = null }
 
-    fun saveDay(date: LocalDate, text: String, strokes: List<AgendaStroke>, imagePaths: List<String>) {
+    fun saveDay(
+        date: LocalDate,
+        text: String,
+        strokes: List<AgendaStroke>,
+        imagePaths: List<String>,
+        manualAppointments: List<AgendaManualAppointment>
+    ) {
         store.save(
             AgendaDayNote(
                 date = date,
                 text = text.trim(),
                 strokes = strokes,
                 imagePaths = imagePaths,
+                manualAppointments = manualAppointments,
                 updatedAt = System.currentTimeMillis()
             )
         )
