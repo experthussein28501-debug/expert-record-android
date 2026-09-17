@@ -104,6 +104,28 @@ class PersonalAiKeyStore @Inject constructor(@ApplicationContext context: Contex
         preferences.edit().remove("report_word_template_uri").remove("report_word_mapping").apply()
     }
 
+    /**
+     * قالب Word شخصي لمحاضر الأعمال — نفس فكرة قوالب التقارير الشخصية،
+     * لكن بمفتاح تخزين مستقل خاص بمحاضر الأعمال (نوع واحد فقط، بدون
+     * تعدد أنواع زي تقارير مدني/أسري/جنح، فمفيش حاجة لـtemplateId هنا).
+     */
+    fun readWorkMinutesTemplateUri(): String =
+        preferences.getString("work_minutes_word_template_uri", null).orEmpty()
+
+    fun writeWorkMinutesTemplateUri(value: String) =
+        preferences.edit().putString("work_minutes_word_template_uri", value).apply()
+
+    fun readWorkMinutesTemplateMapping(): Map<String, String> = readMapping("work_minutes_word_mapping")
+
+    fun writeWorkMinutesTemplateMapping(value: Map<String, String>) = preferences.edit()
+        .putString("work_minutes_word_mapping", org.json.JSONObject(value).toString())
+        .apply()
+
+    fun clearWorkMinutesTemplate() = preferences.edit()
+        .remove("work_minutes_word_template_uri")
+        .remove("work_minutes_word_mapping")
+        .apply()
+
     private fun readMapping(key: String): Map<String, String> = runCatching {
         val json = org.json.JSONObject(preferences.getString(key, "{}").orEmpty())
         json.keys().asSequence().associateWith { json.getString(it) }
