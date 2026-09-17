@@ -25,6 +25,6 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "khabir-app"
-include(":app", ":core", ":feature-auth", ":feature-cases", ":feature-notifications", ":feature-reports")
+include(":app", ":core", ":feature-auth", ":feature-cases", ":feature-notifications", ":feature-reports", ":feature-agenda")
 
 include(":notification-app", ":report-app")
