@@ -4,6 +4,8 @@ import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.khabir.app.data.ai.PersonalAiKeyStore
+import com.khabir.app.data.export.OfficeInteropService
 import com.khabir.app.domain.model.ReportCoverFields
 import com.khabir.app.domain.model.WorkMinutesEntry
 import com.khabir.app.domain.model.WorkMinutesRecord
@@ -39,7 +41,10 @@ data class WorkMinutesUiState(
     val isExporting: Boolean = false,
     val autoSaveStatus: String = "",
     val errorMessage: String? = null,
-    val exportedFileUri: Uri? = null
+    val exportedFileUri: Uri? = null,
+    val savedWordTemplateUri: String = "",
+    val pendingTemplateUri: Uri? = null,
+    val templateParagraphs: List<String> = emptyList()
 ) {
     val isIndependent: Boolean get() = caseId == null
 }
@@ -52,6 +57,8 @@ class WorkMinutesViewModel @Inject constructor(
     private val caseRepository: CaseRepository,
     private val expertProfileRepository: ExpertProfileRepository,
     private val exportRepository: DocumentExportRepository,
+    private val officeInterop: OfficeInteropService,
+    private val personalAiKeyStore: PersonalAiKeyStore,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(WorkMinutesUiState())
@@ -80,7 +87,8 @@ class WorkMinutesViewModel @Inject constructor(
                     defendantsSummary = record.defendantsSummary,
                     entries = record.entries,
                     copiesCount = record.copiesCount,
-                    isLoading = false
+                    isLoading = false,
+                    savedWordTemplateUri = personalAiKeyStore.readWorkMinutesTemplateUri()
                 )
             }
         }
@@ -137,6 +145,29 @@ class WorkMinutesViewModel @Inject constructor(
     fun onErrorMessageConsumed() = _uiState.update { it.copy(errorMessage = null) }
     fun onExportConsumed() = _uiState.update { it.copy(exportedFileUri = null) }
 
+    /** يحل بيانات غلاف الدعوى (وزارة/قطاع/إدارة/خصوم...) من القضية المرتبطة أو من الحقول اليدوية. */
+    private suspend fun resolveCover(state: WorkMinutesUiState, profile: com.khabir.app.domain.model.ExpertProfile): ReportCoverFields? {
+        val linkedCase = state.caseId?.let { caseRepository.getById(it) }
+        return when {
+            linkedCase != null -> ReportCoverFields.from(linkedCase, profile)
+            state.caseNo.isNotBlank() && state.caseYear.isNotBlank() -> ReportCoverFields(
+                court = state.court,
+                caseNo = state.caseNo,
+                caseYear = state.caseYear,
+                incomingNo = "",
+                incomingYear = "",
+                expertName = profile.expertName,
+                ministryOrSector = profile.ministryOrSector,
+                department = profile.department,
+                plaintiffsSummary = state.plaintiffsSummary,
+                defendantsSummary = state.defendantsSummary,
+                partiesSummary = state.plaintiffsSummary,
+                caseType = state.court
+            )
+            else -> null
+        }
+    }
+
     fun onExport() {
         val state = _uiState.value
         if (state.entries.isEmpty()) {
@@ -150,25 +181,7 @@ class WorkMinutesViewModel @Inject constructor(
                 _uiState.update { it.copy(isExporting = false, errorMessage = "أكمل بيانات الخبير أولًا") }
                 return@launch
             }
-            val linkedCase = state.caseId?.let { caseRepository.getById(it) }
-            val cover = when {
-                linkedCase != null -> ReportCoverFields.from(linkedCase, profile)
-                state.caseNo.isNotBlank() && state.caseYear.isNotBlank() -> ReportCoverFields(
-                    court = state.court,
-                    caseNo = state.caseNo,
-                    caseYear = state.caseYear,
-                    incomingNo = "",
-                    incomingYear = "",
-                    expertName = profile.expertName,
-                    ministryOrSector = profile.ministryOrSector,
-                    department = profile.department,
-                    plaintiffsSummary = state.plaintiffsSummary,
-                    defendantsSummary = state.defendantsSummary,
-                    partiesSummary = state.plaintiffsSummary,
-                    caseType = state.court
-                )
-                else -> null
-            }
+            val cover = resolveCover(state, profile)
             if (cover == null) {
                 _uiState.update { it.copy(isExporting = false, errorMessage = "أكمل بيانات الدعوى أولًا") }
                 return@launch
@@ -192,6 +205,114 @@ class WorkMinutesViewModel @Inject constructor(
             )
             _uiState.update { it.copy(isExporting = false, exportedFileUri = uri) }
         }
+    }
+
+    /**
+     * قالب Word خارجي لمحاضر الأعمال — نفس آلية `OfficeInteropService.fillDocxTemplate`
+     * المستخدمة فعليًا في التقارير: تعبئة تلقائية للخانات الفارغة أسفل عناوين معروفة، أو
+     * `{{الحقل}}`/`«الحقل»` في أي مكان بالقالب، أو ربط يدوي لفقرات موجودة عبر [onApplyTemplateMapping]
+     * لو محتاج القالب يفضل شكله زي ما هو بدون علامات.
+     */
+    fun onSelectWordTemplate(uri: Uri) {
+        viewModelScope.launch {
+            runCatching { officeInterop.templateParagraphs(uri) to officeInterop.canAutoFillBlankReportFields(uri) }
+                .onSuccess { (paragraphs, hasBlankFields) ->
+                    if (hasBlankFields || paragraphs.any { it.contains("{{") || it.contains("«") }) onFillWordTemplate(uri)
+                    else _uiState.update { it.copy(pendingTemplateUri = uri, templateParagraphs = paragraphs) }
+                }.onFailure { e -> _uiState.update { it.copy(errorMessage = e.message ?: "تعذر قراءة القالب") } }
+        }
+    }
+
+    fun onCancelTemplateMapping() = _uiState.update { it.copy(pendingTemplateUri = null, templateParagraphs = emptyList()) }
+
+    fun onApplyTemplateMapping(mapping: Map<String, String>) {
+        val uri = _uiState.value.pendingTemplateUri ?: return
+        if (mapping.isEmpty()) return
+        onCancelTemplateMapping()
+        onFillWordTemplate(uri, mapping)
+    }
+
+    fun onFillWordTemplate(uri: Uri, mapping: Map<String, String> = emptyMap()) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isExporting = true, errorMessage = null) }
+            val state = _uiState.value
+            val id = runCatching { saveWorkMinutes(state.toRecord()) }.getOrElse { e ->
+                _uiState.update { it.copy(isExporting = false, errorMessage = e.message ?: "تعذر حفظ محاضر الأعمال") }
+                return@launch
+            }
+            val profile = expertProfileRepository.get()
+            if (profile == null) {
+                _uiState.update { it.copy(isExporting = false, errorMessage = "أكمل بيانات الخبير أولًا") }
+                return@launch
+            }
+            val cover = resolveCover(state, profile)
+            if (cover == null) {
+                _uiState.update { it.copy(isExporting = false, errorMessage = "أكمل بيانات الدعوى أولًا") }
+                return@launch
+            }
+            val entriesWithExpert = state.entries.map { if (it.expertName.isBlank()) it.copy(expertName = profile.expertName) else it }
+                .sortedBy { it.number }
+            val entriesText = entriesWithExpert.joinToString("\n\n") { entry -> entryText(entry) }
+            val replacements = linkedMapOf(
+                "رقم_الدعوى" to cover.caseNo, "رقم الدعوى" to cover.caseNo,
+                "السنة" to cover.caseYear, "سنة_الدعوى" to cover.caseYear,
+                "المحكمة" to cover.court,
+                "القطاع" to cover.ministryOrSector, "الإدارة" to cover.department,
+                "الخبير" to profile.expertName, "اسم_الخبير" to profile.expertName, "اسم الخبير" to profile.expertName,
+                "المرفوعة من" to cover.plaintiffsSummary, "المرفوعـة من" to cover.plaintiffsSummary,
+                "ضد" to cover.defendantsSummary,
+                "الوارد" to if (cover.incomingNo.isBlank()) "" else "${cover.incomingNo}/${cover.incomingYear}",
+                "عدد_النسخ" to state.copiesCount.toString(), "عدد النسخ" to state.copiesCount.toString(),
+                "محاضر_الأعمال" to entriesText, "محاضر الأعمال" to entriesText,
+                "متن_المحاضر" to entriesText, "متن المحاضر" to entriesText,
+                "مجموعة_محاضر_الأعمال" to entriesText, "مجموعة محاضر اعمال" to entriesText
+            )
+            entriesWithExpert.forEach { entry ->
+                replacements.putIfAbsent("محضر_${entry.number}", entryText(entry))
+                replacements.putIfAbsent("محضر ${entry.number}", entryText(entry))
+            }
+            val safeCaseNo = cover.caseNo.ifBlank { "جديد" }
+            val safeCaseYear = cover.caseYear.ifBlank { "بدون_سنة" }
+            runCatching { officeInterop.fillDocxTemplate(uri, replacements, "محاضر_اعمال_من_قالب_${safeCaseNo}_${safeCaseYear}", mapping) }
+                .onSuccess { outputUri ->
+                    personalAiKeyStore.writeWorkMinutesTemplateUri(uri.toString())
+                    personalAiKeyStore.writeWorkMinutesTemplateMapping(mapping)
+                    _uiState.update {
+                        it.copy(
+                            recordId = id, isExporting = false,
+                            savedWordTemplateUri = uri.toString(),
+                            autoSaveStatus = "تم حفظ قالب Word الشخصي لمحاضر الأعمال وإنشاء النسخة",
+                            exportedFileUri = outputUri
+                        )
+                    }
+                }
+                .onFailure { e -> _uiState.update { it.copy(recordId = id, isExporting = false, errorMessage = e.message ?: "تعذر تعبئة قالب Word") } }
+        }
+    }
+
+    fun onUseSavedWordTemplate() {
+        val value = _uiState.value.savedWordTemplateUri
+        if (value.isBlank()) return
+        onFillWordTemplate(Uri.parse(value), personalAiKeyStore.readWorkMinutesTemplateMapping())
+    }
+
+    fun onForgetWordTemplate() {
+        personalAiKeyStore.clearWorkMinutesTemplate()
+        _uiState.update { it.copy(savedWordTemplateUri = "", autoSaveStatus = "تم حذف قالب Word الشخصي لمحاضر الأعمال") }
+    }
+
+    /** نفس منطق فتح/غلق المحضر المستخدم فى `WorkMinutesDocxBuilder`، بصيغة نصية عادية بدل XML. */
+    private fun entryText(entry: WorkMinutesEntry): String {
+        val dateFormat = java.time.format.DateTimeFormatter.ofPattern("d/M/yyyy")
+        val sb = StringBuilder("محضر اعمال رقم (${entry.number})\n")
+        sb.append("فتح هذا المحضر اليوم")
+        entry.openingDate?.let { sb.append(" ${it.format(dateFormat)}") }
+        if (entry.openingTime.isNotBlank()) sb.append(" الساعة ${entry.openingTime}")
+        sb.append(" بالمكتب")
+        if (entry.bodyText.isNotBlank()) sb.append(" ${entry.bodyText}")
+        if (entry.closingTime.isNotBlank()) sb.append("\nواقفل المحضر على ذلك فى تاريخه الساعة ${entry.closingTime} بالمكتب")
+        if (entry.expertName.isNotBlank()) sb.append("\nالخبير/ ${entry.expertName}")
+        return sb.toString()
     }
 }
 
