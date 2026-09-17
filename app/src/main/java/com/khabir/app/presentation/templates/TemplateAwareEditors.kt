@@ -3,8 +3,10 @@ package com.khabir.app.presentation.templates
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,6 +21,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -29,6 +32,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.khabir.app.domain.model.WorkMinutesEntry
 import com.khabir.app.presentation.reports.ReportScreen
 import com.khabir.app.presentation.reports.ReportViewModel
 import com.khabir.app.presentation.workminutes.WorkMinutesScreen
@@ -81,6 +85,8 @@ fun TemplateAwareWorkMinutesScreen(
         viewModel.onSelectWordTemplate(uri)
     }
 
+    val selectedEntry = state.expandedEntryNumber?.let { number -> state.entries.firstOrNull { it.number == number } }
+
     Column(Modifier.fillMaxSize()) {
         WordTemplatePanel(
             title = "قالب محاضر الأعمال",
@@ -90,8 +96,76 @@ fun TemplateAwareWorkMinutesScreen(
             onUseSavedTemplate = viewModel::onUseSavedWordTemplate,
             onForgetTemplate = viewModel::onForgetWordTemplate
         )
+        selectedEntry?.let { entry ->
+            WorkMinutesAgendaAppointmentPanel(
+                entry = entry,
+                court = state.court,
+                onChange = { transform -> viewModel.onEntryChanged(entry.number, transform) }
+            )
+        }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             WorkMinutesScreen(onBack = onBack, viewModel = viewModel)
+        }
+    }
+}
+
+@Composable
+private fun WorkMinutesAgendaAppointmentPanel(
+    entry: WorkMinutesEntry,
+    court: String,
+    onChange: ((WorkMinutesEntry) -> WorkMinutesEntry) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                "بيانات الموعد للأجندة — محضر ${entry.number}",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                if (entry.scheduledFollowUpDate == null)
+                    "حدد تاريخ الموعد القادم من داخل المحضر، ثم أدخل الساعة والمكان هنا."
+                else
+                    "سيظهر هذا الموعد تلقائيًا في الأجندة بتاريخ ${entry.scheduledFollowUpDate}.",
+                style = MaterialTheme.typography.bodySmall
+            )
+            OutlinedTextField(
+                value = entry.scheduledFollowUpTime,
+                onValueChange = { value -> onChange { it.copy(scheduledFollowUpTime = value) } },
+                label = { Text("الساعة — مثال: 9 صباحًا") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                OutlinedButton(
+                    onClick = { onChange { it.copy(scheduledFollowUpLocation = "المكتب") } },
+                    modifier = Modifier.weight(1f)
+                ) { Text("المكتب") }
+                OutlinedButton(
+                    onClick = {
+                        onChange {
+                            it.copy(scheduledFollowUpLocation = court.ifBlank { "المحكمة" })
+                        }
+                    },
+                    modifier = Modifier.weight(1f)
+                ) { Text("المحكمة") }
+            }
+            OutlinedTextField(
+                value = entry.scheduledFollowUpLocation,
+                onValueChange = { value -> onChange { it.copy(scheduledFollowUpLocation = value) } },
+                label = { Text("المكان — المكتب / المحكمة / مكان آخر") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
         }
     }
 }
