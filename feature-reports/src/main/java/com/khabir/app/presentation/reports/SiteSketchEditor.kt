@@ -34,6 +34,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -42,8 +43,19 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import java.io.File
 import java.security.MessageDigest
+import kotlin.math.PI
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
 
-internal data class SketchStroke(val points: List<Offset>, val color: Color, val width: Float)
+enum class SketchTool { FREEHAND, LINE, ARROW }
+
+internal data class SketchStroke(
+    val points: List<Offset>,
+    val color: Color,
+    val width: Float,
+    val tool: SketchTool = SketchTool.FREEHAND
+)
 
 internal data class RestoredSketch(
     val baseImage: Bitmap?,
@@ -52,14 +64,14 @@ internal data class RestoredSketch(
     val fingerprint: String
 )
 
-/** Sidecar codec for editable drawing strokes. */
+/** Sidecar codec for editable drawing strokes. Reads old v1 drafts and writes v2 tool-aware drafts. */
 internal object SketchDraftCodec {
     fun encode(showBaseImage: Boolean, strokes: List<SketchStroke>): String = buildString {
-        appendLine("v=1")
+        appendLine("v=2")
         appendLine("base=${if (showBaseImage) 1 else 0}")
         strokes.forEach { stroke ->
             val points = stroke.points.joinToString(";") { p -> "${p.x.coerceIn(0f, 1f)},${p.y.coerceIn(0f, 1f)}" }
-            appendLine("s=${stroke.color.toArgb()}|${stroke.width}|$points")
+            appendLine("s=${stroke.tool.name}|${stroke.color.toArgb()}|${stroke.width}|$points")
         }
     }
 
@@ -70,31 +82,44 @@ internal object SketchDraftCodec {
             val line = raw.trim()
             when {
                 line.startsWith("base=") -> showBase = line.substringAfter('=').trim() != "0"
-                line.startsWith("s=") -> {
-                    val parts = line.substringAfter("s=").split('|', limit = 3)
-                    if (parts.size != 3) return@forEach
-                    val color = parts[0].toIntOrNull() ?: return@forEach
-                    val width = parts[1].toFloatOrNull()?.coerceIn(0.001f, 0.03f) ?: return@forEach
-                    val points = parts[2].split(';').mapNotNull { token ->
-                        val xy = token.split(',', limit = 2)
-                        if (xy.size != 2) null else {
-                            val x = xy[0].toFloatOrNull()
-                            val y = xy[1].toFloatOrNull()
-                            if (x == null || y == null) null else Offset(x.coerceIn(0f, 1f), y.coerceIn(0f, 1f))
-                        }
-                    }
-                    if (points.isNotEmpty()) strokes += SketchStroke(points, Color(color), width)
-                }
+                line.startsWith("s=") -> decodeStroke(line.substringAfter("s="))?.let(strokes::add)
             }
         }
         return showBase to strokes
     }
+
+    private fun decodeStroke(value: String): SketchStroke? {
+        val v2 = value.split('|', limit = 4)
+        if (v2.size == 4) {
+            val tool = runCatching { SketchTool.valueOf(v2[0]) }.getOrNull()
+            val color = v2[1].toIntOrNull()
+            val width = v2[2].toFloatOrNull()?.coerceIn(0.001f, 0.03f)
+            val points = parsePoints(v2[3])
+            if (tool != null && color != null && width != null && points.isNotEmpty()) {
+                return SketchStroke(points, Color(color), width, tool)
+            }
+        }
+
+        // Backward compatibility with v1: color|width|points
+        val v1 = value.split('|', limit = 3)
+        if (v1.size != 3) return null
+        val color = v1[0].toIntOrNull() ?: return null
+        val width = v1[1].toFloatOrNull()?.coerceIn(0.001f, 0.03f) ?: return null
+        val points = parsePoints(v1[2])
+        return points.takeIf { it.isNotEmpty() }?.let { SketchStroke(it, Color(color), width, SketchTool.FREEHAND) }
+    }
+
+    private fun parsePoints(value: String): List<Offset> = value.split(';').mapNotNull { token ->
+        val xy = token.split(',', limit = 2)
+        if (xy.size != 2) null else {
+            val x = xy[0].toFloatOrNull()
+            val y = xy[1].toFloatOrNull()
+            if (x == null || y == null) null else Offset(x.coerceIn(0f, 1f), y.coerceIn(0f, 1f))
+        }
+    }
 }
 
-/**
- * Keeps the background image and strokes separate without changing the report database schema.
- * The rendered PNG is fingerprinted; that fingerprint points to a private sidecar draft.
- */
+/** Keeps the background image and editable strokes separate across app restarts. */
 private object SketchDraftRegistry {
     private const val MAX_DRAFTS = 60
 
@@ -167,8 +192,7 @@ private object SketchDraftRegistry {
 }
 
 /**
- * Location sketch editor. New sketches preserve the map/photo background and the drawing
- * strokes as separate editable layers across app restarts.
+ * محرر الكروكي: رسم حر أو خط مستقيم أو سهم، مع حفظ كل عنصر كطبقة قابلة للتعديل.
  */
 @Composable
 fun SiteSketchEditor(
@@ -181,6 +205,7 @@ fun SiteSketchEditor(
     val editableBaseImage = remember(baseImage, restored) { restored?.baseImage ?: baseImage }
     val strokes = remember(baseImage, restored) { mutableStateListOf<SketchStroke>().apply { addAll(restored?.strokes.orEmpty()) } }
     var currentPoints by remember { mutableStateOf<List<Offset>>(emptyList()) }
+    var selectedTool by remember { mutableStateOf(SketchTool.FREEHAND) }
     var selectedColor by remember { mutableStateOf(Color(0xFF111111)) }
     var selectedWidth by remember { mutableStateOf(0.005f) }
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
@@ -189,55 +214,98 @@ fun SiteSketchEditor(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("مخطط الموقع") },
+        title = { Text(if (restored == null) "رسم كروكي جديد" else "تعديل الرسم الكروكي") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    if (restored != null) "تم استرجاع طبقة الرسم السابقة؛ يمكنك تعديل الخطوط أو إخفاء خلفية الخريطة."
-                    else "ارسم فوق لقطة الخريطة أو على صفحة بيضاء. الرسم يدوي للمراجعة وليس قياسًا مساحيًا.",
+                    if (restored != null) "تم فتح طبقات الرسم السابقة. عدّلها أو أضف خطوطًا وأسهمًا جديدة ثم احفظ."
+                    else "اختر الأداة ثم ارسم فوق الخريطة/الصورة أو على صفحة بيضاء.",
                     style = MaterialTheme.typography.bodySmall
                 )
+
+                Text("أداة الرسم", style = MaterialTheme.typography.labelLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilterChip(selected = selectedTool == SketchTool.FREEHAND, onClick = { selectedTool = SketchTool.FREEHAND }, label = { Text("رسم حر") })
+                    FilterChip(selected = selectedTool == SketchTool.LINE, onClick = { selectedTool = SketchTool.LINE }, label = { Text("خط مستقيم") })
+                    FilterChip(selected = selectedTool == SketchTool.ARROW, onClick = { selectedTool = SketchTool.ARROW }, label = { Text("سهم") })
+                }
+
+                Text("اللون", style = MaterialTheme.typography.labelLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf(Color(0xFF111111) to "أسود", Color(0xFFC62828) to "أحمر", Color(0xFF1565C0) to "أزرق").forEach { (color, label) ->
                         FilterChip(selected = selectedColor == color, onClick = { selectedColor = color }, label = { Text(label) })
                     }
                 }
+
                 if (editableBaseImage != null) {
-                    FilterChip(selected = showBaseImage, onClick = { showBaseImage = !showBaseImage }, label = { Text(if (showBaseImage) "خلفية الخريطة ظاهرة" else "الخريطة مخفية — الرسم فقط") })
+                    FilterChip(
+                        selected = showBaseImage,
+                        onClick = { showBaseImage = !showBaseImage },
+                        label = { Text(if (showBaseImage) "خلفية الخريطة ظاهرة" else "الخريطة مخفية — الرسم فقط") }
+                    )
                 }
+
+                Text("سمك الخط", style = MaterialTheme.typography.labelLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     FilterChip(selected = selectedWidth == 0.003f, onClick = { selectedWidth = 0.003f }, label = { Text("رفيع") })
                     FilterChip(selected = selectedWidth == 0.005f, onClick = { selectedWidth = 0.005f }, label = { Text("متوسط") })
                     FilterChip(selected = selectedWidth == 0.009f, onClick = { selectedWidth = 0.009f }, label = { Text("عريض") })
-                    OutlinedButton(onClick = { if (strokes.isNotEmpty()) strokes.removeAt(strokes.lastIndex) }) { Text("تراجع") }
                 }
-                Box(Modifier.fillMaxWidth().height(360.dp).background(Color.White).clipToBounds().onSizeChanged { canvasSize = it }, contentAlignment = Alignment.Center) {
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = { if (strokes.isNotEmpty()) strokes.removeAt(strokes.lastIndex) },
+                        enabled = strokes.isNotEmpty(),
+                        modifier = Modifier.weight(1f)
+                    ) { Text("تراجع آخر عنصر") }
+                    OutlinedButton(
+                        onClick = { strokes.clear(); currentPoints = emptyList() },
+                        enabled = strokes.isNotEmpty(),
+                        modifier = Modifier.weight(1f)
+                    ) { Text("مسح الرسم") }
+                }
+
+                Text("العناصر الحالية: ${strokes.size}", style = MaterialTheme.typography.labelMedium)
+
+                Box(
+                    Modifier.fillMaxWidth().height(360.dp).background(Color.White).clipToBounds().onSizeChanged { canvasSize = it },
+                    contentAlignment = Alignment.Center
+                ) {
                     Canvas(
-                        Modifier.fillMaxWidth().height(360.dp).pointerInput(canvasSize, selectedColor, selectedWidth) {
+                        Modifier.fillMaxWidth().height(360.dp).pointerInput(canvasSize, selectedColor, selectedWidth, selectedTool) {
                             fun pointAt(position: Offset): Offset = Offset(
                                 (position.x / canvasSize.width.coerceAtLeast(1)).coerceIn(0f, 1f),
                                 (position.y / canvasSize.height.coerceAtLeast(1)).coerceIn(0f, 1f)
                             )
                             detectDragGestures(
                                 onDragStart = { currentPoints = listOf(pointAt(it)) },
-                                onDrag = { change, _ -> currentPoints = currentPoints + pointAt(change.position) },
-                                onDragEnd = { if (currentPoints.isNotEmpty()) strokes += SketchStroke(currentPoints, selectedColor, selectedWidth); currentPoints = emptyList() },
+                                onDrag = { change, _ ->
+                                    val point = pointAt(change.position)
+                                    currentPoints = when (selectedTool) {
+                                        SketchTool.FREEHAND -> currentPoints + point
+                                        SketchTool.LINE, SketchTool.ARROW -> listOf(currentPoints.firstOrNull() ?: point, point)
+                                    }
+                                },
+                                onDragEnd = {
+                                    if (currentPoints.isNotEmpty()) {
+                                        val points = if (selectedTool == SketchTool.FREEHAND) currentPoints else {
+                                            if (currentPoints.size >= 2) listOf(currentPoints.first(), currentPoints.last()) else emptyList()
+                                        }
+                                        if (points.isNotEmpty()) strokes += SketchStroke(points, selectedColor, selectedWidth, selectedTool)
+                                    }
+                                    currentPoints = emptyList()
+                                },
                                 onDragCancel = { currentPoints = emptyList() }
                             )
                         }
                     ) {
                         if (showBaseImage) base?.let { drawImage(it, dstSize = IntSize(size.width.toInt(), size.height.toInt())) }
-                        (strokes + SketchStroke(currentPoints, selectedColor, selectedWidth)).forEach { stroke ->
-                            if (stroke.points.isEmpty()) return@forEach
-                            val path = Path().apply {
-                                moveTo(stroke.points.first().x * size.width, stroke.points.first().y * size.height)
-                                stroke.points.drop(1).forEach { lineTo(it.x * size.width, it.y * size.height) }
-                            }
-                            drawPath(path, stroke.color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke.width * size.width))
+                        strokes.forEach(::drawSketchStroke)
+                        if (currentPoints.isNotEmpty()) {
+                            drawSketchStroke(SketchStroke(currentPoints, selectedColor, selectedWidth, selectedTool))
                         }
                     }
                 }
-                OutlinedButton(onClick = { strokes.clear(); currentPoints = emptyList() }, modifier = Modifier.align(Alignment.End)) { Text("مسح الرسم") }
             }
         },
         confirmButton = {
@@ -245,10 +313,45 @@ fun SiteSketchEditor(
                 val rendered = renderSketch(editableBaseImage.takeIf { showBaseImage }, strokes)
                 SketchDraftRegistry.save(context, rendered, editableBaseImage, strokes, showBaseImage, restored?.fingerprint)
                 onSave(rendered)
-            }) { Text("حفظ المخطط") }
+            }) { Text("حفظ المخطط والطبقات") }
         },
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text("إلغاء") } }
     )
+}
+
+private fun DrawScope.drawSketchStroke(stroke: SketchStroke) {
+    if (stroke.points.isEmpty()) return
+    val widthPx = (stroke.width * size.width).coerceAtLeast(2f)
+    val pixelPoints = stroke.points.map { Offset(it.x * size.width, it.y * size.height) }
+    when (stroke.tool) {
+        SketchTool.FREEHAND -> {
+            val path = Path().apply {
+                moveTo(pixelPoints.first().x, pixelPoints.first().y)
+                pixelPoints.drop(1).forEach { lineTo(it.x, it.y) }
+            }
+            drawPath(path, stroke.color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = widthPx))
+        }
+        SketchTool.LINE -> if (pixelPoints.size >= 2) {
+            drawLine(stroke.color, pixelPoints.first(), pixelPoints.last(), strokeWidth = widthPx)
+        }
+        SketchTool.ARROW -> if (pixelPoints.size >= 2) {
+            val start = pixelPoints.first(); val end = pixelPoints.last()
+            drawLine(stroke.color, start, end, strokeWidth = widthPx)
+            val angle = atan2((end.y - start.y).toDouble(), (end.x - start.x).toDouble())
+            val head = (18f + widthPx * 2f).coerceAtMost(42f)
+            val spread = PI / 7.0
+            val left = Offset(
+                end.x - (head * cos(angle - spread)).toFloat(),
+                end.y - (head * sin(angle - spread)).toFloat()
+            )
+            val right = Offset(
+                end.x - (head * cos(angle + spread)).toFloat(),
+                end.y - (head * sin(angle + spread)).toFloat()
+            )
+            drawLine(stroke.color, end, left, strokeWidth = widthPx)
+            drawLine(stroke.color, end, right, strokeWidth = widthPx)
+        }
+    }
 }
 
 private fun renderSketch(baseImage: Bitmap?, strokes: List<SketchStroke>): Bitmap {
@@ -258,18 +361,44 @@ private fun renderSketch(baseImage: Bitmap?, strokes: List<SketchStroke>): Bitma
     val canvas = AndroidCanvas(result)
     canvas.drawColor(android.graphics.Color.WHITE)
     baseImage?.let { canvas.drawBitmap(it, null, Rect(0, 0, width, height), null) }
-    strokes.forEach { stroke ->
-        if (stroke.points.isEmpty()) return@forEach
-        val paint = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
-            color = stroke.color.toArgb(); style = AndroidPaint.Style.STROKE
-            strokeCap = AndroidPaint.Cap.ROUND; strokeJoin = AndroidPaint.Join.ROUND
-            strokeWidth = (stroke.width * width).coerceAtLeast(2f)
-        }
-        val path = android.graphics.Path().apply {
-            moveTo(stroke.points.first().x * width, stroke.points.first().y * height)
-            stroke.points.drop(1).forEach { lineTo(it.x * width, it.y * height) }
-        }
-        canvas.drawPath(path, paint)
-    }
+    strokes.forEach { drawAndroidStroke(canvas, it, width, height) }
     return result
+}
+
+private fun drawAndroidStroke(canvas: AndroidCanvas, stroke: SketchStroke, width: Int, height: Int) {
+    if (stroke.points.isEmpty()) return
+    val paint = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
+        color = stroke.color.toArgb()
+        style = AndroidPaint.Style.STROKE
+        strokeCap = AndroidPaint.Cap.ROUND
+        strokeJoin = AndroidPaint.Join.ROUND
+        strokeWidth = (stroke.width * width).coerceAtLeast(2f)
+    }
+    fun px(point: Offset) = android.graphics.PointF(point.x * width, point.y * height)
+    val start = px(stroke.points.first())
+    val end = px(stroke.points.last())
+    when (stroke.tool) {
+        SketchTool.FREEHAND -> {
+            val path = android.graphics.Path().apply {
+                moveTo(start.x, start.y)
+                stroke.points.drop(1).forEach { point ->
+                    val p = px(point); lineTo(p.x, p.y)
+                }
+            }
+            canvas.drawPath(path, paint)
+        }
+        SketchTool.LINE -> if (stroke.points.size >= 2) canvas.drawLine(start.x, start.y, end.x, end.y, paint)
+        SketchTool.ARROW -> if (stroke.points.size >= 2) {
+            canvas.drawLine(start.x, start.y, end.x, end.y, paint)
+            val angle = atan2((end.y - start.y).toDouble(), (end.x - start.x).toDouble())
+            val head = (28f + paint.strokeWidth * 2f).coerceAtMost(70f)
+            val spread = PI / 7.0
+            val leftX = end.x - (head * cos(angle - spread)).toFloat()
+            val leftY = end.y - (head * sin(angle - spread)).toFloat()
+            val rightX = end.x - (head * cos(angle + spread)).toFloat()
+            val rightY = end.y - (head * sin(angle + spread)).toFloat()
+            canvas.drawLine(end.x, end.y, leftX, leftY, paint)
+            canvas.drawLine(end.x, end.y, rightX, rightY, paint)
+        }
+    }
 }
