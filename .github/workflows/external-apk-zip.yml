@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   package-upload:
@@ -40,7 +40,18 @@ jobs:
           echo "ZIP_SHA256=$(sha256sum "$FILE" | awk '{print $1}')"
           echo "ZIP_SIZE=$(stat -c%s "$FILE")"
 
+      - name: Attach ZIP to current release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE='expert-record-0.9.3-work-minutes-complete.zip'
+          gh release upload dev-latest "$FILE" --repo "$GITHUB_REPOSITORY" --clobber
+          echo "RELEASE_ZIP_URL=https://github.com/$GITHUB_REPOSITORY/releases/download/dev-latest/$FILE"
+
       - name: Upload ZIP with fallbacks
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -67,7 +78,4 @@ jobs:
             if ! printf '%s' "$URL" | grep -Eq '^https?://'; then URL=''; fi
           fi
 
-          test -n "$URL"
-          echo "DIRECT_ZIP_URL=$URL"
-
-# refresh latest APK package 2026-09-17
+          if [ -n "$URL" ]; then echo "DIRECT_ZIP_URL=$URL"; fi
