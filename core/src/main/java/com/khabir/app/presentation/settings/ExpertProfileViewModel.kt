@@ -1,20 +1,14 @@
 package com.khabir.app.presentation.settings
 
-import android.content.Context
-import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.khabir.app.data.ai.GeminiDocumentVisionService
 import com.khabir.app.data.ai.AiProvider
 import com.khabir.app.data.ai.PersonalAiKeyStore
-import com.khabir.app.data.backup.BackupOperationResult
-import com.khabir.app.data.backup.EncryptedBackupService
-import com.khabir.app.data.backup.PendingBackupRestore
 import com.khabir.app.domain.model.ExpertProfile
 import com.khabir.app.domain.usecase.profile.GetExpertProfileUseCase
 import com.khabir.app.domain.usecase.profile.SaveExpertProfileUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -38,11 +32,7 @@ data class ExpertProfileUiState(
     val savedJustNow: Boolean = false,
     val validationMessage: String? = null,
     val aiKeyMessage: String? = null,
-    val ocrReviewField: ExpertProfileField? = null,
-    val backupPassword: String = "",
-    val isBackupWorking: Boolean = false,
-    val backupMessage: String? = null,
-    val backupRestartRequired: Boolean = false
+    val ocrReviewField: ExpertProfileField? = null
 )
 
 @HiltViewModel
@@ -50,9 +40,7 @@ class ExpertProfileViewModel @Inject constructor(
     getExpertProfile: GetExpertProfileUseCase,
     private val saveExpertProfile: SaveExpertProfileUseCase,
     private val personalAiKeyStore: PersonalAiKeyStore,
-    private val geminiVision: GeminiDocumentVisionService,
-    private val encryptedBackupService: EncryptedBackupService,
-    @ApplicationContext private val appContext: Context
+    private val geminiVision: GeminiDocumentVisionService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ExpertProfileUiState())
@@ -65,8 +53,7 @@ class ExpertProfileViewModel @Inject constructor(
             it.copy(
                 hasPersonalAiKey = personalAiKeyStore.read().isNotBlank(),
                 aiProvider = personalAiKeyStore.readProvider(),
-                aiInstructions = personalAiKeyStore.readInstructions(),
-                backupMessage = PendingBackupRestore.consumeLastStatus(appContext)
+                aiInstructions = personalAiKeyStore.readInstructions()
             )
         }
         viewModelScope.launch {
@@ -181,42 +168,6 @@ class ExpertProfileViewModel @Inject constructor(
                     _uiState.update { it.copy(isTestingAiKey = false, aiKeyMessage = result.message) }
                 is GeminiDocumentVisionService.Result.Failure ->
                     _uiState.update { it.copy(isTestingAiKey = false, aiKeyMessage = result.message) }
-            }
-        }
-    }
-
-    fun onBackupPasswordChanged(value: String) = _uiState.update {
-        it.copy(backupPassword = value, backupMessage = null, backupRestartRequired = false)
-    }
-
-    fun exportBackup(uri: Uri) {
-        val password = _uiState.value.backupPassword
-        if (_uiState.value.isBackupWorking) return
-        viewModelScope.launch {
-            _uiState.update { it.copy(isBackupWorking = true, backupMessage = "جارٍ تجهيز النسخة الاحتياطية المشفرة...", backupRestartRequired = false) }
-            when (val result = encryptedBackupService.exportTo(uri, password)) {
-                is BackupOperationResult.Success -> _uiState.update {
-                    it.copy(isBackupWorking = false, backupMessage = result.message, backupRestartRequired = result.restartRequired)
-                }
-                is BackupOperationResult.Failure -> _uiState.update {
-                    it.copy(isBackupWorking = false, backupMessage = result.message, backupRestartRequired = false)
-                }
-            }
-        }
-    }
-
-    fun restoreBackup(uri: Uri) {
-        val password = _uiState.value.backupPassword
-        if (_uiState.value.isBackupWorking) return
-        viewModelScope.launch {
-            _uiState.update { it.copy(isBackupWorking = true, backupMessage = "جارٍ فحص وفك النسخة الاحتياطية...", backupRestartRequired = false) }
-            when (val result = encryptedBackupService.stageRestore(uri, password)) {
-                is BackupOperationResult.Success -> _uiState.update {
-                    it.copy(isBackupWorking = false, backupMessage = result.message, backupRestartRequired = result.restartRequired)
-                }
-                is BackupOperationResult.Failure -> _uiState.update {
-                    it.copy(isBackupWorking = false, backupMessage = result.message, backupRestartRequired = false)
-                }
             }
         }
     }
