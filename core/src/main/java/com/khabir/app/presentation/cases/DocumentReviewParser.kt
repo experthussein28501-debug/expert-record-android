@@ -3,7 +3,7 @@ package com.khabir.app.presentation.cases
 enum class DocumentMatchStatus(val arabicLabel: String) {
     MATCHED("مطابق"),
     UNCERTAIN("المطابقة غير مؤكدة"),
-    DIFFERENT("مستند مختلف أو غير مطابق")
+    DIFFERENT("مستند مخالف")
 }
 
 data class ReviewedDocument(
@@ -74,7 +74,6 @@ object DocumentReviewParser {
             IntakeNarrative.counterclaim(data.parties.filter { it.role.isPlaintiff }.map { it.name },
                 data.finalRequests, doc.type.contains("طلب عارض"), data.subjectOfCase)
         }.distinct()
-        // Evidence is extracted as a literal quotation, not inferred from a deposit amount.
         fun evidence(label: String): String? = judgments.mapNotNull { captureLine(it.first.rawText, label) }
             .firstOrNull { it !in listOf("غير مذكور", "غير موجود", "لا", "...", "[غير واضح]") }
         val history = IntakeNarrative.returnedHistory(evidence("دليل إعادة الدعوى"),
