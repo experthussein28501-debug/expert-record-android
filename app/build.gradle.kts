@@ -35,8 +35,8 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         minSdk = 26
         targetSdk = 36
-        versionCode = 94
-        versionName = "0.9.5-live-agenda"
+        versionCode = 95
+        versionName = "0.9.6-live-agenda"
         buildConfigField("String", "ACTIVATION_ENDPOINT", "\"${activationEndpoint.replace("\"", "\\\"")}\"")
         buildConfigField("String", "GEMINI_VISION_ENDPOINT", "\"${geminiVisionEndpoint.replace("\"", "\\\"")}\"")
         buildConfigField("String", "FIREBASE_API_KEY", "\"${firebaseApiKey.replace("\"", "\\\"")}\"")
@@ -93,7 +93,7 @@ android {
             applicationIdSuffix = ".combined"
             versionNameSuffix = "-combined"
             buildConfigField("String", "MODULE_MODE", "\"COMBINED\"")
-            manifestPlaceholders["appLabel"] = "سجل الخبير — النسخة المجمعة 0.9.5"
+            manifestPlaceholders["appLabel"] = "سجل الخبير — النسخة المجمعة 0.9.6"
         }
         create("notifications") {
             dimension = "module"
