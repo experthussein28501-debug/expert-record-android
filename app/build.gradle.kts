@@ -35,8 +35,8 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         minSdk = 26
         targetSdk = 36
-        versionCode = 93
-        versionName = "0.9.4-complete-ui-map-sketch"
+        versionCode = 94
+        versionName = "0.9.5-live-agenda"
         buildConfigField("String", "ACTIVATION_ENDPOINT", "\"${activationEndpoint.replace("\"", "\\\"")}\"")
         buildConfigField("String", "GEMINI_VISION_ENDPOINT", "\"${geminiVisionEndpoint.replace("\"", "\\\"")}\"")
         buildConfigField("String", "FIREBASE_API_KEY", "\"${firebaseApiKey.replace("\"", "\\\"")}\"")
@@ -93,7 +93,7 @@ android {
             applicationIdSuffix = ".combined"
             versionNameSuffix = "-combined"
             buildConfigField("String", "MODULE_MODE", "\"COMBINED\"")
-            manifestPlaceholders["appLabel"] = "سجل الخبير — النسخة المجمعة 0.9.4"
+            manifestPlaceholders["appLabel"] = "سجل الخبير — النسخة المجمعة 0.9.5"
         }
         create("notifications") {
             dimension = "module"
@@ -148,6 +148,7 @@ dependencies {
     implementation(project(":feature-cases"))
     implementation(project(":feature-notifications"))
     implementation(project(":feature-reports"))
+    implementation(project(":feature-agenda"))
     val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
     implementation(composeBom)
     androidTestImplementation(composeBom)
