@@ -1,0 +1,38 @@
+name: Chat APK Artifact
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - ".github/workflows/chat-apk-artifact.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Download latest APK release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release download dev-latest \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "expert-record-debug.apk" \
+            --clobber
+          test -s expert-record-debug.apk
+          ls -lh expert-record-debug.apk
+
+      - name: Upload APK for chat
+        uses: actions/upload-artifact@v4
+        with:
+          name: expert-record-chat-direct
+          path: expert-record-debug.apk
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
