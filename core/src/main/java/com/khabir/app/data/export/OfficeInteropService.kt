@@ -137,6 +137,20 @@ class OfficeInteropService @Inject constructor(
             normalized == "البحث" || normalized.startsWith("البحث والرد") || normalized == "البحث والدراسه" -> "البحث"
             normalized.contains("الحكم المستانف واسباب الاستئناف") -> "الوقائع"
             normalized == "النتيجه" || normalized.contains("النتيجه النهائيه") -> "النتيجة"
+            // Work-minutes Word templates use the same blank-paragraph filling engine.
+            // Keep these aliases here so a DOCX with ordinary Arabic headings can be
+            // filled automatically without forcing the user through manual mapping.
+            normalized == "رقم الدعوى" -> "رقم الدعوى"
+            normalized == "السنه" || normalized == "سنه الدعوى" -> "السنة"
+            normalized == "المحكمه" -> "المحكمة"
+            normalized == "المرفوعه من" || normalized == "مرفوعه من" -> "المرفوعة من"
+            normalized == "ضد" -> "ضد"
+            normalized == "الوارد" || normalized == "رقم الوارد" -> "الوارد"
+            normalized == "اسم الخبير" || normalized == "الخبير" -> "اسم الخبير"
+            normalized == "القطاع" -> "القطاع"
+            normalized == "الاداره" -> "الإدارة"
+            normalized == "عدد النسخ" -> "عدد النسخ"
+            normalized == "محاضر الاعمال" || normalized == "متن المحاضر" || normalized == "مجموعه محاضر الاعمال" -> "محاضر الأعمال"
             else -> null
         }
     }
