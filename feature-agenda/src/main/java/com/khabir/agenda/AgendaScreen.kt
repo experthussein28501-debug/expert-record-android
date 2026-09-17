@@ -46,10 +46,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.content.ContextCompat
+import androidx.hilt.navigation.compose.hiltViewModel
 import java.io.File
 import java.io.FileOutputStream
 import java.time.LocalDate
@@ -129,7 +129,7 @@ private fun MonthGrid(
     modifier: Modifier = Modifier
 ) {
     val first = month.atDay(1)
-    val offset = (first.dayOfWeek.value + 1) % 7 // السبت أول الأسبوع
+    val offset = (first.dayOfWeek.value + 1) % 7
     val slots = remember(month) {
         buildList<LocalDate?> {
             repeat(offset) { add(null) }
@@ -141,8 +141,7 @@ private fun MonthGrid(
         columns = GridCells.Fixed(7),
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-        userScrollEnabled = true
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         items(slots) { date ->
             if (date == null) Spacer(Modifier.aspectRatio(.78f))
@@ -249,7 +248,7 @@ private fun AgendaDayDialog(
                         onValueChange = { text = it },
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 5,
-                        label = { Text("ملاحظات اليوم — تدعم لوحة مفاتيح الهاتف وS Pen للكتابة") }
+                        label = { Text("ملاحظات اليوم — لوحة مفاتيح الهاتف") }
                     )
 
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -281,10 +280,15 @@ private fun AgendaDayDialog(
                     }
 
                     Text("لوحة الكتابة والرسم — إصبع / قلم / S Pen", fontWeight = FontWeight.Bold)
-                    DrawingBoard(strokes, currentStroke, onCurrentStrokeChange = { currentStroke = it }, onStrokeFinished = {
-                        if (currentStroke.size > 1) strokes.add(AgendaStroke(currentStroke))
-                        currentStroke = emptyList()
-                    })
+                    DrawingBoard(
+                        strokes = strokes,
+                        currentStroke = currentStroke,
+                        onCurrentStrokeChange = { currentStroke = it },
+                        onStrokeFinished = {
+                            if (currentStroke.size > 1) strokes.add(AgendaStroke(currentStroke))
+                            currentStroke = emptyList()
+                        }
+                    )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { if (strokes.isNotEmpty()) strokes.removeAt(strokes.lastIndex) }) {
                             Icon(Icons.Filled.Undo, null); Text(" تراجع")
@@ -348,17 +352,20 @@ private fun DrawingBoard(
     onStrokeFinished: () -> Unit
 ) {
     val color = MaterialTheme.colorScheme.primary
+    val latestCurrentStroke by rememberUpdatedState(currentStroke)
+    val latestOnCurrentStrokeChange by rememberUpdatedState(onCurrentStrokeChange)
+    val latestOnStrokeFinished by rememberUpdatedState(onStrokeFinished)
     Canvas(
         modifier = Modifier.fillMaxWidth().height(230.dp)
             .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
             .pointerInput(Unit) {
                 detectDragGestures(
-                    onDragStart = { offset -> onCurrentStrokeChange(listOf(AgendaPoint(offset.x, offset.y))) },
+                    onDragStart = { offset -> latestOnCurrentStrokeChange(listOf(AgendaPoint(offset.x, offset.y))) },
                     onDrag = { change, _ ->
-                        onCurrentStrokeChange(currentStroke + AgendaPoint(change.position.x, change.position.y))
+                        latestOnCurrentStrokeChange(latestCurrentStroke + AgendaPoint(change.position.x, change.position.y))
                     },
-                    onDragEnd = onStrokeFinished,
-                    onDragCancel = onStrokeFinished
+                    onDragEnd = { latestOnStrokeFinished() },
+                    onDragCancel = { latestOnStrokeFinished() }
                 )
             }
     ) {
