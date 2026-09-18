@@ -449,7 +449,16 @@ private fun WorkMinutesEntryCard(
             Text("نصوص جاهزة", style = MaterialTheme.typography.labelSmall)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 WorkMinutesPhrases.quickPhrases.forEach { (label, phrase) ->
-                    AssistChip(onClick = { onChange { e -> e.copy(bodyText = phrase) } }, label = { Text(label) })
+                    AssistChip(
+                        onClick = {
+                            onChange { e ->
+                                val merged = listOf(e.bodyText.trim(), phrase.trim()).filter { it.isNotBlank() }.joinToString("\n\n")
+                                e.copy(bodyText = merged)
+                            }
+                            onOpenEditor()
+                        },
+                        label = { Text(label) }
+                    )
                 }
             }
             KhabirTextField(
@@ -499,6 +508,29 @@ private fun WorkMinutesEntryCard(
                 trailingIcon = { IconButton(onClick = { showFollowUpDatePicker = true }) { Icon(Icons.Filled.CalendarMonth, "اختيار التاريخ") } },
                 modifier = Modifier.fillMaxWidth()
             )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                KhabirTextField(
+                    value = entry.scheduledFollowUpTime,
+                    onValueChange = { value -> onChange { e -> e.copy(scheduledFollowUpTime = value) } },
+                    label = { Text("وقت الموعد القادم") },
+                    placeholder = { Text("مثال: ٩ صباحًا") },
+                    modifier = Modifier.weight(1f)
+                )
+                KhabirTextField(
+                    value = entry.scheduledFollowUpLocation,
+                    onValueChange = { value -> onChange { e -> e.copy(scheduledFollowUpLocation = value) } },
+                    label = { Text("مكان الموعد") },
+                    placeholder = { Text("المكتب / المعاينة") },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            if (entry.scheduledFollowUpDate != null) {
+                Text(
+                    "عند إضافة «محضر جديد» سيبدأ تلقائيًا بتاريخ ووقت هذا الموعد وبنموذج حضور ومناقشة الخصوم، ويمكن تعديله بالكامل.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
         }
     }
 }
