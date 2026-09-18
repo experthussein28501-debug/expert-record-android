@@ -70,7 +70,7 @@ fun CaseFormScreen(
     var showContinuousDictation by remember { mutableStateOf(false) }
     var useAiVoice by remember { mutableStateOf(false) }
     var pendingGoogleSpeech by remember { mutableStateOf(false) }
-    val caseTypeOptions = listOf("مدني كلي", "مدني جزئي", "جنح", "أحوال شخصية", "شؤون الأسرة", "استئناف عالي", "تنفيذ", "أخرى")
+    val caseTypeOptions = listOf("مدني كلي", "مدني جزئي", "مدني مستأنف", "جنح", "أحوال شخصية", "شؤون الأسرة", "استئناف عالي", "قضاء إداري", "تنفيذ", "أخرى")
 
     val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
@@ -290,7 +290,13 @@ fun CaseFormScreen(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 KhabirTextField(state.caseNo, viewModel::onCaseNoChanged, label = { Text("رقم الدعوى") }, modifier = Modifier.weight(1f))
-                KhabirTextField(state.caseYear, viewModel::onCaseYearChanged, label = { Text("السنة") }, modifier = Modifier.weight(1f))
+                KhabirTextField(
+                    state.caseYear,
+                    viewModel::onCaseYearChanged,
+                    label = { Text(if (state.isJudicialYearType()) "السنة القضائية (ق)" else "السنة") },
+                    placeholder = { Text(if (state.isJudicialYearType()) "مثال: 21ق" else "مثال: 2026") },
+                    modifier = Modifier.weight(1f)
+                )
             }
             KhabirTextField(state.court, viewModel::onCourtChanged, label = { Text("المحكمة / المأمورية") }, modifier = Modifier.fillMaxWidth())
 
@@ -782,4 +788,12 @@ private fun TemporaryPagePreview(path: String, modifier: Modifier = Modifier) {
         }
     }
     bitmap?.let { Image(it.asImageBitmap(), "معاينة صفحة المستند", modifier) }
+}
+
+
+private fun CaseFormUiState.isJudicialYearType(): Boolean {
+    val type = caseType.replace("أ", "ا")
+    val courtName = court.replace("أ", "ا")
+    return type.contains("استئناف عالي") || type.contains("قضاء اداري") ||
+        courtName.contains("استئناف عالي") || courtName.contains("قضاء اداري")
 }
