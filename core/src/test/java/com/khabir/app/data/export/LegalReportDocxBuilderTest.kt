@@ -43,11 +43,11 @@ class LegalReportDocxBuilderTest {
         assertTrue(documentXml.contains("قطاع الخبراء"))
         assertTrue(documentXml.contains("إدارة خبراء أسوان"))
         assertTrue(documentXml.contains("خبير وزارة العدل"))
-        assertTrue(documentXml.contains("فى الدعوى رقم 272 لسنة 2025 مدني كلي كوم أمبو"))
+        assertTrue(documentXml.contains("فى الدعوى رقم ٢٧٢ لسنة ٢٠٢٥ مدني كلي كوم أمبو"))
         assertTrue(documentXml.contains("المرفوعــة من"))
         assertTrue(documentXml.contains("ضـــــد"))
-        assertTrue(documentXml.contains("وارد رقم 5373"))
-        assertTrue(documentXml.contains("لسنة 2025"))
+        assertTrue(documentXml.contains("وارد رقم ٥٣٧٣"))
+        assertTrue(documentXml.contains("لسنة ٢٠٢٥"))
 
         assertTrue(documentXml.contains("الموضوع :"))
         assertTrue(documentXml.contains("المأمورية:"))
@@ -66,6 +66,35 @@ class LegalReportDocxBuilderTest {
         assertFalse(documentXml.contains("تقرير خبير قضائي"))
         assertFalse(documentXml.contains("خبرة قانونية"))
         assertFalse(documentXml.contains("تقرير خبرة قانونية"))
+    }
+
+    @Test
+    fun `direct report places office header opposite incoming and expert signature at page end`() {
+        val bytes = LegalReportDocxBuilder().build(
+            reportTitle = "تقرير",
+            coverFields = listOf(
+                "الوزارة" to "وزارة العدل",
+                "القطاع" to "قطاع الخبراء",
+                "الإدارة" to "إدارة خبراء أسوان",
+                "الخبير" to "أحمد محمد",
+                "رقم الدعوى" to "350 لسنة 21ق",
+                "المحكمة" to "استئناف عالي قنا",
+                "المرفوعة من" to "المدعي الأول وآخرين",
+                "ضد" to "المدعى عليه الأول وآخرين",
+                "الوارد" to "رقم 25 لسنة 2026",
+                "نمط الغلاف" to "مختصر"
+            ),
+            sections = listOf(
+                "النتيجة النهائية" to "ثبت من البحث ما تقدم.",
+                "هذه نتيجة أعمالنا نقدمها لعدالة المحكمة" to "الخبير / أحمد محمد"
+            )
+        )
+        val xml = unzipEntry(bytes, "word/document.xml")
+        assertTrue(xml.contains("<w:tbl>"))
+        assertTrue(xml.contains("وارد رقم ٢٥ لسنة ٢٠٢٦"))
+        assertTrue(xml.contains("فى الدعوى رقم ٣٥٠ لسنة ٢١ق استئناف عالي قنا"))
+        assertTrue(xml.contains("الخبير / أحمد محمد"))
+        assertTrue(xml.contains("w:val=\"end\""))
     }
 
     @Test
