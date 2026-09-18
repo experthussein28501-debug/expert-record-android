@@ -12,6 +12,7 @@ import com.khabir.app.data.export.OfficeInteropService
 import com.khabir.app.domain.model.ReportCoverFields
 import com.khabir.app.domain.model.WorkMinutesEntry
 import com.khabir.app.domain.model.WorkMinutesRecord
+import com.khabir.app.domain.model.WorkMinutesPhrases
 import com.khabir.app.domain.repository.CaseRepository
 import com.khabir.app.domain.repository.DocumentExportRepository
 import com.khabir.app.domain.repository.ExpertProfileRepository
@@ -128,9 +129,12 @@ class WorkMinutesViewModel @Inject constructor(
         val nextNumber = (state.entries.maxOfOrNull { it.number } ?: 0) + 1
         val previous = state.entries.lastOrNull()
         val defaultDate = previous?.scheduledFollowUpDate ?: caseReceiptDate.takeIf { state.entries.isEmpty() }
+        val fromScheduledAppointment = previous?.scheduledFollowUpDate != null
         val newEntry = WorkMinutesEntry(
             number = nextNumber,
             openingDate = defaultDate,
+            openingTime = if (fromScheduledAppointment) previous?.scheduledFollowUpTime.orEmpty() else "",
+            bodyText = if (fromScheduledAppointment) WorkMinutesPhrases.ATTENDANCE_AND_DISCUSSION else "",
             expertName = defaultExpertName
         )
         state.copy(entries = state.entries + newEntry, expandedEntryNumber = nextNumber)
@@ -377,6 +381,12 @@ class WorkMinutesViewModel @Inject constructor(
         if (entry.openingTime.isNotBlank()) sb.append(" الساعة ${entry.openingTime}")
         sb.append(" بالمكتب")
         if (entry.bodyText.isNotBlank()) sb.append(" ${entry.bodyText}")
+        entry.scheduledFollowUpDate?.let { followUp ->
+            sb.append("\nوحددنا يوم ${followUp.format(dateFormat)}")
+            if (entry.scheduledFollowUpTime.isNotBlank()) sb.append(" الساعة ${entry.scheduledFollowUpTime}")
+            if (entry.scheduledFollowUpLocation.isNotBlank()) sb.append(" ${entry.scheduledFollowUpLocation}")
+            sb.append(" موعدًا لمتابعة مباشرة المأمورية.")
+        }
         if (entry.closingTime.isNotBlank()) sb.append("\nواقفل المحضر على ذلك فى تاريخه الساعة ${entry.closingTime} بالمكتب")
         if (entry.expertName.isNotBlank()) sb.append("\nالخبير/ ${entry.expertName}")
         return sb.toString()
