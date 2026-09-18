@@ -234,6 +234,21 @@ object ReportTemplateCatalog {
     )
     val all: List<ReportTemplate> = listOf(civil, detailedCivil, conciseCivil, family, misdemeanor, appeal, highAppeal, free)
 
+    fun suggestFor(caseType: String, court: String): ReportTemplate {
+        val source = "$caseType $court"
+            .replace("أ", "ا")
+            .replace("إ", "ا")
+            .replace("آ", "ا")
+            .lowercase()
+        return when {
+            source.contains("استئناف عالي") -> highAppeal
+            source.contains("مدني مستأنف") || source.contains("مدنى مستأنف") -> appeal
+            source.contains("جنح") || source.contains("جنحة") -> misdemeanor
+            listOf("تركات", "تركة", "ميراث", "وصاية", "وصايه", "قاصر", "قصر", "شئون الاسرة", "شؤون الاسرة").any(source::contains) -> family
+            else -> detailedCivil
+        }
+    }
+
     private fun commonLegalSections(): List<ReportSectionDefinition> = listOf(
         ReportSectionDefinition("subject", "الموضوع"),
         ReportSectionDefinition("assignment", "المأمورية"),
