@@ -32,6 +32,33 @@ class OfficeInteropService @Inject constructor(
             .joinToString("\n")
     }
 
+    suspend fun readPptxText(uri: Uri): String = withContext(Dispatchers.IO) {
+        val slides = mutableListOf<Pair<Int, String>>()
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            ZipInputStream(input).use { zip ->
+                var entry = zip.nextEntry
+                while (entry != null) {
+                    if (!entry.isDirectory && entry.name.matches(Regex("""ppt/slides/slide\d+\.xml"""))) {
+                        val number = Regex("""slide(\d+)\.xml""").find(entry.name)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: Int.MAX_VALUE
+                        val text = zip.readBytes().toString(Charsets.UTF_8)
+                            .replace(Regex("</a:p>"), "\n")
+                            .replace(Regex("<a:br[^>]*/>"), "\n")
+                            .replace(Regex("<[^>]+>"), "")
+                            .let(::unescapeXml)
+                            .lines()
+                            .map { it.trim() }
+                            .filter { it.isNotBlank() }
+                            .joinToString("\n")
+                        if (text.isNotBlank()) slides += number to text
+                    }
+                    entry = zip.nextEntry
+                }
+            }
+        } ?: error("تعذر فتح ملف PowerPoint")
+        if (slides.isEmpty()) error("ملف PowerPoint لا يحتوي على نص قابل للقراءة")
+        slides.sortedBy { it.first }.joinToString("\n\n") { (number, text) -> "شريحة $number\n$text" }
+    }
+
     suspend fun templateParagraphs(uri: Uri): List<String> = withContext(Dispatchers.IO) {
         val xml = readZipEntry(uri, "word/document.xml") ?: error("اختر ملف DOCX")
         Regex("<w:p(?:\\s[^>]*)?>.*?</w:p>", RegexOption.DOT_MATCHES_ALL).findAll(xml)
