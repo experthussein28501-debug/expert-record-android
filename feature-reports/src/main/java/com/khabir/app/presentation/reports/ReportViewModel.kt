@@ -14,6 +14,8 @@ import com.khabir.app.data.ai.LegalDocumentPurpose
 import com.khabir.app.data.ai.PersonalAiKeyStore
 import com.khabir.app.domain.model.Report
 import com.khabir.app.domain.model.ReportCustomSectionCodec
+import com.khabir.app.domain.model.ReportSectionDefinition
+import com.khabir.app.domain.model.ReportTemplateKind
 import com.khabir.app.domain.model.ReportTemplate
 import com.khabir.app.domain.model.ReportTemplateCatalog
 import com.khabir.app.domain.model.ReportTemplateCodec
@@ -401,6 +403,100 @@ class ReportViewModel @Inject constructor(
                     _uiState.update { it.copy(isLoading = false, errorMessage = e.message ?: "تعذر استيراد PowerPoint") }
                 }
         }
+    }
+
+    fun onImportEditableReportTemplate(uri: Uri) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            runCatching { officeInterop.templateParagraphs(uri) }
+                .onSuccess { paragraphs ->
+                    val detected = detectEditableTemplateSections(paragraphs)
+                    if (detected.isEmpty()) {
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                errorMessage = "لم أتعرف على عناوين تقرير قانونية داخل القالب. استخدم «قالب Word بنفس التنسيق» أو عدّل عناوين الملف."
+                            )
+                        }
+                    } else {
+                        val template = ReportTemplate(
+                            id = "imported_${System.currentTimeMillis()}",
+                            name = "قالب مستورد للعمل عليه",
+                            kind = ReportTemplateKind.CUSTOM,
+                            sections = detected,
+                            isBuiltIn = false,
+                            verifiedFromUserReports = false,
+                            referenceReport = "قالب Word مستورد بواسطة المستخدم"
+                        )
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                template = template,
+                                savedWordTemplateUri = "",
+                                autoSaveStatus = "تم تحويل قالب Word إلى هيكل تقرير قابل للتعديل"
+                            )
+                        }
+                        autoSaveRequests.tryEmit(Unit)
+                    }
+                }
+                .onFailure { e ->
+                    _uiState.update { it.copy(isLoading = false, errorMessage = e.message ?: "تعذر تحويل قالب Word إلى تقرير قابل للتعديل") }
+                }
+        }
+    }
+
+    private fun detectEditableTemplateSections(paragraphs: List<String>): List<ReportSectionDefinition> {
+        val headings = linkedMapOf(
+            "subject" to listOf("الموضوع"),
+            "assignment" to listOf("المأمورية", "المامورية"),
+            "proceedings" to listOf("مباشرة المأمورية", "مباشرة المامورية"),
+            "statements" to listOf("الأقوال", "اقوال", "أقوال المدعي", "أقوال المستأنفين"),
+            "witnesses" to listOf("سماع الشهود", "أقوال الشهود"),
+            "inspection" to listOf("المعاينة", "المعاينه"),
+            "documents" to listOf("بحث المستندات", "فحص المستندات", "المستندات"),
+            "facts" to listOf("الوقائع", "الحكم المستأنف", "التقارير السابقة"),
+            "research" to listOf("البحث", "البحث والدراسة"),
+            "calculations" to listOf("الحسابات", "حساب الريع", "حساب نصيب"),
+            "conclusion" to listOf("النتيجة النهائية", "النتيجه النهائيه", "النتيجة")
+        )
+        val normalizedParagraphs = paragraphs
+            .map { it.replace("ـ", "").replace(Regex("\\s+"), " ").trim() }
+            .filter { it.isNotBlank() }
+
+        val found = mutableListOf<ReportSectionDefinition>()
+        val used = mutableSetOf<String>()
+        normalizedParagraphs.forEach { paragraph ->
+            headings.entries.firstOrNull { (id, labels) ->
+                id !in used && labels.any { label -> paragraph.equals(label, true) || paragraph.startsWith(label, true) }
+            }?.let { (id, labels) ->
+                used += id
+                val title = when (id) {
+                    "subject" -> "الموضوع"
+                    "assignment" -> "المأمورية"
+                    "proceedings" -> "مباشرة المأمورية"
+                    "statements" -> "أقوال طرفي الخصومة"
+                    "witnesses" -> "أقوال الشهود"
+                    "inspection" -> "المعاينة على الطبيعة"
+                    "documents" -> "بحث المستندات"
+                    "facts" -> "الوقائع والتقارير السابقة"
+                    "research" -> "البحث"
+                    "calculations" -> "الحسابات والجداول"
+                    "conclusion" -> "النتيجة النهائية"
+                    else -> labels.first()
+                }
+                found += ReportSectionDefinition(
+                    id = id,
+                    title = title,
+                    enabled = true,
+                    removable = id != "conclusion",
+                    orderIndex = found.size
+                )
+            }
+        }
+        if ("conclusion" !in used && found.isNotEmpty()) {
+            found += ReportSectionDefinition("conclusion", "النتيجة النهائية", removable = false, orderIndex = found.size)
+        }
+        return found
     }
 
     fun onSelectWordTemplate(uri: Uri) {
