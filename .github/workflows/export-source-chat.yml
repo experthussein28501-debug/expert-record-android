@@ -1,0 +1,40 @@
+name: Export Source 0.9.6 for Chat
+
+on:
+  push:
+    branches:
+      - export-source-0.9.6-chat
+    paths:
+      - ".github/workflows/export-source-chat.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  export-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout export branch with parent commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Archive exact 0.9.6 source commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          ORIGINAL_COMMIT="$(git rev-parse HEAD^)"
+          test "$ORIGINAL_COMMIT" = "d8c5a6779edf62797333356a32815e3a560ca361"
+          git archive --format=zip --output=expert-record-0.9.6-source.zip "$ORIGINAL_COMMIT"
+          sha256sum expert-record-0.9.6-source.zip > expert-record-0.9.6-source.sha256
+
+      - name: Upload exact source ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: expert-record-0.9.6-source
+          path: |
+            expert-record-0.9.6-source.zip
+            expert-record-0.9.6-source.sha256
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
