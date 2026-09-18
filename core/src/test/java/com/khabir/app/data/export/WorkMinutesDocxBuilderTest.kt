@@ -47,6 +47,38 @@ class WorkMinutesDocxBuilderTest {
         assertTrue(xml.contains("w:val=\"end\""))
     }
 
+
+    @Test
+    fun `keeps numbered work minute lines as separate Word paragraphs`() {
+        val bytes = WorkMinutesDocxBuilder().build(
+            ministry = "وزارة العدل",
+            sector = "قطاع الخبراء",
+            department = "إدارة خبراء أسوان",
+            incomingNo = "",
+            caseIntro = "فى الدعوى رقم",
+            caseNo = "1",
+            caseYear = "2026",
+            court = "مدني",
+            plaintiffs = "",
+            defendants = "",
+            entries = listOf(
+                WorkMinutesEntry(
+                    number = 2,
+                    openingDate = LocalDate.of(2026, 9, 18),
+                    bodyText = "1. مستند أول\n2. مستند ثان\n• ملاحظة"
+                )
+            ),
+            logoBytes = null
+        )
+
+        val xml = readEntry(bytes, "word/document.xml")
+        assertTrue(xml.contains("١. مستند أول"))
+        assertTrue(xml.contains("٢. مستند ثان"))
+        assertTrue(xml.contains("• ملاحظة"))
+        assertTrue(xml.indexOf("١. مستند أول") < xml.indexOf("</w:p>", xml.indexOf("١. مستند أول")))
+        assertTrue(xml.indexOf("</w:p>", xml.indexOf("١. مستند أول")) < xml.indexOf("٢. مستند ثان"))
+    }
+
     private fun readEntry(bytes: ByteArray, path: String): String {
         ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
             var entry = zip.nextEntry
