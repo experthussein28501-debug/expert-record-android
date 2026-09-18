@@ -139,7 +139,7 @@ class WorkMinutesDocxBuilder {
     private fun paragraph(text: String, align: String, bold: Boolean, size: Int, after: Int, line: Int, keepNext: Boolean = false): String {
         val boldXml = if (bold) "<w:b/>" else ""
         val keepNextXml = if (keepNext) "<w:keepNext/>" else ""
-        return "<w:p><w:pPr><w:bidi/><w:widowControl/>$keepNextXml<w:jc w:val=\"$align\"/><w:spacing w:before=\"0\" w:after=\"$after\" w:line=\"$line\" w:lineRule=\"auto\"/></w:pPr><w:r><w:rPr><w:rtl/><w:lang w:val=\"ar-EG\" w:bidi=\"ar-EG\"/><w:rFonts w:ascii=\"Traditional Arabic\" w:hAnsi=\"Traditional Arabic\" w:cs=\"Traditional Arabic\"/>$boldXml<w:sz w:val=\"$size\"/><w:szCs w:val=\"$size\"/></w:rPr><w:t xml:space=\"preserve\">${escape(text)}</w:t></w:r></w:p>"
+        return "<w:p><w:pPr><w:bidi/><w:widowControl/>$keepNextXml<w:jc w:val=\"$align\"/><w:spacing w:before=\"0\" w:after=\"$after\" w:line=\"$line\" w:lineRule=\"auto\"/></w:pPr><w:r><w:rPr><w:rtl/><w:lang w:val=\"ar-EG\" w:bidi=\"ar-EG\"/><w:rFonts w:ascii=\"Traditional Arabic\" w:hAnsi=\"Traditional Arabic\" w:cs=\"Traditional Arabic\"/>$boldXml<w:sz w:val=\"$size\"/><w:szCs w:val=\"$size\"/></w:rPr><w:t xml:space=\"preserve\">${escape(text.toArabicIndicDigits())}</w:t></w:r></w:p>"
     }
 
     private fun escape(text: String): String = text
