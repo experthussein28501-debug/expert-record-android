@@ -11,8 +11,8 @@ object JudgmentCaseIdentity {
                 else -> c
             }
         }.joinToString("").replace('ـ', ' ').replace(Regex("[\u064B-\u065F]"), "")
-        val line = Regex("""(?:الدعوى|الدعوي|القضية)\s*رقم\s*[:：]?\s*(\d+)\s*(?:لسنة|لسنه|/)\s*(\d{4})([^\n،؛]*)""").find(text) ?: return null
-        val descriptor = line.groupValues[3].trim()
+        val line = Regex("""(?:الدعوى|الدعوي|القضية)\s*رقم\s*[:：]?\s*(\d+)\s*(?:لسنة|لسنه|/)\s*(\d{1,4})\s*(ق)?([^\n،؛]*)""").find(text) ?: return null
+        val descriptor = line.groupValues[4].trim()
         val kinds = listOf(
             "استئناف عالي" to """استئناف\s+عال[يىٍ]?""",
             "قضاء إداري" to """(?:القضاء\s+الإداري|القضاء\s+الاداري|قضاء\s+[إا]دار[يى])""",
@@ -35,6 +35,9 @@ object JudgmentCaseIdentity {
         } else {
             court = court.substringBefore("محكمة").substringBefore("مأمورية").substringBefore("مامورية").trim()
         }
-        return Identity(line.groupValues[1], line.groupValues[2], match.first, court.ifBlank { null })
+        val rawYear = line.groupValues[2]
+        val hasJudicialSuffix = line.groupValues[3].isNotBlank()
+        val year = if (match.first == "استئناف عالي" || match.first == "قضاء إداري" || hasJudicialSuffix) "${rawYear}ق" else rawYear
+        return Identity(line.groupValues[1], year, match.first, court.ifBlank { null })
     }
 }
