@@ -242,7 +242,7 @@ object ReportTemplateCatalog {
             .lowercase()
         return when {
             source.contains("استئناف عالي") -> highAppeal
-            source.contains("مدني مستأنف") || source.contains("مدنى مستأنف") -> appeal
+            source.contains("مدني مستانف") || source.contains("مدنى مستانف") -> appeal
             source.contains("جنح") || source.contains("جنحة") -> misdemeanor
             listOf("تركات", "تركة", "ميراث", "وصاية", "وصايه", "قاصر", "قصر", "شئون الاسرة", "شؤون الاسرة").any(source::contains) -> family
             else -> detailedCivil
