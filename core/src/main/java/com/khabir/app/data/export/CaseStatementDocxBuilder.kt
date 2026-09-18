@@ -50,7 +50,7 @@ class CaseStatementDocxBuilder {
         "<w:p><w:pPr><w:bidi/><w:jc w:val=\"center\"/><w:keepNext/><w:spacing w:before=\"0\" w:after=\"120\"/></w:pPr><w:r><w:rPr><w:rtl/><w:b/><w:lang w:val=\"ar-EG\" w:bidi=\"ar-EG\"/><w:rFonts w:ascii=\"Traditional Arabic\" w:hAnsi=\"Traditional Arabic\" w:cs=\"Traditional Arabic\"/><w:sz w:val=\"26\"/><w:szCs w:val=\"26\"/></w:rPr><w:t xml:space=\"preserve\">${escape(text)}</w:t></w:r></w:p>"
 
     private fun footerParagraph(text: String) =
-        "<w:p><w:pPr><w:bidi/><w:jc w:val=\"right\"/><w:spacing w:before=\"100\" w:after=\"0\"/></w:pPr><w:r><w:rPr><w:rtl/><w:b/><w:lang w:val=\"ar-EG\" w:bidi=\"ar-EG\"/><w:rFonts w:ascii=\"Traditional Arabic\" w:hAnsi=\"Traditional Arabic\" w:cs=\"Traditional Arabic\"/><w:sz w:val=\"20\"/><w:szCs w:val=\"20\"/></w:rPr><w:t>${escape(text)}</w:t></w:r></w:p>"
+        "<w:p><w:pPr><w:bidi/><w:jc w:val=\"right\"/><w:spacing w:before=\"100\" w:after=\"0\"/></w:pPr><w:r><w:rPr><w:rtl/><w:b/><w:lang w:val=\"ar-EG\" w:bidi=\"ar-EG\"/><w:rFonts w:ascii=\"Traditional Arabic\" w:hAnsi=\"Traditional Arabic\" w:cs=\"Traditional Arabic\"/><w:sz w:val=\"20\"/><w:szCs w:val=\"20\"/></w:rPr><w:t>${escape(text.toArabicIndicDigits())}</w:t></w:r></w:p>"
 
     private fun escape(text: String) = text
         .replace("&", "&amp;")
