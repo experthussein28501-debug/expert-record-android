@@ -32,8 +32,8 @@ class CaseStatementTableTest {
         assertEquals("٧", table.rows[1][1])
         assertEquals("١٢", table.rows[2][1])
         assertTrue(table.title.contains("بيان القضايا المدنية طرف السيد الخبير"))
-        assertTrue(table.title.contains("01/08/2026"))
-        assertTrue(table.title.contains("31/08/2026"))
+        assertTrue(table.title.contains("٠١/٠٨/٢٠٢٦"))
+        assertTrue(table.title.contains("٣١/٠٨/٢٠٢٦"))
         assertFalse(table.headers.contains("نوع الدعوى"))
     }
 
@@ -67,13 +67,13 @@ class CaseStatementTableTest {
         )
 
         val row = table.rows.single()
-        assertEquals("272", row[3])
-        assertEquals("2025", row[4])
+        assertEquals("٢٧٢", row[3])
+        assertEquals("٢٠٢٥", row[4])
         assertEquals("كوم أمبو", row[5])
         assertTrue(row[6].contains("أحمد محمد علي بصفته"))
         assertTrue(row[7].contains("كوم أمبو - أسوان"))
-        assertEquals("05/08/2026", row[8])
-        assertEquals("15/07/2026", row[9])
+        assertEquals("٠٥/٠٨/٢٠٢٦", row[8])
+        assertEquals("١٥/٠٧/٢٠٢٦", row[9])
     }
 
     @Test
@@ -90,7 +90,7 @@ class CaseStatementTableTest {
             LocalDate.of(2026, 8, 31)
         )
         assertEquals(1, table.rows.size)
-        assertEquals("1", table.rows.single()[1])
+        assertEquals("١", table.rows.single()[1])
     }
 
     @Test
@@ -102,7 +102,25 @@ class CaseStatementTableTest {
             LocalDate.of(2026, 8, 31)
         )
         assertEquals(1, table.rows.size)
-        assertEquals("22", table.rows.single()[1])
+        assertEquals("٢٢", table.rows.single()[1])
+    }
+
+    @Test
+    fun `statement summarizes first plaintiff and defendant only`() {
+        val parties = listOf(
+            Party(firstName = "أحمد", restName = "محمد", role = PartyRole.PLAINTIFF, orderIndex = 0),
+            Party(firstName = "علي", restName = "حسن", role = PartyRole.PLAINTIFF, orderIndex = 1),
+            Party(firstName = "محمود", restName = "سالم", role = PartyRole.DEFENDANT, orderIndex = 2),
+            Party(firstName = "سعيد", restName = "عمر", role = PartyRole.DEFENDANT, orderIndex = 3)
+        )
+        val case = sampleCase("10", "مدني كلي", LocalDate.of(2026, 8, 10), "55").copy(parties = parties)
+        val row = CaseStatementTableBuilder.build(
+            listOf(case),
+            CaseStatementType.CIVIL,
+            LocalDate.of(2026, 8, 1),
+            LocalDate.of(2026, 8, 31)
+        ).rows.single()
+        assertEquals("المدعي: أحمد محمد وآخرين | المدعى عليه: محمود سالم وآخرين", row[6])
     }
 
     private fun sampleCase(incoming: String, type: String, date: LocalDate, caseNo: String) = Case(
