@@ -386,6 +386,7 @@ private fun WorkMinutesEntryCard(
                 Text("محضر أعمال رقم (${entry.number})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 IconButton(onClick = onRemove) { Icon(Icons.Filled.Delete, "حذف المحضر") }
             }
+            Text("بيانات فتح المحضر", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 KhabirTextField(
                     value = entry.openingDate?.format(dateFormat).orEmpty(),
@@ -402,6 +403,8 @@ private fun WorkMinutesEntryCard(
                     modifier = Modifier.weight(1f)
                 )
             }
+            HorizontalDivider()
+            Text("متن المحضر", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
             Text("نصوص جاهزة", style = MaterialTheme.typography.labelSmall)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 WorkMinutesPhrases.quickPhrases.forEach { (label, phrase) ->
@@ -424,29 +427,40 @@ private fun WorkMinutesEntryCard(
                 AssistChip(onClick = onCamera, label = { Text("كاميرا 1–10") }, leadingIcon = { Icon(Icons.Filled.CameraAlt, null) })
                 AssistChip(onClick = onImportImages, label = { Text("استيراد صور") }, leadingIcon = { Icon(Icons.Filled.PhotoLibrary, null) })
             }
-            KhabirTextField(
-                value = entry.closingTime,
-                onValueChange = { onChange { e -> e.copy(closingTime = it) } },
-                label = { Text("ساعة القفل") }
-            )
-            KhabirTextField(
-                value = entry.expertName,
-                onValueChange = { onChange { e -> e.copy(expertName = it) } },
-                label = { Text("الخبير") }
-            )
+            HorizontalDivider()
+            Text("القفل والتوقيع", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                KhabirTextField(
+                    value = entry.closingTime,
+                    onValueChange = { onChange { e -> e.copy(closingTime = it) } },
+                    label = { Text("ساعة القفل") },
+                    modifier = Modifier.weight(1f)
+                )
+                KhabirTextField(
+                    value = entry.expertName,
+                    onValueChange = { onChange { e -> e.copy(expertName = it) } },
+                    label = { Text("الخبير") },
+                    modifier = Modifier.weight(1f)
+                )
+            }
             HorizontalDivider()
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.Event, null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(6.dp))
-                Text("موعد الجلسة/المباشرة القادمة (يُستخدم تلقائيًا كتاريخ المحضر التالي)", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+                Text("الموعد القادم", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            }
+            Text("موعد الجلسة/المباشرة القادمة يُستخدم تلقائيًا كتاريخ فتح المحضر التالي.", style = MaterialTheme.typography.labelSmall)
+            Row(verticalAlignment = Alignment.CenterVertically) {
             }
             KhabirTextField(
                 value = entry.scheduledFollowUpDate?.format(dateFormat).orEmpty(),
                 onValueChange = {},
                 readOnly = true,
                 label = { Text("تاريخ الموعد القادم — اختياري") },
-                trailingIcon = { IconButton(onClick = { showFollowUpDatePicker = true }) { Icon(Icons.Filled.CalendarMonth, "اختيار التاريخ") } }
+                trailingIcon = { IconButton(onClick = { showFollowUpDatePicker = true }) { Icon(Icons.Filled.CalendarMonth, "اختيار التاريخ") } },
+                modifier = Modifier.weight(1f)
             )
+            }
         }
     }
 }
