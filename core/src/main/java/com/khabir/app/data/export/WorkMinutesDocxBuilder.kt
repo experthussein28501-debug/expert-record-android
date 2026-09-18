@@ -71,9 +71,13 @@ class WorkMinutesDocxBuilder {
                 if (openingDateText.isNotBlank()) append(" $openingDateText")
                 if (entry.openingTime.isNotBlank()) append(" الساعة ${entry.openingTime}")
                 append(" بالمكتب")
-                if (entry.bodyText.isNotBlank()) append(" ${entry.bodyText}")
             }
             body.append(normal(openingLine))
+            if (entry.bodyText.isNotBlank()) {
+                entry.bodyText.replace("\r\n", "\n").lines().forEach { line ->
+                    if (line.isBlank()) body.append(compactSpacer()) else body.append(normal(line))
+                }
+            }
             entry.scheduledFollowUpDate?.let { followUp ->
                 val followUpLine = buildString {
                     append("وحددنا يوم ${followUp.format(dateFormat)}")
