@@ -31,7 +31,7 @@ class ExportReportToWordUseCase @Inject constructor(
             else -> return Result.MissingCaseData
         }
 
-        val wording = reportCoverWording(cover)
+        val wording = reportCoverWording(cover, report.templateId, report.templateName)
         val descriptor = reportCaseDescriptor(cover)
         val caseIdentity = reportCaseIdentity(cover)
         val coverFields = buildList {
