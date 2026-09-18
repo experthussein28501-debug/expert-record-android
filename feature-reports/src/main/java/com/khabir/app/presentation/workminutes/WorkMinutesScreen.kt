@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.*
@@ -63,6 +64,7 @@ fun WorkMinutesScreen(onBack: () -> Unit, viewModel: WorkMinutesViewModel = hilt
     var voiceUseAi by remember { mutableStateOf(false) }
     var pendingVoiceLaunch by remember { mutableStateOf(false) }
     var importEntryNumber by remember { mutableStateOf<Int?>(null) }
+    var editingEntryNumber by remember { mutableStateOf<Int?>(null) }
 
     val smartTemplateLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
@@ -222,6 +224,7 @@ fun WorkMinutesScreen(onBack: () -> Unit, viewModel: WorkMinutesViewModel = hilt
                     isExpanded = state.expandedEntryNumber == entry.number,
                     expandedHeight = screenHeightDp * 0.8f,
                     onExpand = { viewModel.onEntryExpand(entry.number) },
+                    onOpenEditor = { editingEntryNumber = entry.number },
                     onChange = { transform -> viewModel.onEntryChanged(entry.number, transform) },
                     onRemove = { viewModel.onRemoveEntry(entry.number) },
                     onGoogleVoice = { startVoice(entry.number, false) },
@@ -306,6 +309,36 @@ fun WorkMinutesScreen(onBack: () -> Unit, viewModel: WorkMinutesViewModel = hilt
         )
     }
 
+    editingEntryNumber?.let { number ->
+        state.entries.firstOrNull { it.number == number }?.let { entry ->
+            AlertDialog(
+                onDismissRequest = { editingEntryNumber = null },
+                title = { Text("تحرير محضر أعمال رقم (${entry.number})") },
+                text = {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = screenHeightDp * 0.55f, max = screenHeightDp * 0.78f),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("المحرر الكبير — اكتب وراجع متن المحضر كاملًا في صفحة واحدة.", style = MaterialTheme.typography.bodySmall)
+                        KhabirTextField(
+                            value = entry.bodyText,
+                            onValueChange = { value -> viewModel.onEntryChanged(entry.number) { it.copy(bodyText = value) } },
+                            label = { Text("نص المحضر") },
+                            placeholder = { Text("اكتب مباشرة المأمورية، حضور الخصوم، المناقشة، الأقوال، وما تم من إجراءات...") },
+                            modifier = Modifier.fillMaxWidth().weight(1f),
+                            minLines = 12,
+                            maxLines = Int.MAX_VALUE
+                        )
+                    }
+                },
+                confirmButton = { Button(onClick = { editingEntryNumber = null }) { Text("تم") } },
+                dismissButton = { TextButton(onClick = { editingEntryNumber = null }) { Text("إغلاق") } }
+            )
+        }
+    }
+
     state.pendingTemplateUri?.let {
         WorkMinutesTemplateMappingDialog(uriKey = it, state = state, viewModel = viewModel)
     }
@@ -353,6 +386,7 @@ private fun WorkMinutesEntryCard(
     isExpanded: Boolean,
     expandedHeight: Dp,
     onExpand: () -> Unit,
+    onOpenEditor: () -> Unit,
     onChange: ((WorkMinutesEntry) -> WorkMinutesEntry) -> Unit,
     onRemove: () -> Unit,
     onGoogleVoice: () -> Unit,
@@ -404,7 +438,14 @@ private fun WorkMinutesEntryCard(
                 )
             }
             HorizontalDivider()
-            Text("متن المحضر", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("متن المحضر", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                FilledTonalButton(onClick = onOpenEditor) {
+                    Icon(Icons.Filled.Edit, contentDescription = "فتح محرر كبير")
+                    Spacer(Modifier.width(4.dp))
+                    Text("تعديل في صفحة كبيرة")
+                }
+            }
             Text("نصوص جاهزة", style = MaterialTheme.typography.labelSmall)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 WorkMinutesPhrases.quickPhrases.forEach { (label, phrase) ->
@@ -414,7 +455,7 @@ private fun WorkMinutesEntryCard(
             KhabirTextField(
                 value = entry.bodyText,
                 onValueChange = { onChange { e -> e.copy(bodyText = it) } },
-                modifier = Modifier.onFocusChanged { if (it.isFocused) onExpand() }.let { if (isExpanded) it.weight(1f) else it },
+                modifier = Modifier.onFocusChanged { if (it.isFocused) { onExpand(); onOpenEditor() } }.let { if (isExpanded) it.weight(1f) else it },
                 label = { Text("نص المحضر") },
                 placeholder = { Text("لإثبات ...") },
                 minLines = 3,
