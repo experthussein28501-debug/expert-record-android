@@ -855,14 +855,41 @@ private fun ReportTemplateSection(
     if (section.id == "calculations") {
         ReportCalculationsEditor(state.calculationsTable, viewModel::onCalculationsChanged, { onCamera(ReportCaptureField.CALCULATIONS, null) }, { onMic(ReportCaptureField.CALCULATIONS, null) })
     } else if (mapping != null) {
-        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             section.headingLines.filter(String::isNotBlank).forEach { Text(it, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium) }
-            ReportSectionField(
-                section.title, mapping.first, mapping.second,
-                if (section.id in setOf("statements", "witnesses", "inspection", "documents", "research")) 5 else 4,
-                { onCamera(mapping.third, null) }, { onMic(mapping.third, null) },
-                isExpanded = isExpanded, onExpand = onExpand, expandedHeight = expandedHeight
-            )
+            if (section.id == "statements") {
+                val statements = splitPartyStatements(state.partyStatements)
+                ReportSectionField(
+                    "أقوال المدعي",
+                    statements.first,
+                    { plaintiff -> viewModel.onPartyStatementsChanged(joinPartyStatements(plaintiff, statements.second)) },
+                    5,
+                    { onCamera(ReportCaptureField.STATEMENTS, null) },
+                    { onMic(ReportCaptureField.STATEMENTS, null) },
+                    isExpanded = isExpanded,
+                    onExpand = onExpand,
+                    expandedHeight = expandedHeight
+                )
+                Spacer(Modifier.height(8.dp))
+                ReportSectionField(
+                    "أقوال المدعى عليه",
+                    statements.second,
+                    { defendant -> viewModel.onPartyStatementsChanged(joinPartyStatements(statements.first, defendant)) },
+                    5,
+                    { onCamera(ReportCaptureField.STATEMENTS, null) },
+                    { onMic(ReportCaptureField.STATEMENTS, null) },
+                    isExpanded = isExpanded,
+                    onExpand = onExpand,
+                    expandedHeight = expandedHeight
+                )
+            } else {
+                ReportSectionField(
+                    section.title, mapping.first, mapping.second,
+                    if (section.id in setOf("witnesses", "inspection", "documents", "research")) 5 else 4,
+                    { onCamera(mapping.third, null) }, { onMic(mapping.third, null) },
+                    isExpanded = isExpanded, onExpand = onExpand, expandedHeight = expandedHeight
+                )
+            }
         }
     } else {
         ReportSectionField(
@@ -876,6 +903,28 @@ private fun ReportTemplateSection(
         )
     }
 }
+
+private fun splitPartyStatements(value: String): Pair<String, String> {
+    val normalized = value.replace("\r\n", "\n").trim()
+    if (normalized.isBlank()) return "" to ""
+    val plaintiffLabel = "أقوال المدعي:"
+    val defendantLabel = "أقوال المدعى عليه:"
+    val pIndex = normalized.indexOf(plaintiffLabel)
+    val dIndex = normalized.indexOf(defendantLabel)
+    if (pIndex >= 0 && dIndex > pIndex) {
+        val plaintiff = normalized.substring(pIndex + plaintiffLabel.length, dIndex).trim()
+        val defendant = normalized.substring(dIndex + defendantLabel.length).trim()
+        return plaintiff to defendant
+    }
+    return normalized to ""
+}
+
+private fun joinPartyStatements(plaintiff: String, defendant: String): String = buildString {
+    append("أقوال المدعي:\n")
+    append(plaintiff.trim())
+    append("\n\nأقوال المدعى عليه:\n")
+    append(defendant.trim())
+}.trim()
 
 private enum class ReportCaptureField(val label: String) {
     PARTIES("الخصوم والصفات"), SUBJECT("الموضوع"), ASSIGNMENT("المأمورية"), PROCEEDINGS("مباشرة المأمورية"), STATEMENTS("أقوال طرفي التداعي"), WITNESSES("سماع الشهود"), INSPECTION("المعاينة على الطبيعة"), DOCUMENTS("بحث المستندات"), FACTS("الوقائع والملاحظات"), RESEARCH("البحث"), CALCULATIONS("الحسابات والجداول"), CONCLUSION("النتيجة النهائية"), ATTACHMENTS("ملاحظات المرفقات"), CUSTOM("البند المضاف");
