@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Mic
@@ -298,14 +299,25 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
             }
             Spacer(Modifier.height(12.dp))
             KhabirCard(contentPadding = PaddingValues(12.dp)) {
-                Text("إدخال واستيراد", style = MaterialTheme.typography.titleSmall)
-                Text("الصوت والصورة وملفات Office تُراجع قبل اعتمادها، ولا يتم استبدال محتوى التقرير تلقائيًا.", style = MaterialTheme.typography.bodySmall)
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    if (state.isOcrProcessing) "جارٍ قراءة صفحات المستند..." else "كل زر تصوير في التقرير يتيح تصوير مستند متعدد الصفحات ثم مراجعته دفعة واحدة.",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("إدخال واستيراد", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Text("الصوت والصورة وملفات Office تُراجع قبل اعتمادها، ولا يتم استبدال محتوى التقرير تلقائيًا.", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        if (state.isOcrProcessing) "جارٍ قراءة صفحات المستند..." else "كل زر تصوير في التقرير يتيح تصوير مستند متعدد الصفحات ثم مراجعته دفعة واحدة.",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilledTonalButton(
+                            onClick = { smartTemplateLauncher.launch(arrayOf(ReportViewModel.WORD_MIME, "application/msword")) },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("استيراد قالب تقرير") }
+                        OutlinedButton(
+                            onClick = { styleLearningPreview = viewModel.assistantContext() },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("التعلّم من تقرير معتمد") }
+                    }
+                }
             }
             Spacer(Modifier.height(12.dp))
             KhabirCard(contentPadding = PaddingValues(12.dp)) {
@@ -970,6 +982,11 @@ private fun ReportSectionField(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                TextButton(onClick = onExpand) {
+                    Icon(Icons.Filled.Edit, contentDescription = "تعديل $label")
+                    Spacer(Modifier.width(4.dp))
+                    Text(if (isExpanded) "مفتوح" else "تعديل")
+                }
                 FilledTonalIconButton(onClick = onCamera) {
                     Icon(Icons.Filled.CameraAlt, contentDescription = "تصوير $label")
                 }
