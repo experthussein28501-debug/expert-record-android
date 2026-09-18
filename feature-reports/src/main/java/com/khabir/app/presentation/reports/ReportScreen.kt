@@ -105,6 +105,7 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
     val importWordLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(viewModel::onImportWord) }
     val importExcelLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(viewModel::onImportExcel) }
     val importPowerPointLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(viewModel::onImportPowerPoint) }
+    val learningReportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(viewModel::onImportLearningReport) }
     val editableTemplateLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let(viewModel::onImportEditableReportTemplate)
     }
@@ -375,8 +376,12 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                         FilledTonalButton(
                             onClick = { styleLearningPreview = viewModel.assistantContext() },
                             modifier = Modifier.weight(1f)
-                        ) { Text("استخرج من التقرير") }
+                        ) { Text("من التقرير الحالي") }
                     }
+                    OutlinedButton(
+                        onClick = { learningReportLauncher.launch(arrayOf(ReportViewModel.WORD_MIME, "application/msword")) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("التعلّم من تقرير Word معتمد") }
                     TextButton(onClick = viewModel::onClearReportLearning, modifier = Modifier.fillMaxWidth()) { Text("مسح التعلّم") }
                     if (state.learningStatus.isNotBlank()) Text(state.learningStatus, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                 }
@@ -461,6 +466,16 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
             preview = preview,
             onPreviewChange = { styleLearningPreview = it },
             onDismiss = { styleLearningPreview = null },
+            viewModel = viewModel,
+            onRulesGenerated = { generated -> rulesEditor = generated }
+        )
+    }
+
+    if (state.pendingLearningText.isNotBlank()) {
+        StyleLearningPreviewDialog(
+            preview = state.pendingLearningText,
+            onPreviewChange = viewModel::onLearningTextChanged,
+            onDismiss = viewModel::onLearningImportConsumed,
             viewModel = viewModel,
             onRulesGenerated = { generated -> rulesEditor = generated }
         )
