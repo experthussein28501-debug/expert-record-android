@@ -206,11 +206,11 @@ class LegalReportDocxBuilder {
             val content = lines.filter(String::isNotBlank).joinToString("") { line ->
                 paragraph(line, align, bold = true, size = 22, after = 0, line = 240, keepNext = true)
             }
-            return "<w:tc><w:tcPr><w:tcW w:w="5000" w:type="dxa"/><w:tcBorders><w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="nil"/><w:right w:val="nil"/><w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tcBorders></w:tcPr>$content</w:tc>"
+            return """<w:tc><w:tcPr><w:tcW w:w="5000" w:type="dxa"/><w:tcBorders><w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="nil"/><w:right w:val="nil"/><w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tcBorders></w:tcPr>$content</w:tc>"""
         }
         val right = listOf(ministry, sector, department)
         val left = if (incoming.isBlank()) emptyList() else listOf("وارد $incoming")
-        return "<w:tbl><w:tblPr><w:tblW w:w="10000" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:bidiVisual/><w:tblBorders><w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="nil"/><w:right w:val="nil"/><w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tblBorders></w:tblPr><w:tblGrid><w:gridCol w:w="5000"/><w:gridCol w:w="5000"/></w:tblGrid><w:tr>${cell(left, "end")}${cell(right, "start")}</w:tr></w:tbl>"
+        return """<w:tbl><w:tblPr><w:tblW w:w="10000" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:bidiVisual/><w:tblBorders><w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="nil"/><w:right w:val="nil"/><w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tblBorders></w:tblPr><w:tblGrid><w:gridCol w:w="5000"/><w:gridCol w:w="5000"/></w:tblGrid><w:tr>${cell(left, "end")}${cell(right, "start")}</w:tr></w:tbl>"""
     }
 
     private fun compactSpacer(): String =
