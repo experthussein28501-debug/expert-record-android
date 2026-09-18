@@ -28,7 +28,8 @@ data class ReportTemplate(
     val kind: ReportTemplateKind,
     val sections: List<ReportSectionDefinition>,
     val isBuiltIn: Boolean,
-    val verifiedFromUserReports: Boolean
+    val verifiedFromUserReports: Boolean,
+    val referenceReport: String = ""
 ) {
     fun orderedSections(): List<ReportSectionDefinition> = sections.sortedBy { it.orderIndex }
 
@@ -93,7 +94,8 @@ data class ReportTemplate(
             section.copy(id = "${newId}_$index", orderIndex = index)
         },
         isBuiltIn = false,
-        verifiedFromUserReports = false
+        verifiedFromUserReports = false,
+        referenceReport = referenceReport
     )
 }
 
@@ -107,7 +109,8 @@ object ReportTemplateCatalog {
         kind = ReportTemplateKind.CIVIL,
         sections = commonLegalSections(),
         isBuiltIn = true,
-        verifiedFromUserReports = true
+        verifiedFromUserReports = true,
+        referenceReport = "الدعوى رقم 146 لسنة 2025 مدني جزئي نصر النوبة — نموذج Drive"
     )
 
     val family: ReportTemplate = ReportTemplate(
@@ -132,7 +135,8 @@ object ReportTemplateCatalog {
             ReportSectionDefinition("conclusion", "النتيجة النهائية", removable = false)
         ).reindex(),
         isBuiltIn = true,
-        verifiedFromUserReports = true
+        verifiedFromUserReports = true,
+        referenceReport = "نموذج تركات/قصر من تقارير المستخدم على Drive"
     )
 
     val misdemeanor: ReportTemplate = ReportTemplate(
@@ -148,7 +152,8 @@ object ReportTemplateCatalog {
             ReportSectionDefinition("documents", "فحص المستندات", enabled = false),
             ReportSectionDefinition("research", "البحث", enabled = false),
             ReportSectionDefinition("conclusion", "النتيجة النهائية", removable = false)
-        ).reindex(), true, true
+        ).reindex(), true, true,
+        referenceReport = "تقارير الجنح المرجعية على Drive — غلاف مختصر ومسار أقوال/معاينة"
     )
     val appeal: ReportTemplate = ReportTemplate(
         "drive_civil_appeal", "مدني مستأنف — من تقارير الخبير", ReportTemplateKind.APPEAL,
@@ -167,7 +172,8 @@ object ReportTemplateCatalog {
             ReportSectionDefinition("witnesses", "أقوال الشهود", enabled = false),
             ReportSectionDefinition("research", "البحث والرد على المأمورية"),
             ReportSectionDefinition("conclusion", "النتيجة النهائية", removable = false)
-        ).reindex(), true, true
+        ).reindex(), true, true,
+        referenceReport = "رقم 305 لسنة 33ق مدني استئناف أسوان — نموذج Drive"
     )
 
     // تقارير الاستئناف العالي المرجعية تُظهر أن مسار الطعن والإعادة
@@ -189,7 +195,8 @@ object ReportTemplateCatalog {
             ReportSectionDefinition("witnesses", "أقوال الشهود", enabled = false),
             ReportSectionDefinition("research", "البحث والرد على المأمورية"),
             ReportSectionDefinition("conclusion", "النتيجة النهائية", removable = false)
-        ).reindex(), true, true
+        ).reindex(), true, true,
+        referenceReport = "الدعوى رقم 871 لسنة 34ق استئناف عالي قنا مأمورية أسوان — نموذج Drive"
     )
 
     val free: ReportTemplate = ReportTemplate(
@@ -217,7 +224,8 @@ object ReportTemplateCatalog {
             ReportSectionDefinition("conclusion", "النتيجة النهائية", removable = false)
         ).reindex(),
         isBuiltIn = true,
-        verifiedFromUserReports = true
+        verifiedFromUserReports = true,
+        referenceReport = "الدعوى رقم 146 لسنة 2025 مدني جزئي نصر النوبة — نموذج Drive"
     )
     val conciseCivil: ReportTemplate = detailedCivil.copy(
         id = "library_civil_concise",
