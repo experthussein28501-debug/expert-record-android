@@ -49,6 +49,36 @@ class WorkMinutesDocxBuilderTest {
 
 
     @Test
+    fun `renders question and answer labels outside the writing margin`() {
+        val bytes = WorkMinutesDocxBuilder().build(
+            ministry = "وزارة العدل",
+            sector = "قطاع الخبراء",
+            department = "إدارة خبراء أسوان",
+            incomingNo = "",
+            caseIntro = "فى الدعوى رقم",
+            caseNo = "1",
+            caseYear = "2026",
+            court = "مدني",
+            plaintiffs = "",
+            defendants = "",
+            entries = listOf(
+                WorkMinutesEntry(
+                    number = 3,
+                    bodyText = "س/ ما قولك فيما هو منسوب؟\nج: أقرر بما ورد بالمستندات"
+                )
+            ),
+            logoBytes = null
+        )
+
+        val xml = readEntry(bytes, "word/document.xml")
+        assertTrue(xml.contains("<w:ind w:right=\"0\" w:hanging=\"460\"/>"))
+        assertTrue(xml.contains(">س/ </w:t>"))
+        assertTrue(xml.contains(">ج/ </w:t>"))
+        assertTrue(xml.contains("ما قولك فيما هو منسوب؟"))
+        assertTrue(xml.contains("أقرر بما ورد بالمستندات"))
+    }
+
+    @Test
     fun `exports official vertical page margins around work minutes`() {
         val bytes = WorkMinutesDocxBuilder().build(
             ministry = "وزارة العدل",
