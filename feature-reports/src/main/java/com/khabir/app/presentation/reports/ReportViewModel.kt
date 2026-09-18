@@ -376,6 +376,26 @@ class ReportViewModel @Inject constructor(
         }
     }
 
+    fun onImportPowerPoint(uri: Uri) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            runCatching { officeInterop.readPptxText(uri) }
+                .onSuccess { text ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            importedOfficeText = text,
+                            importedOfficeSource = "PowerPoint",
+                            errorMessage = if (text.isBlank()) "لم يتم العثور على نص داخل ملف PowerPoint" else null
+                        )
+                    }
+                }
+                .onFailure { e ->
+                    _uiState.update { it.copy(isLoading = false, errorMessage = e.message ?: "تعذر استيراد PowerPoint") }
+                }
+        }
+    }
+
     fun onSelectWordTemplate(uri: Uri) {
         viewModelScope.launch {
             runCatching { officeInterop.templateParagraphs(uri) to officeInterop.canAutoFillBlankReportFields(uri) }
@@ -577,6 +597,7 @@ class ReportViewModel @Inject constructor(
         const val WORD_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         const val PDF_MIME = "application/pdf"
         const val EXCEL_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        const val POWERPOINT_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
         private val KNOWN_EXCEL_FIELDS = setOf("رقم الدعوى", "السنة", "المحكمة", "رأس التقرير", "الخصوم", "الموضوع", "المأمورية", "مباشرة المأمورية", "أقوال طرفي التداعي", "سماع الشهود", "المعاينة على الطبيعة", "الإطلاع والمستندات", "بحث المستندات", "الوقائع والملاحظات", "البحث", "البحث والدراسة", "الحسابات والجداول", "النتيجة النهائية", "ملاحظات المرفقات")
     }
 }
