@@ -49,6 +49,32 @@ class WorkMinutesDocxBuilderTest {
 
 
     @Test
+    fun `exports official vertical page margins around work minutes`() {
+        val bytes = WorkMinutesDocxBuilder().build(
+            ministry = "وزارة العدل",
+            sector = "قطاع الخبراء",
+            department = "إدارة خبراء أسوان",
+            incomingNo = "",
+            caseIntro = "فى الدعوى رقم",
+            caseNo = "1",
+            caseYear = "2026",
+            court = "مدني",
+            plaintiffs = "",
+            defendants = "",
+            entries = listOf(WorkMinutesEntry(number = 1, bodyText = "نص المحضر")),
+            logoBytes = null
+        )
+
+        val xml = readEntry(bytes, "word/document.xml")
+        assertTrue(xml.contains("<w:pgMar w:top=\"850\" w:right=\"1550\" w:bottom=\"850\" w:left=\"1550\"/>"))
+        assertTrue(xml.contains("<w:pgBorders w:offsetFrom=\"text\" w:display=\"allPages\">"))
+        assertTrue(xml.contains("<w:left w:val=\"single\""))
+        assertTrue(xml.contains("<w:right w:val=\"single\""))
+        assertTrue(xml.contains("<w:top w:val=\"nil\"/>"))
+        assertTrue(xml.contains("<w:bottom w:val=\"nil\"/>"))
+    }
+
+    @Test
     fun `keeps numbered work minute lines as separate Word paragraphs`() {
         val bytes = WorkMinutesDocxBuilder().build(
             ministry = "وزارة العدل",
