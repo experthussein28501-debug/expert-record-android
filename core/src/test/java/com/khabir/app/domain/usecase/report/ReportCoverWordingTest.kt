@@ -95,6 +95,37 @@ class ReportCoverWordingTest {
         assertEquals("بوصاية", guardianship.secondPartyLabel)
     }
 
+
+    @Test
+    fun `selected misdemeanor template forces criminal cover for independent report`() {
+        val wording = reportCoverWording(
+            cover(caseType = "", court = "مركز كوم أمبو"),
+            templateId = "drive_misdemeanor",
+            templateName = "جنح — من تقارير الخبير"
+        )
+        assertEquals(ReportCoverKind.CRIMINAL, wording.kind)
+        assertTrue(wording.criminal)
+        assertTrue(wording.compactCover)
+    }
+
+    @Test
+    fun `selected appeal templates keep civil full cover`() {
+        val appeal = reportCoverWording(
+            cover(caseType = "", court = "استئناف أسوان"),
+            templateId = "drive_civil_appeal",
+            templateName = "مدني مستأنف — من تقارير الخبير"
+        )
+        val high = reportCoverWording(
+            cover(caseType = "", court = "استئناف أسوان"),
+            templateId = "drive_high_appeal",
+            templateName = "استئناف عالٍ — من تقارير الخبير"
+        )
+        assertEquals(ReportCoverKind.CIVIL, appeal.kind)
+        assertEquals(ReportCoverKind.CIVIL, high.kind)
+        assertTrue(!appeal.compactCover)
+        assertTrue(!high.compactCover)
+    }
+
     @Test
     fun `other prosecution is compact but does not inherit estate wording`() {
         val wording = reportCoverWording(cover("مأمورية نيابة", "نيابة أسوان"))
