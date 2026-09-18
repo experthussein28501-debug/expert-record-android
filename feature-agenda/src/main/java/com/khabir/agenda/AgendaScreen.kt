@@ -113,7 +113,7 @@ private fun WeekHeader() {
     Row(Modifier.fillMaxWidth()) {
         listOf("السبت", "الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة").forEach { day ->
             Text(
-                day.take(3),
+                day,
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
@@ -363,34 +363,6 @@ private fun AgendaDayDialog(
                         label = { Text("ملاحظات اليوم — لوحة مفاتيح الهاتف") }
                     )
 
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        OutlinedButton(
-                            onClick = {
-                                voiceLauncher.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ar-EG")
-                                    putExtra(RecognizerIntent.EXTRA_PROMPT, "إملاء ملاحظات الأجندة")
-                                })
-                            },
-                            modifier = Modifier.weight(1f)
-                        ) { Icon(Icons.Filled.Mic, null); Text(" صوت") }
-                        OutlinedButton(
-                            onClick = {
-                                if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-                                    cameraLauncher.launch(null)
-                                } else {
-                                    launchCameraAfterPermission = true
-                                    cameraPermission.launch(Manifest.permission.CAMERA)
-                                }
-                            },
-                            modifier = Modifier.weight(1f)
-                        ) { Icon(Icons.Filled.CameraAlt, null); Text(" كاميرا") }
-                        OutlinedButton(
-                            onClick = { importImages.launch(arrayOf("image/*")) },
-                            modifier = Modifier.weight(1f)
-                        ) { Icon(Icons.Filled.PhotoLibrary, null); Text(" صور") }
-                    }
-
                     Text("لوحة الكتابة والرسم — إصبع / قلم / S Pen", fontWeight = FontWeight.Bold)
                     DrawingBoard(
                         strokes = strokes,
@@ -422,6 +394,36 @@ private fun AgendaDayDialog(
                             }
                         }
                     }
+
+                    Text("أدوات الملاحظة", fontWeight = FontWeight.Bold)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                voiceLauncher.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ar-EG")
+                                    putExtra(RecognizerIntent.EXTRA_PROMPT, "إملاء ملاحظات الأجندة")
+                                })
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) { Icon(Icons.Filled.Mic, null); Text(" صوت") }
+                        OutlinedButton(
+                            onClick = {
+                                if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                                    cameraLauncher.launch(null)
+                                } else {
+                                    launchCameraAfterPermission = true
+                                    cameraPermission.launch(Manifest.permission.CAMERA)
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) { Icon(Icons.Filled.CameraAlt, null); Text(" كاميرا") }
+                        OutlinedButton(
+                            onClick = { importImages.launch(arrayOf("image/*")) },
+                            modifier = Modifier.weight(1f)
+                        ) { Icon(Icons.Filled.PhotoLibrary, null); Text(" صور") }
+                    }
+
                 }
                 Button(
                     onClick = { onSave(text, strokes.toList(), images.toList(), manualAppointments.toList()) },
