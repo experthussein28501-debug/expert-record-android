@@ -27,4 +27,18 @@ class CaseValidationTest {
         assertTrue(CaseValidationError.InvalidCaseYear in sample("1800").validate())
         assertFalse(CaseValidationError.MissingCaseYear in sample("26").validate())
     }
+    @Test
+    fun `accepts judicial year for high appeal and administrative judiciary`() {
+        val highAppeal = sample("21ق").copy(caseType = "استئناف عالي", court = "محكمة استئناف قنا")
+        val admin = sample("٢١ ق").copy(caseType = "قضاء إداري", court = "محكمة القضاء الإداري")
+        assertTrue(highAppeal.validate().isEmpty())
+        assertTrue(admin.validate().isEmpty())
+    }
+
+    @Test
+    fun `civil appeal still requires Gregorian year`() {
+        val civilAppeal = sample("21ق").copy(caseType = "مدني مستأنف", court = "مدني مستأنف أسوان")
+        assertTrue(CaseValidationError.InvalidCaseYear in civilAppeal.validate())
+    }
+
 }
