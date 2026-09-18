@@ -108,10 +108,10 @@ class CaseStatementTableTest {
     @Test
     fun `statement summarizes first plaintiff and defendant only`() {
         val parties = listOf(
-            Party(firstName = "أحمد", restName = "محمد", role = PartyRole.PLAINTIFF, orderIndex = 0),
-            Party(firstName = "علي", restName = "حسن", role = PartyRole.PLAINTIFF, orderIndex = 1),
-            Party(firstName = "محمود", restName = "سالم", role = PartyRole.DEFENDANT, orderIndex = 2),
-            Party(firstName = "سعيد", restName = "عمر", role = PartyRole.DEFENDANT, orderIndex = 3)
+            Party(firstName = "أحمد", restName = "محمد", role = PartyRole.PLAINTIFF, address = "", orderIndex = 0),
+            Party(firstName = "علي", restName = "حسن", role = PartyRole.PLAINTIFF, address = "", orderIndex = 1),
+            Party(firstName = "محمود", restName = "سالم", role = PartyRole.DEFENDANT, address = "", orderIndex = 2),
+            Party(firstName = "سعيد", restName = "عمر", role = PartyRole.DEFENDANT, address = "", orderIndex = 3)
         )
         val case = sampleCase("10", "مدني كلي", LocalDate.of(2026, 8, 10), "55").copy(parties = parties)
         val row = CaseStatementTableBuilder.build(
