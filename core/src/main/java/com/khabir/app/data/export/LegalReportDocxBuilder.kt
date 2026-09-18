@@ -1,5 +1,6 @@
 package com.khabir.app.data.export
 
+import com.khabir.app.domain.model.toArabicIndicDigits
 import java.io.ByteArrayOutputStream
 import java.io.File
 import android.graphics.BitmapFactory
@@ -58,30 +59,47 @@ class LegalReportDocxBuilder {
         val logoRelId = if (logoBytes != null) "rId${nextRelId++}" else null
         val sketchRelId = "rId${nextRelId}"
 
-        if (logoRelId != null) {
-            body.append(imageParagraph(logoRelId, 480_000, 447_000, "شعار وزارة العدل"))
+        if (compactCover) {
+            body.append(directReportHeader(ministry, sector, department, incoming))
+            body.append(compactCentered(reportTitle, true, 30))
+            if (caseNumber.isNotBlank()) {
+                body.append(compactCentered("$caseIntro $caseNumber${if (court.isBlank()) "" else " $court"}", true, 23))
+            }
+            if (plaintiffs.isNotBlank()) {
+                body.append(compactCentered(firstPartyLabel, true, 21))
+                body.append(compactCentered(plaintiffs, true, 22))
+            }
+            if (defendants.isNotBlank()) {
+                body.append(compactCentered(secondPartyLabel, true, 21))
+                body.append(compactCentered(defendants, true, 22))
+            }
+            body.append(tinySpacer())
+        } else {
+            if (logoRelId != null) {
+                body.append(imageParagraph(logoRelId, 480_000, 447_000, "شعار وزارة العدل"))
+            }
+            body.append(centered(ministry, true, 26))
+            if (sector.isNotBlank()) body.append(centered(sector, true, 24))
+            if (department.isNotBlank()) body.append(centered(department, true, 24))
+            body.append(compactSpacer())
+            body.append(centered(reportTitle, true, 34))
+            if (expert.isNotBlank()) body.append(centered("مقدم من $expert خبير وزارة العدل", true, 24))
+            if (caseNumber.isNotBlank()) body.append(centered("$caseIntro $caseNumber${if (court.isBlank()) "" else " $court"}", true, 25))
+            if (plaintiffs.isNotBlank()) {
+                body.append(centered(firstPartyLabel, true, 23))
+                body.append(centered(plaintiffs, true, 24))
+            }
+            if (defendants.isNotBlank()) {
+                body.append(centered(secondPartyLabel, true, 23))
+                body.append(centered(defendants, true, 24))
+            }
+            if (incoming.isNotBlank()) {
+                val incomingParts = incoming.split(" لسنة ", limit = 2)
+                body.append(centered("وارد ${incomingParts[0]}", true, 22))
+                if (incomingParts.size == 2) body.append(centered("لسنة ${incomingParts[1]}", true, 22))
+            }
+            body.append(compactSpacer())
         }
-        body.append(coverParagraph(ministry, true, if (compactCover) 24 else 26))
-        if (sector.isNotBlank()) body.append(coverParagraph(sector, true, if (compactCover) 22 else 24))
-        if (department.isNotBlank()) body.append(coverParagraph(department, true, if (compactCover) 22 else 24))
-        if (!compactCover) body.append(compactSpacer())
-        body.append(coverParagraph(reportTitle, true, if (compactCover) 30 else 34))
-        if (expert.isNotBlank()) body.append(coverParagraph("مقدم من $expert خبير وزارة العدل", true, if (compactCover) 22 else 24))
-        if (caseNumber.isNotBlank()) body.append(coverParagraph("$caseIntro $caseNumber${if (court.isBlank()) "" else " $court"}", true, if (compactCover) 23 else 25))
-        if (plaintiffs.isNotBlank()) {
-            body.append(coverParagraph(firstPartyLabel, true, if (compactCover) 21 else 23))
-            body.append(coverParagraph(plaintiffs, true, if (compactCover) 22 else 24))
-        }
-        if (defendants.isNotBlank()) {
-            body.append(coverParagraph(secondPartyLabel, true, if (compactCover) 21 else 23))
-            body.append(coverParagraph(defendants, true, if (compactCover) 22 else 24))
-        }
-        if (incoming.isNotBlank()) {
-            val incomingParts = incoming.split(" لسنة ", limit = 2)
-            body.append(coverParagraph("وارد ${incomingParts[0]}", true, if (compactCover) 20 else 22))
-            if (incomingParts.size == 2) body.append(coverParagraph("لسنة ${incomingParts[1]}", true, if (compactCover) 20 else 22))
-        }
-        body.append(if (compactCover) tinySpacer() else compactSpacer())
 
         var sketchInserted = false
         val sketchBytes = siteSketchFile?.takeIf { it.isFile }?.readBytes()?.takeIf { it.isNotEmpty() }
@@ -99,8 +117,15 @@ class LegalReportDocxBuilder {
         }
         sections.forEach { (sectionTitle, content) ->
             body.append(heading(sectionTitle))
+            val isExpertSignature = sectionTitle.contains("نتيجة أعمالنا") || content.trimStart().startsWith("الخبير")
             content.lines().forEach { line ->
-                if (line.isBlank()) body.append(compactSpacer()) else body.append(normal(line))
+                if (line.isBlank()) {
+                    body.append(compactSpacer())
+                } else if (isExpertSignature && line.trimStart().startsWith("الخبير")) {
+                    body.append(endAligned(line, bold = true, size = 24))
+                } else {
+                    body.append(normal(line))
+                }
             }
             body.append(compactSpacer())
             if (sectionTitle.contains("معاين")) appendSketch()
@@ -166,6 +191,28 @@ class LegalReportDocxBuilder {
         firstLineIndent = 300
     )
 
+    private fun endAligned(text: String, bold: Boolean, size: Int): String = paragraph(
+        text = text,
+        align = "end",
+        bold = bold,
+        size = size,
+        after = 8,
+        line = 300,
+        keepNext = true
+    )
+
+    private fun directReportHeader(ministry: String, sector: String, department: String, incoming: String): String {
+        fun cell(lines: List<String>, align: String): String {
+            val content = lines.filter(String::isNotBlank).joinToString("") { line ->
+                paragraph(line, align, bold = true, size = 22, after = 0, line = 240, keepNext = true)
+            }
+            return "<w:tc><w:tcPr><w:tcW w:w="5000" w:type="dxa"/><w:tcBorders><w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="nil"/><w:right w:val="nil"/><w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tcBorders></w:tcPr>$content</w:tc>"
+        }
+        val right = listOf(ministry, sector, department)
+        val left = if (incoming.isBlank()) emptyList() else listOf("وارد $incoming")
+        return "<w:tbl><w:tblPr><w:tblW w:w="10000" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:bidiVisual/><w:tblBorders><w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="nil"/><w:right w:val="nil"/><w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tblBorders></w:tblPr><w:tblGrid><w:gridCol w:w="5000"/><w:gridCol w:w="5000"/></w:tblGrid><w:tr>${cell(left, "end")}${cell(right, "start")}</w:tr></w:tbl>"
+    }
+
     private fun compactSpacer(): String =
         "<w:p><w:pPr><w:bidi/><w:spacing w:before=\"0\" w:after=\"20\"/></w:pPr></w:p>"
 
@@ -173,7 +220,7 @@ class LegalReportDocxBuilder {
         "<w:p><w:pPr><w:bidi/><w:spacing w:before=\"0\" w:after=\"4\"/></w:pPr></w:p>"
 
     private fun imageParagraph(relId: String, cx: Long, cy: Long, name: String = "صورة"): String =
-        """<w:p><w:pPr><w:bidi/><w:jc w:val="center"/></w:pPr><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="$cx" cy="$cy"/><wp:docPr id="1" name="${escape(name)}"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="0" name="${escape(name)}"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="$relId"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="$cx" cy="$cy"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>"""
+        """<w:p><w:pPr><w:bidi/><w:jc w:val="center"/></w:pPr><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="$cx" cy="$cy"/><wp:docPr id="1" name="${escape(name.toArabicIndicDigits())}"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="0" name="${escape(name)}"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="$relId"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="$cx" cy="$cy"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>"""
 
     private fun paragraph(
         text: String,
@@ -188,7 +235,7 @@ class LegalReportDocxBuilder {
         val boldXml = if (bold) "<w:b/>" else ""
         val keepNextXml = if (keepNext) "<w:keepNext/>" else ""
         val indentXml = if (firstLineIndent > 0) "<w:ind w:firstLine=\"$firstLineIndent\"/>" else ""
-        return "<w:p><w:pPr><w:bidi/><w:widowControl/>$keepNextXml<w:jc w:val=\"$align\"/>$indentXml<w:spacing w:before=\"0\" w:after=\"$after\" w:line=\"$line\" w:lineRule=\"auto\"/></w:pPr><w:r><w:rPr><w:rtl/><w:lang w:val=\"ar-EG\" w:bidi=\"ar-EG\"/><w:rFonts w:ascii=\"Traditional Arabic\" w:hAnsi=\"Traditional Arabic\" w:cs=\"Traditional Arabic\"/>$boldXml<w:sz w:val=\"$size\"/><w:szCs w:val=\"$size\"/></w:rPr><w:t xml:space=\"preserve\">${escape(text)}</w:t></w:r></w:p>"
+        return "<w:p><w:pPr><w:bidi/><w:widowControl/>$keepNextXml<w:jc w:val=\"$align\"/>$indentXml<w:spacing w:before=\"0\" w:after=\"$after\" w:line=\"$line\" w:lineRule=\"auto\"/></w:pPr><w:r><w:rPr><w:rtl/><w:lang w:val=\"ar-EG\" w:bidi=\"ar-EG\"/><w:rFonts w:ascii=\"Traditional Arabic\" w:hAnsi=\"Traditional Arabic\" w:cs=\"Traditional Arabic\"/>$boldXml<w:sz w:val=\"$size\"/><w:szCs w:val=\"$size\"/></w:rPr><w:t xml:space=\"preserve\">${escape(text.toArabicIndicDigits())}</w:t></w:r></w:p>"
     }
 
     private fun headerXml(text: String): String =
