@@ -73,20 +73,33 @@ internal object AgendaDayCodec {
     }.getOrNull()
 
     private fun encodeStrokes(strokes: List<AgendaStroke>): String = strokes.joinToString("|") { stroke ->
-        stroke.points.joinToString(";") { point -> "${point.x},${point.y}" }
+        val points = stroke.points.joinToString(";") { point -> "${point.x},${point.y}" }
+        "v2~${stroke.tool.name}~${stroke.colorArgb}~${stroke.width}~$points"
     }
 
     private fun decodeStrokes(spec: String): List<AgendaStroke> = spec
         .split("|")
         .filter(String::isNotBlank)
-        .mapNotNull { stroke ->
-            val points = stroke.split(";").mapNotNull { pair ->
+        .mapNotNull { encoded ->
+            val v2 = encoded.split("~", limit = 5)
+            val tool = if (v2.size == 5) runCatching { AgendaSketchTool.valueOf(v2[1]) }.getOrNull() else null
+            val color = if (v2.size == 5) v2[2].toIntOrNull() else null
+            val width = if (v2.size == 5) v2[3].toFloatOrNull() else null
+            val pointSpec = if (v2.size == 5) v2[4] else encoded
+            val points = pointSpec.split(";").mapNotNull { pair ->
                 val values = pair.split(",")
                 val x = values.getOrNull(0)?.toFloatOrNull()
                 val y = values.getOrNull(1)?.toFloatOrNull()
                 if (x != null && y != null) AgendaPoint(x, y) else null
             }
-            points.takeIf { it.isNotEmpty() }?.let(::AgendaStroke)
+            points.takeIf { it.isNotEmpty() }?.let {
+                AgendaStroke(
+                    points = it,
+                    tool = tool ?: AgendaSketchTool.FREEHAND,
+                    colorArgb = color ?: 0xFF1B1B1B.toInt(),
+                    width = width?.coerceIn(2f, 16f) ?: 4f
+                )
+            }
         }
 
     private fun encodeManualAppointments(items: List<AgendaManualAppointment>): String =
