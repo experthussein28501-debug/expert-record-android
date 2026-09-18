@@ -11,6 +11,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -22,6 +24,7 @@ import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -218,23 +221,68 @@ fun WorkMinutesScreen(onBack: () -> Unit, viewModel: WorkMinutesViewModel = hilt
                 }
             }
 
-            state.entries.sortedBy { it.number }.forEach { entry ->
-                WorkMinutesEntryCard(
-                    entry = entry,
-                    isExpanded = state.expandedEntryNumber == entry.number,
-                    expandedHeight = screenHeightDp * 0.8f,
-                    onExpand = { viewModel.onEntryExpand(entry.number) },
-                    onOpenEditor = { editingEntryNumber = entry.number },
-                    onChange = { transform -> viewModel.onEntryChanged(entry.number, transform) },
-                    onRemove = { viewModel.onRemoveEntry(entry.number) },
-                    onGoogleVoice = { startVoice(entry.number, false) },
-                    onAiVoice = { startVoice(entry.number, true) },
-                    onCamera = { startCamera(entry.number) },
-                    onImportImages = {
-                        importEntryNumber = entry.number
-                        importImagesLauncher.launch(arrayOf("image/*"))
-                    }
+            val orderedEntries = state.entries.sortedBy { it.number }
+            if (orderedEntries.isNotEmpty()) {
+                val pagerState = rememberPagerState(
+                    initialPage = state.expandedEntryNumber?.let { number ->
+                        orderedEntries.indexOfFirst { it.number == number }.coerceAtLeast(0)
+                    } ?: 0,
+                    pageCount = { orderedEntries.size }
                 )
+                var lastKnownCount by remember { mutableIntStateOf(orderedEntries.size) }
+
+                LaunchedEffect(orderedEntries.size) {
+                    if (orderedEntries.size > lastKnownCount) {
+                        pagerState.animateScrollToPage(orderedEntries.lastIndex)
+                    } else if (pagerState.currentPage > orderedEntries.lastIndex) {
+                        pagerState.scrollToPage(orderedEntries.lastIndex.coerceAtLeast(0))
+                    }
+                    lastKnownCount = orderedEntries.size
+                }
+
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("محضر ${pagerState.currentPage + 1} من ${orderedEntries.size}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Text("اسحب يمينًا أو يسارًا", style = MaterialTheme.typography.labelSmall)
+                }
+
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxWidth().height(screenHeightDp * 0.78f),
+                    pageSpacing = 12.dp
+                ) { page ->
+                    val entry = orderedEntries[page]
+                    Box(modifier = Modifier.fillMaxSize().padding(horizontal = 2.dp).verticalScroll(rememberScrollState())) {
+                        WorkMinutesEntryCard(
+                            entry = entry,
+                            isExpanded = true,
+                            expandedHeight = screenHeightDp * 0.72f,
+                            onExpand = { viewModel.onEntryExpand(entry.number) },
+                            onOpenEditor = { editingEntryNumber = entry.number },
+                            onChange = { transform -> viewModel.onEntryChanged(entry.number, transform) },
+                            onRemove = { viewModel.onRemoveEntry(entry.number) },
+                            onGoogleVoice = { startVoice(entry.number, false) },
+                            onAiVoice = { startVoice(entry.number, true) },
+                            onCamera = { startCamera(entry.number) },
+                            onImportImages = {
+                                importEntryNumber = entry.number
+                                importImagesLauncher.launch(arrayOf("image/*"))
+                            }
+                        )
+                    }
+                }
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) } },
+                        enabled = pagerState.currentPage > 0,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("السابق") }
+                    Button(
+                        onClick = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) } },
+                        enabled = pagerState.currentPage < orderedEntries.lastIndex,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("التالي") }
+                }
             }
 
             Spacer(Modifier.height(8.dp))
