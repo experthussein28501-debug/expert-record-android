@@ -1,6 +1,6 @@
 package com.khabir.app.presentation.reports
 
-internal enum class FinalRequestsPlacement {
+enum class FinalRequestsPlacement {
     START,
     END
 }
