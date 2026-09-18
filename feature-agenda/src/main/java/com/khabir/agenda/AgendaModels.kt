@@ -6,7 +6,14 @@ enum class AgendaEventSource { NOTIFICATION_APPOINTMENT, WORK_MINUTES, MANUAL, H
 
 data class AgendaPoint(val x: Float, val y: Float)
 
-data class AgendaStroke(val points: List<AgendaPoint>)
+enum class AgendaSketchTool { FREEHAND, LINE, ARROW, RECTANGLE, CIRCLE, TRIANGLE, SEMICIRCLE }
+
+data class AgendaStroke(
+    val points: List<AgendaPoint>,
+    val tool: AgendaSketchTool = AgendaSketchTool.FREEHAND,
+    val colorArgb: Int = 0xFF1B1B1B.toInt(),
+    val width: Float = 4f
+)
 
 /** موعد يدوي منظم يضيفه المستخدم داخل يوم الأجندة. */
 data class AgendaManualAppointment(
