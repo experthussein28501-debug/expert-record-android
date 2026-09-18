@@ -77,6 +77,7 @@ data class ReportUiState(
     val assistantReply: String = "",
     val isAssistantWorking: Boolean = false,
     val learningStatus: String = "",
+    val pendingLearningText: String = "",
     val finalRequestsPlacement: FinalRequestsPlacement = FinalRequestsPlacement.START,
     val savedWordTemplateUri: String = "",
     val pendingTemplateUri: Uri? = null,
@@ -299,6 +300,31 @@ class ReportViewModel @Inject constructor(
 
     fun learnedRules(): String = personalAiKeyStore.readReportStyleMemory()
     fun expertInstructions(): String = personalAiKeyStore.readInstructions()
+
+    fun onImportLearningReport(uri: Uri) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(learningStatus = "جارٍ قراءة التقرير المعتمد…", errorMessage = null) }
+            runCatching { officeInterop.readDocxText(uri) }
+                .onSuccess { text ->
+                    if (text.isBlank()) {
+                        _uiState.update { it.copy(learningStatus = "", errorMessage = "لم يتم العثور على نص داخل تقرير Word") }
+                    } else {
+                        _uiState.update {
+                            it.copy(
+                                pendingLearningText = text,
+                                learningStatus = "راجع التقرير قبل استخراج أسلوب الصياغة"
+                            )
+                        }
+                    }
+                }
+                .onFailure { e ->
+                    _uiState.update { it.copy(learningStatus = "", errorMessage = e.message ?: "تعذر قراءة تقرير Word للتعلّم") }
+                }
+        }
+    }
+
+    fun onLearningTextChanged(value: String) = _uiState.update { it.copy(pendingLearningText = value) }
+    fun onLearningImportConsumed() = _uiState.update { it.copy(pendingLearningText = "") }
 
     fun onAskAssistant(request: String, approvedContext: String, approvedRules: String) {
         if (request.isBlank() || _uiState.value.isAssistantWorking) return
