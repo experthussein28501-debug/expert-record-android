@@ -6,7 +6,7 @@ enum class AgendaEventSource { NOTIFICATION_APPOINTMENT, WORK_MINUTES, MANUAL, H
 
 data class AgendaPoint(val x: Float, val y: Float)
 
-enum class AgendaSketchTool { FREEHAND, LINE, ARROW, RECTANGLE, CIRCLE, TRIANGLE, SEMICIRCLE }
+enum class AgendaSketchTool { FREEHAND, LINE, ARROW, RECTANGLE, CIRCLE, TRIANGLE, SEMICIRCLE, ERASER }
 
 data class AgendaStroke(
     val points: List<AgendaPoint>,
