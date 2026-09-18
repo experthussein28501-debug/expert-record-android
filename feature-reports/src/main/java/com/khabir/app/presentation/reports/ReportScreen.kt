@@ -94,6 +94,7 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
     var styleLearningPreview by remember { mutableStateOf<String?>(null) }
     var expandedSectionId by remember { mutableStateOf<String?>(null) }
     var editingSectionHeaderId by remember { mutableStateOf<String?>(null) }
+    var showReportTools by remember { mutableStateOf(false) }
     val screenHeightDp = LocalConfiguration.current.screenHeightDp.dp
 
     val saveAsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { destination ->
@@ -308,6 +309,10 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                 }
             }
             Spacer(Modifier.height(12.dp))
+            OutlinedButton(onClick = { showReportTools = !showReportTools }, modifier = Modifier.fillMaxWidth()) {
+                Text(if (showReportTools) "إخفاء أدوات التقرير" else "أدوات التقرير")
+            }
+            if (showReportTools) {
             KhabirCard(contentPadding = PaddingValues(12.dp)) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("إدخال واستيراد", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
@@ -417,18 +422,24 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                     }
                 }
             }
+            }
             val enabledSections = state.template.orderedSections().filter { it.enabled }
             if (enabledSections.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
                 val sectionPagerState = rememberPagerState(pageCount = { enabledSections.size })
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    val currentSection = enabledSections[sectionPagerState.currentPage]
                     Text(
-                        "${sectionPagerState.currentPage + 1} / ${enabledSections.size} — ${enabledSections[sectionPagerState.currentPage].title}",
+                        "${sectionPagerState.currentPage + 1} / ${enabledSections.size} — ${currentSection.title}",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.weight(1f)
                     )
-                    Text("اسحب يمينًا أو يسارًا", style = MaterialTheme.typography.labelSmall)
+                    TextButton(onClick = { editingSectionHeaderId = currentSection.id }) {
+                        Icon(Icons.Filled.Edit, contentDescription = null)
+                        Spacer(Modifier.width(4.dp))
+                        Text("تعديل")
+                    }
                 }
                 Spacer(Modifier.height(6.dp))
                 HorizontalPager(
@@ -441,17 +452,6 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text(section.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                            OutlinedButton(onClick = { editingSectionHeaderId = section.id }) {
-                                Icon(Icons.Filled.Edit, contentDescription = null)
-                                Spacer(Modifier.width(4.dp))
-                                Text("تعديل العنوان")
-                            }
-                        }
-                        section.headingLines.filter(String::isNotBlank).forEach { line ->
-                            Text(line, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                        }
                         ReportTemplateSection(
                             section, state, viewModel, ::startReportCamera, ::startArabicDictation,
                             isExpanded = true,
@@ -471,7 +471,10 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                                         OutlinedButton(onClick = { sketchBaseImage = savedSketch; showSiteSketchEditor = true }, modifier = Modifier.weight(1f)) { Text(if (savedSketch == null) "رسم كروكي" else "تعديل الرسم") }
                                         OutlinedButton(onClick = { sketchImageLauncher.launch("image/*") }, modifier = Modifier.weight(1f)) { Text("استيراد صورة") }
                                     }
-                                    FilledTonalButton(onClick = { showMapLocationPicker = true }, modifier = Modifier.fillMaxWidth()) { Text("خريطة تفاعلية داخل التطبيق") }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                        FilledTonalButton(onClick = { showMapLocationPicker = true }, modifier = Modifier.weight(1f)) { Text("خريطة تفاعلية داخل التطبيق") }
+                                        if (savedSketch != null) TextButton(onClick = viewModel::onSiteSketchRemoved) { Text("حذف الرسم") }
+                                    }
                                 }
                             }
                         }
