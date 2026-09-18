@@ -874,7 +874,34 @@ private fun ReportTemplateSection(
     } else if (mapping != null) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             section.headingLines.filter(String::isNotBlank).forEach { Text(it, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium) }
-            if (section.id == "statements") {
+            if (section.id == "subject") {
+                KhabirCard(contentPadding = PaddingValues(10.dp), containerColor = MaterialTheme.colorScheme.secondaryContainer) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("موضع الطلبات الختامية داخل الموضوع", fontWeight = FontWeight.SemiBold)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            FilterChip(
+                                selected = state.finalRequestsPlacement == FinalRequestsPlacement.START,
+                                onClick = { viewModel.onFinalRequestsPlacementChanged(FinalRequestsPlacement.START) },
+                                label = { Text("في البداية") },
+                                modifier = Modifier.weight(1f)
+                            )
+                            FilterChip(
+                                selected = state.finalRequestsPlacement == FinalRequestsPlacement.END,
+                                onClick = { viewModel.onFinalRequestsPlacementChanged(FinalRequestsPlacement.END) },
+                                label = { Text("في النهاية") },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        Text("الاختيار يعيد ترتيب الموضوع الحالي ويُستخدم أيضًا عند استخراج موضوع الدعوى من العريضة.", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+                ReportSectionField(
+                    section.title, mapping.first, mapping.second,
+                    5,
+                    { onCamera(mapping.third, null) }, { onMic(mapping.third, null) },
+                    isExpanded = isExpanded, onExpand = onExpand, expandedHeight = expandedHeight
+                )
+            } else if (section.id == "statements") {
                 val statements = splitPartyStatements(state.partyStatements)
                 ReportSectionField(
                     "أقوال المدعي",
