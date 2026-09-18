@@ -75,7 +75,12 @@ class WorkMinutesDocxBuilder {
             body.append(normal(openingLine))
             if (entry.bodyText.isNotBlank()) {
                 entry.bodyText.replace("\r\n", "\n").lines().forEach { line ->
-                    if (line.isBlank()) body.append(compactSpacer()) else body.append(normal(line))
+                    if (line.isBlank()) {
+                        body.append(compactSpacer())
+                    } else {
+                        val qa = parseQuestionAnswerLine(line)
+                        if (qa != null) body.append(questionAnswerParagraph(qa.first, qa.second)) else body.append(normal(line))
+                    }
                 }
             }
             entry.scheduledFollowUpDate?.let { followUp ->
@@ -135,6 +140,26 @@ class WorkMinutesDocxBuilder {
     }
 
     private fun normal(text: String): String = paragraph(text, "both", bold = true, size = 24, after = 8, line = 360, keepNext = false)
+
+    private fun parseQuestionAnswerLine(text: String): Pair<String, String>? {
+        val trimmed = text.trimStart()
+        val punctuated = Regex("""^([سج])\s*([/:.\-–—])\s*(.*)$""").matchEntire(trimmed)
+        if (punctuated != null) {
+            val label = punctuated.groupValues[1]
+            val body = punctuated.groupValues[3]
+            return label to body
+        }
+        val spaced = Regex("""^([سج])\s+(.+)$""").matchEntire(trimmed)
+        return spaced?.let { it.groupValues[1] to it.groupValues[2] }
+    }
+
+    private fun questionAnswerParagraph(label: String, text: String): String {
+        val safeLabel = escape(label)
+        val safeText = escape(text.toArabicIndicDigits())
+        return "<w:p><w:pPr><w:bidi/><w:widowControl/><w:jc w:val=\"both\"/><w:ind w:right=\"0\" w:hanging=\"460\"/><w:spacing w:before=\"0\" w:after=\"8\" w:line=\"360\" w:lineRule=\"auto\"/></w:pPr>" +
+            "<w:r><w:rPr><w:rtl/><w:b/><w:lang w:val=\"ar-EG\" w:bidi=\"ar-EG\"/><w:rFonts w:ascii=\"Traditional Arabic\" w:hAnsi=\"Traditional Arabic\" w:cs=\"Traditional Arabic\"/><w:sz w:val=\"24\"/><w:szCs w:val=\"24\"/></w:rPr><w:t xml:space=\"preserve\">$safeLabel/ </w:t></w:r>" +
+            "<w:r><w:rPr><w:rtl/><w:b/><w:lang w:val=\"ar-EG\" w:bidi=\"ar-EG\"/><w:rFonts w:ascii=\"Traditional Arabic\" w:hAnsi=\"Traditional Arabic\" w:cs=\"Traditional Arabic\"/><w:sz w:val=\"24\"/><w:szCs w:val=\"24\"/></w:rPr><w:t xml:space=\"preserve\">$safeText</w:t></w:r></w:p>"
+    }
 
     private fun compactSpacer(): String = "<w:p><w:pPr><w:bidi/><w:spacing w:before=\"0\" w:after=\"20\"/></w:pPr></w:p>"
 
