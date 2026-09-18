@@ -74,6 +74,15 @@ class WorkMinutesDocxBuilder {
                 if (entry.bodyText.isNotBlank()) append(" ${entry.bodyText}")
             }
             body.append(normal(openingLine))
+            entry.scheduledFollowUpDate?.let { followUp ->
+                val followUpLine = buildString {
+                    append("وحددنا يوم ${followUp.format(dateFormat)}")
+                    if (entry.scheduledFollowUpTime.isNotBlank()) append(" الساعة ${entry.scheduledFollowUpTime}")
+                    if (entry.scheduledFollowUpLocation.isNotBlank()) append(" ${entry.scheduledFollowUpLocation}")
+                    append(" موعدًا لمتابعة مباشرة المأمورية.")
+                }
+                body.append(normal(followUpLine))
+            }
             if (entry.closingTime.isNotBlank()) {
                 body.append(normal("واقفل المحضر على ذلك فى تاريخه الساعة ${entry.closingTime} بالمكتب"))
             }
