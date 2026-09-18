@@ -26,8 +26,8 @@ internal data class ReportCoverWording(
  * مدني جزئي، مدني مستأنف، شؤون الأسرة...) is written after the number and year from
  * the case data saved at intake.
  */
-internal fun reportCoverWording(cover: ReportCoverFields): ReportCoverWording {
-    val source = "${cover.caseType} ${cover.court}".lowercase()
+internal fun reportCoverWording(cover: ReportCoverFields, templateId: String = "", templateName: String = ""): ReportCoverWording {
+    val source = "${cover.caseType} ${cover.court} $templateId $templateName".lowercase()
     val criminal = listOf("جنح", "جنحة", "الجنحه", "الجنحة").any(source::contains)
     val estate = listOf("تركة", "تركات", "ميراث").any(source::contains)
     val guardianship = listOf(
