@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -1044,7 +1045,8 @@ private fun ReportTemplateSection(
                     section.title, mapping.first, mapping.second,
                     if (section.id in setOf("witnesses", "inspection", "documents", "research")) 5 else 4,
                     { onCamera(mapping.third, null) }, { onMic(mapping.third, null) },
-                    isExpanded = isExpanded, onExpand = onExpand, expandedHeight = expandedHeight
+                    isExpanded = isExpanded, onExpand = onExpand, expandedHeight = expandedHeight,
+                    enableListTools = section.id in setOf("documents", "research", "conclusion")
                 )
             }
         }
@@ -1101,6 +1103,58 @@ private enum class ReportCaptureField(val label: String) {
     }
 }
 
+private enum class ReportListStyle(val label: String) {
+    WESTERN("1، 2، 3"),
+    ARABIC_INDIC("١، ٢، ٣"),
+    ARABIC_LETTERS("أ، ب، ج"),
+    BULLET("• نقطة"),
+    DASH("– شرطة"),
+    X_MARK("X"),
+    PLAIN("نص عادي")
+}
+
+private fun ensureReportListStarted(text: String, style: ReportListStyle): String {
+    val trimmed = text.trimEnd()
+    if (trimmed.isBlank()) return reportListMarker(style, 1)
+    val lastLine = trimmed.lineSequence().lastOrNull().orEmpty()
+    return if (looksLikeReportListLine(lastLine, style)) text else trimmed + "\n" + reportListMarker(style, 1)
+}
+
+private fun continueReportListOnEnter(oldValue: String, newValue: String, style: ReportListStyle): String {
+    if (newValue.length != oldValue.length + 1 || !newValue.endsWith("\n")) return newValue
+    val completed = oldValue.lineSequence().count { looksLikeReportListLine(it, style) }.coerceAtLeast(1)
+    return newValue + reportListMarker(style, completed + 1)
+}
+
+private fun looksLikeReportListLine(line: String, style: ReportListStyle): Boolean {
+    val v = line.trimStart()
+    return when (style) {
+        ReportListStyle.WESTERN -> Regex("""\d+[.)-]?\s+.*""").matches(v)
+        ReportListStyle.ARABIC_INDIC -> Regex("""[٠-٩]+[.)-]?\s+.*""").matches(v)
+        ReportListStyle.ARABIC_LETTERS -> Regex("""[أبجدهوزحطيكلمنسعفصقرشتثخذضظغ][.)-]?\s+.*""").matches(v)
+        ReportListStyle.BULLET -> v.startsWith("• ")
+        ReportListStyle.DASH -> v.startsWith("– ")
+        ReportListStyle.X_MARK -> v.startsWith("X ")
+        ReportListStyle.PLAIN -> false
+    }
+}
+
+private fun reportListMarker(style: ReportListStyle, index: Int): String = when (style) {
+    ReportListStyle.WESTERN -> "$index. "
+    ReportListStyle.ARABIC_INDIC -> reportArabicIndic(index) + ". "
+    ReportListStyle.ARABIC_LETTERS -> reportArabicLetter(index) + ". "
+    ReportListStyle.BULLET -> "• "
+    ReportListStyle.DASH -> "– "
+    ReportListStyle.X_MARK -> "X "
+    ReportListStyle.PLAIN -> ""
+}
+
+private fun reportArabicIndic(index: Int): String = index.toString().map { ch -> "٠١٢٣٤٥٦٧٨٩"[ch.digitToInt()] }.joinToString("")
+private fun reportArabicLetter(index: Int): String {
+    val letters = listOf("أ", "ب", "ج", "د", "هـ", "و", "ز", "ح", "ط", "ي", "ك", "ل", "م", "ن", "س", "ع", "ف", "ص", "ق", "ر", "ش", "ت", "ث", "خ", "ذ", "ض", "ظ", "غ")
+    return letters[(index - 1).mod(letters.size)]
+}
+
 @Composable
 private fun ReportSectionField(
     label: String,
@@ -1111,8 +1165,11 @@ private fun ReportSectionField(
     onMic: () -> Unit,
     isExpanded: Boolean = false,
     onExpand: () -> Unit = {},
-    expandedHeight: Dp = 480.dp
+    expandedHeight: Dp = 480.dp,
+    enableListTools: Boolean = false
 ) {
+    var listMenuExpanded by remember(label) { mutableStateOf(false) }
+    var activeListStyle by remember(label) { mutableStateOf<ReportListStyle?>(null) }
     KhabirCard(
         contentPadding = PaddingValues(12.dp),
         containerColor = if (isExpanded) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
@@ -1139,9 +1196,36 @@ private fun ReportSectionField(
                 }
             }
             Spacer(Modifier.height(6.dp))
+            if (enableListTools) {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("ترقيم وقوائم", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+                    Box {
+                        FilledTonalButton(onClick = { listMenuExpanded = true }) {
+                            Icon(Icons.Filled.FormatListNumbered, contentDescription = null)
+                            Spacer(Modifier.width(4.dp))
+                            Text(activeListStyle?.label ?: "اختيار قائمة")
+                        }
+                        DropdownMenu(expanded = listMenuExpanded, onDismissRequest = { listMenuExpanded = false }) {
+                            ReportListStyle.entries.forEach { style ->
+                                DropdownMenuItem(
+                                    text = { Text(style.label) },
+                                    onClick = {
+                                        activeListStyle = style.takeUnless { it == ReportListStyle.PLAIN }
+                                        listMenuExpanded = false
+                                        if (style != ReportListStyle.PLAIN) onChange(ensureReportListStarted(value, style))
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+            }
             KhabirTextField(
                 value = value,
-                onValueChange = onChange,
+                onValueChange = { incoming ->
+                    onChange(activeListStyle?.let { continueReportListOnEnter(value, incoming, it) } ?: incoming)
+                },
                 modifier = Modifier
                     .onFocusChanged { if (it.isFocused) onExpand() }
                     .let { if (isExpanded) it.weight(1f) else it },
