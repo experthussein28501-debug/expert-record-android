@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas as AndroidCanvas
 import android.graphics.Paint as AndroidPaint
 import android.graphics.Rect
+import android.graphics.RectF
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -31,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asImageBitmap
@@ -48,7 +50,7 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 
-enum class SketchTool { FREEHAND, LINE, ARROW }
+enum class SketchTool { FREEHAND, LINE, ARROW, RECTANGLE, CIRCLE, TRIANGLE, SEMICIRCLE, ERASER }
 
 internal data class SketchStroke(
     val points: List<Offset>,
@@ -224,10 +226,19 @@ fun SiteSketchEditor(
                 )
 
                 Text("أداة الرسم", style = MaterialTheme.typography.labelLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilterChip(selected = selectedTool == SketchTool.FREEHAND, onClick = { selectedTool = SketchTool.FREEHAND }, label = { Text("رسم حر") })
-                    FilterChip(selected = selectedTool == SketchTool.LINE, onClick = { selectedTool = SketchTool.LINE }, label = { Text("خط مستقيم") })
-                    FilterChip(selected = selectedTool == SketchTool.ARROW, onClick = { selectedTool = SketchTool.ARROW }, label = { Text("سهم") })
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FilterChip(selected = selectedTool == SketchTool.FREEHAND, onClick = { selectedTool = SketchTool.FREEHAND }, label = { Text("رسم حر") })
+                        FilterChip(selected = selectedTool == SketchTool.LINE, onClick = { selectedTool = SketchTool.LINE }, label = { Text("خط") })
+                        FilterChip(selected = selectedTool == SketchTool.ARROW, onClick = { selectedTool = SketchTool.ARROW }, label = { Text("سهم") })
+                        FilterChip(selected = selectedTool == SketchTool.ERASER, onClick = { selectedTool = SketchTool.ERASER }, label = { Text("استيكة") })
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FilterChip(selected = selectedTool == SketchTool.RECTANGLE, onClick = { selectedTool = SketchTool.RECTANGLE }, label = { Text("مربع/مستطيل") })
+                        FilterChip(selected = selectedTool == SketchTool.CIRCLE, onClick = { selectedTool = SketchTool.CIRCLE }, label = { Text("دائرة") })
+                        FilterChip(selected = selectedTool == SketchTool.TRIANGLE, onClick = { selectedTool = SketchTool.TRIANGLE }, label = { Text("مثلث") })
+                        FilterChip(selected = selectedTool == SketchTool.SEMICIRCLE, onClick = { selectedTool = SketchTool.SEMICIRCLE }, label = { Text("نصف دائرة") })
+                    }
                 }
 
                 Text("اللون", style = MaterialTheme.typography.labelLarge)
@@ -278,16 +289,32 @@ fun SiteSketchEditor(
                                 (position.y / canvasSize.height.coerceAtLeast(1)).coerceIn(0f, 1f)
                             )
                             detectDragGestures(
-                                onDragStart = { currentPoints = listOf(pointAt(it)) },
+                                onDragStart = { position ->
+                                    val point = pointAt(position)
+                                    if (selectedTool == SketchTool.ERASER) {
+                                        eraseSketchAt(strokes, point)
+                                        currentPoints = emptyList()
+                                    } else {
+                                        currentPoints = listOf(point)
+                                    }
+                                },
                                 onDrag = { change, _ ->
                                     val point = pointAt(change.position)
-                                    currentPoints = when (selectedTool) {
-                                        SketchTool.FREEHAND -> currentPoints + point
-                                        SketchTool.LINE, SketchTool.ARROW -> listOf(currentPoints.firstOrNull() ?: point, point)
+                                    if (selectedTool == SketchTool.ERASER) {
+                                        eraseSketchAt(strokes, point)
+                                        currentPoints = emptyList()
+                                    } else {
+                                        currentPoints = when (selectedTool) {
+                                            SketchTool.FREEHAND -> currentPoints + point
+                                            SketchTool.LINE, SketchTool.ARROW, SketchTool.RECTANGLE,
+                                            SketchTool.CIRCLE, SketchTool.TRIANGLE, SketchTool.SEMICIRCLE ->
+                                                listOf(currentPoints.firstOrNull() ?: point, point)
+                                            SketchTool.ERASER -> emptyList()
+                                        }
                                     }
                                 },
                                 onDragEnd = {
-                                    if (currentPoints.isNotEmpty()) {
+                                    if (selectedTool != SketchTool.ERASER && currentPoints.isNotEmpty()) {
                                         val points = if (selectedTool == SketchTool.FREEHAND) currentPoints else {
                                             if (currentPoints.size >= 2) listOf(currentPoints.first(), currentPoints.last()) else emptyList()
                                         }
@@ -351,6 +378,31 @@ private fun DrawScope.drawSketchStroke(stroke: SketchStroke) {
             drawLine(stroke.color, end, left, strokeWidth = widthPx)
             drawLine(stroke.color, end, right, strokeWidth = widthPx)
         }
+        SketchTool.RECTANGLE -> if (pixelPoints.size >= 2) {
+            val a = pixelPoints.first(); val b = pixelPoints.last()
+            val left = minOf(a.x, b.x); val top = minOf(a.y, b.y)
+            drawRect(stroke.color, Offset(left, top), Size(kotlin.math.abs(b.x-a.x), kotlin.math.abs(b.y-a.y)),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(widthPx))
+        }
+        SketchTool.CIRCLE -> if (pixelPoints.size >= 2) {
+            val a = pixelPoints.first(); val b = pixelPoints.last()
+            val left = minOf(a.x, b.x); val top = minOf(a.y, b.y)
+            drawOval(stroke.color, Offset(left, top), Size(kotlin.math.abs(b.x-a.x), kotlin.math.abs(b.y-a.y)),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(widthPx))
+        }
+        SketchTool.TRIANGLE -> if (pixelPoints.size >= 2) {
+            val a = pixelPoints.first(); val b = pixelPoints.last()
+            val left = minOf(a.x,b.x); val right = maxOf(a.x,b.x); val top = minOf(a.y,b.y); val bottom = maxOf(a.y,b.y)
+            val path = Path().apply { moveTo((left+right)/2f, top); lineTo(right,bottom); lineTo(left,bottom); close() }
+            drawPath(path, stroke.color, style = androidx.compose.ui.graphics.drawscope.Stroke(widthPx))
+        }
+        SketchTool.SEMICIRCLE -> if (pixelPoints.size >= 2) {
+            val a = pixelPoints.first(); val b = pixelPoints.last()
+            val left = minOf(a.x, b.x); val top = minOf(a.y, b.y)
+            drawArc(stroke.color, 180f, 180f, false, Offset(left, top), Size(kotlin.math.abs(b.x-a.x), kotlin.math.abs(b.y-a.y)),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(widthPx))
+        }
+        SketchTool.ERASER -> Unit
     }
 }
 
@@ -400,5 +452,41 @@ private fun drawAndroidStroke(canvas: AndroidCanvas, stroke: SketchStroke, width
             canvas.drawLine(end.x, end.y, leftX, leftY, paint)
             canvas.drawLine(end.x, end.y, rightX, rightY, paint)
         }
+        SketchTool.RECTANGLE -> if (stroke.points.size >= 2) {
+            canvas.drawRect(minOf(start.x,end.x), minOf(start.y,end.y), maxOf(start.x,end.x), maxOf(start.y,end.y), paint)
+        }
+        SketchTool.CIRCLE -> if (stroke.points.size >= 2) {
+            canvas.drawOval(RectF(minOf(start.x,end.x), minOf(start.y,end.y), maxOf(start.x,end.x), maxOf(start.y,end.y)), paint)
+        }
+        SketchTool.TRIANGLE -> if (stroke.points.size >= 2) {
+            val left=minOf(start.x,end.x); val right=maxOf(start.x,end.x); val top=minOf(start.y,end.y); val bottom=maxOf(start.y,end.y)
+            val path = android.graphics.Path().apply { moveTo((left+right)/2f,top); lineTo(right,bottom); lineTo(left,bottom); close() }
+            canvas.drawPath(path, paint)
+        }
+        SketchTool.SEMICIRCLE -> if (stroke.points.size >= 2) {
+            canvas.drawArc(RectF(minOf(start.x,end.x), minOf(start.y,end.y), maxOf(start.x,end.x), maxOf(start.y,end.y)), 180f, 180f, false, paint)
+        }
+        SketchTool.ERASER -> Unit
     }
+}
+
+
+private fun eraseSketchAt(strokes: MutableList<SketchStroke>, point: Offset) {
+    val threshold = 0.045f
+    val index = strokes.indexOfLast { stroke ->
+        if (stroke.points.isEmpty()) false
+        else if (stroke.tool == SketchTool.FREEHAND || stroke.tool == SketchTool.LINE || stroke.tool == SketchTool.ARROW) {
+            stroke.points.any { p ->
+                val dx = p.x - point.x
+                val dy = p.y - point.y
+                dx * dx + dy * dy <= threshold * threshold
+            }
+        } else {
+            val a = stroke.points.first()
+            val b = stroke.points.last()
+            point.x in (minOf(a.x,b.x)-threshold)..(maxOf(a.x,b.x)+threshold) &&
+                point.y in (minOf(a.y,b.y)-threshold)..(maxOf(a.y,b.y)+threshold)
+        }
+    }
+    if (index >= 0) strokes.removeAt(index)
 }
