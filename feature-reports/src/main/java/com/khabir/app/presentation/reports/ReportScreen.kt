@@ -103,6 +103,7 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
     }
     val importWordLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(viewModel::onImportWord) }
     val importExcelLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(viewModel::onImportExcel) }
+    val importPowerPointLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(viewModel::onImportPowerPoint) }
     val smartTemplateLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
             runCatching {
@@ -228,6 +229,7 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                             }
                             DropdownMenuItem(text = { Text("استيراد من Word") }, onClick = { fileMenuExpanded = false; importWordLauncher.launch(arrayOf(ReportViewModel.WORD_MIME, "application/msword")) })
                             DropdownMenuItem(text = { Text("استيراد من Excel") }, onClick = { fileMenuExpanded = false; importExcelLauncher.launch(arrayOf(ReportViewModel.EXCEL_MIME, "application/vnd.ms-excel")) })
+                            DropdownMenuItem(text = { Text("استيراد من PowerPoint") }, onClick = { fileMenuExpanded = false; importPowerPointLauncher.launch(arrayOf(ReportViewModel.POWERPOINT_MIME, "application/vnd.ms-powerpoint")) })
                             HorizontalDivider()
                             DropdownMenuItem(text = { Text("فتح نسخة Word") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.OPEN; viewModel.onExportWord() })
                             DropdownMenuItem(text = { Text("حفظ باسم Word") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.SAVE_AS; viewModel.onExportWord() })
