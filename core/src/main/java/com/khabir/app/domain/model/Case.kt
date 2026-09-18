@@ -25,8 +25,14 @@ data class Case(
         if (caseNo.isBlank()) errors += CaseValidationError.MissingCaseNo
         if (caseYear.isBlank()) {
             errors += CaseValidationError.MissingCaseYear
+        } else if (usesJudicialYear()) {
+            val normalizedYear = caseYear.toWesternDigits().replace("ق", "").replace("هـ", "").trim()
+            val year = normalizedYear.toIntOrNull()
+            if (year == null || normalizedYear.length !in 1..3 || year !in 1..999) {
+                errors += CaseValidationError.InvalidCaseYear
+            }
         } else {
-            val normalizedYear = caseYear.toWesternDigits()
+            val normalizedYear = caseYear.toWesternDigits().trim()
             val year = normalizedYear.toIntOrNull()
             if (normalizedYear.length != 4 || year == null || year !in 1900..(LocalDate.now().year + 1)) {
                 errors += CaseValidationError.InvalidCaseYear
@@ -34,6 +40,12 @@ data class Case(
         }
         if (court.isBlank()) errors += CaseValidationError.MissingCourt
         return errors
+    }
+    fun usesJudicialYear(): Boolean {
+        val type = caseType.replace("أ", "ا").trim()
+        val courtName = court.replace("أ", "ا").trim()
+        return type.contains("استئناف عالي") || type.contains("قضاء اداري") ||
+            courtName.contains("استئناف عالي") || courtName.contains("قضاء اداري")
     }
 }
 
