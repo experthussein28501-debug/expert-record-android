@@ -75,6 +75,7 @@ data class ReportUiState(
     val assistantReply: String = "",
     val isAssistantWorking: Boolean = false,
     val learningStatus: String = "",
+    val finalRequestsPlacement: FinalRequestsPlacement = FinalRequestsPlacement.START,
     val savedWordTemplateUri: String = "",
     val pendingTemplateUri: Uri? = null,
     val templateParagraphs: List<String> = emptyList()
@@ -163,6 +164,12 @@ class ReportViewModel @Inject constructor(
     }
     fun onPartiesSummaryChanged(v: String) = edit { it.copy(partiesSummary = v) }
     fun onSubjectChanged(v: String) = edit { it.copy(subjectOfCase = v) }
+    fun onFinalRequestsPlacementChanged(value: FinalRequestsPlacement) = edit { state ->
+        state.copy(
+            finalRequestsPlacement = value,
+            subjectOfCase = CaseSubjectFormatter.reorderFormatted(state.subjectOfCase, value)
+        )
+    }
     fun onAssignmentChanged(v: String) = edit { it.copy(assignment = v) }
     fun onProceedingsChanged(v: String) = edit { it.copy(proceedings = v) }
     fun onPartyStatementsChanged(v: String) = edit { it.copy(partyStatements = v) }
