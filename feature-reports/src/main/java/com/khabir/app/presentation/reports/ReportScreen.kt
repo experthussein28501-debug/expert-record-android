@@ -397,9 +397,6 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                 }
             }
             Spacer(Modifier.height(12.dp))
-            val savedSketch = remember(state.siteSketchPath) {
-                state.siteSketchPath.takeIf(String::isNotBlank)?.let { path -> runCatching { BitmapFactory.decodeFile(path) }.getOrNull() }
-            }
             KhabirCard(contentPadding = PaddingValues(12.dp)) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -422,6 +419,9 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                     }
                 }
             }
+            }
+            val savedSketch = remember(state.siteSketchPath) {
+                state.siteSketchPath.takeIf(String::isNotBlank)?.let { path -> runCatching { BitmapFactory.decodeFile(path) }.getOrNull() }
             }
             val enabledSections = state.template.orderedSections().filter { it.enabled }
             if (enabledSections.isNotEmpty()) {
