@@ -383,6 +383,9 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                         Column(Modifier.weight(1f)) {
                             Text("قالب التقرير: ${state.template.name}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                             Text("العناوين والترتيب والبنود المختارة تُحفظ مع هذا التقرير وتظهر بنفسها في Word وPDF.", style = MaterialTheme.typography.bodySmall)
+                            if (state.template.referenceReport.isNotBlank()) {
+                                Text("النموذج المرجعي: ${state.template.referenceReport}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            }
                             Text("قاعدة ثابتة: نتائج AI وOCR والاستيراد لا تُطبق مباشرة؛ تظهر أولًا في شاشة مراجعة فوقية قبل الاعتماد.", style = MaterialTheme.typography.bodySmall)
                         }
                         OutlinedButton(onClick = { showTemplateEditor = true }) { Text("تعديل القالب") }
