@@ -1,6 +1,7 @@
 package com.khabir.app.presentation.cases
 
 import com.khabir.app.domain.model.Case
+import com.khabir.app.domain.model.toArabicIndicDigits
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -66,7 +67,7 @@ object CaseStatementTableBuilder {
             )
             .toList()
 
-        val title = "بيان ${type.titleLabel} طرف السيد الخبير مرتبة بترتيب الوارد من تاريخ ${fromDate.format(dateFormatter)} حتى تاريخ ${toDate.format(dateFormatter)}"
+        val title = "بيان ${type.titleLabel} طرف السيد الخبير مرتبة بترتيب الوارد من تاريخ ${fromDate.format(dateFormatter).toArabicIndicDigits()} حتى تاريخ ${toDate.format(dateFormatter).toArabicIndicDigits()}"
         val headers = listOf(
             "م",
             "رقم الوارد",
@@ -81,30 +82,38 @@ object CaseStatementTableBuilder {
         )
         val rows = filtered.mapIndexed { index, case ->
             val orderedParties = case.parties.sortedBy { it.orderIndex }
-            val partyNames = orderedParties.joinToString(" | ") { party ->
-                val side = party.role.arabicLabel
-                val capacity = if (party.withCapacity) " بصفته" else ""
-                "$side: ${party.fullName}$capacity"
-            }
+            val plaintiffs = orderedParties.filter { it.role.isPlaintiff && it.fullName.isNotBlank() }
+            val defendants = orderedParties.filter { it.role.isDefendant && it.fullName.isNotBlank() }
+            val partyNames = listOf(
+                partySideSummary("المدعي", plaintiffs),
+                partySideSummary("المدعى عليه", defendants)
+            ).filter(String::isNotBlank).joinToString(" | ")
             val addresses = orderedParties.joinToString(" | ") { party ->
                 val name = party.fullName.ifBlank { party.role.arabicLabel }
                 if (party.address.isBlank()) name else "$name: ${party.address}"
             }
             listOf(
-                (index + 1).toString(),
-                case.incomingNo,
-                case.incomingDate.format(dateFormatter),
-                case.caseNo,
-                case.caseYear,
+                (index + 1).toString().toArabicIndicDigits(),
+                case.incomingNo.toArabicIndicDigits(),
+                case.incomingDate.format(dateFormatter).toArabicIndicDigits(),
+                case.caseNo.toArabicIndicDigits(),
+                case.caseYear.toArabicIndicDigits(),
                 case.court,
                 partyNames,
                 addresses,
-                case.receiptDate?.format(dateFormatter).orEmpty(),
-                case.preliminaryJudgmentDate?.format(dateFormatter).orEmpty()
+                case.receiptDate?.format(dateFormatter).orEmpty().toArabicIndicDigits(),
+                case.preliminaryJudgmentDate?.format(dateFormatter).orEmpty().toArabicIndicDigits()
             )
         }
 
         return CaseStatementTable(title, headers, rows)
+    }
+
+    private fun partySideSummary(label: String, parties: List<com.khabir.app.domain.model.Party>): String {
+        if (parties.isEmpty()) return ""
+        val first = parties.first().reportDisplayName
+        val name = if (parties.size > 1 && !first.contains("وآخرين")) "$first وآخرين" else first
+        return "$label: $name"
     }
 
     private fun incomingSortNumber(value: String): Long {
