@@ -98,7 +98,7 @@ class WorkMinutesDocxBuilder {
 
         val imageRelId = "rId2"
         val document = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><w:body>$body<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="720" w:right="850" w:bottom="720" w:left="850"/><w:bidi/></w:sectPr></w:body></w:document>"""
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><w:body>$body<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="850" w:right="1550" w:bottom="850" w:left="1550"/><w:pgBorders w:offsetFrom="text" w:display="allPages"><w:top w:val="nil"/><w:left w:val="single" w:sz="10" w:space="12" w:color="000000"/><w:bottom w:val="nil"/><w:right w:val="single" w:sz="10" w:space="12" w:color="000000"/></w:pgBorders><w:bidi/></w:sectPr></w:body></w:document>"""
 
         val parts = mutableListOf(
             "[Content_Types].xml" to contentTypes(hasLogo = logoBytes != null).toByteArray(),
