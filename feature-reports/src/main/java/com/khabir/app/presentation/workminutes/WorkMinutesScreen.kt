@@ -450,17 +450,14 @@ private fun WorkMinutesEntryCard(
                 Text("الموعد القادم", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             }
             Text("موعد الجلسة/المباشرة القادمة يُستخدم تلقائيًا كتاريخ فتح المحضر التالي.", style = MaterialTheme.typography.labelSmall)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-            }
             KhabirTextField(
                 value = entry.scheduledFollowUpDate?.format(dateFormat).orEmpty(),
                 onValueChange = {},
                 readOnly = true,
                 label = { Text("تاريخ الموعد القادم — اختياري") },
                 trailingIcon = { IconButton(onClick = { showFollowUpDatePicker = true }) { Icon(Icons.Filled.CalendarMonth, "اختيار التاريخ") } },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.fillMaxWidth()
             )
-            }
         }
     }
 }
