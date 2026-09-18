@@ -25,4 +25,16 @@ class JudgmentCaseIdentityTest {
         val result = JudgmentCaseIdentity.parse("محكمة استئناف قنا الدائرة الخامسة\nالدعوى رقم 20 لسنة 2025 استئناف عالي قنا")!!
         assertEquals("محكمة استئناف قنا", result.court)
     }
+    @Test fun highAppealParsesJudicialYear() {
+        val result = JudgmentCaseIdentity.parse("محكمة استئناف قنا\nالدعوى رقم 350 لسنة 21 ق استئناف عالي قنا")!!
+        assertEquals("350", result.number)
+        assertEquals("21ق", result.year)
+        assertEquals("استئناف عالي", result.type)
+    }
+    @Test fun administrativeJudiciaryParsesJudicialYear() {
+        val result = JudgmentCaseIdentity.parse("محكمة القضاء الإداري\nالدعوى رقم 180 لسنة ١٠١ ق قضاء إداري")!!
+        assertEquals("101ق", result.year)
+        assertEquals("قضاء إداري", result.type)
+    }
+
 }
