@@ -1,5 +1,6 @@
 package com.khabir.app.data.export
 
+import com.khabir.app.domain.model.toArabicIndicDigits
 import android.graphics.Canvas
 import android.graphics.BitmapFactory
 import android.graphics.Rect
@@ -58,9 +59,15 @@ class LegalReportPdfBuilder {
             typeface = Typeface.create("sans-serif", Typeface.NORMAL)
         }
 
-        fun buildLayout(text: String, centered: Boolean, justified: Boolean, width: Int = usableWidth): StaticLayout {
-            val builder = StaticLayout.Builder.obtain(text, 0, text.length, paint, width)
-                .setAlignment(if (centered) Layout.Alignment.ALIGN_CENTER else Layout.Alignment.ALIGN_NORMAL)
+        fun buildLayout(text: String, centered: Boolean, justified: Boolean, width: Int = usableWidth, leftAligned: Boolean = false): StaticLayout {
+            val displayText = text.toArabicIndicDigits()
+            val alignment = when {
+                centered -> Layout.Alignment.ALIGN_CENTER
+                leftAligned -> Layout.Alignment.ALIGN_OPPOSITE
+                else -> Layout.Alignment.ALIGN_NORMAL
+            }
+            val builder = StaticLayout.Builder.obtain(displayText, 0, displayText.length, paint, width)
+                .setAlignment(alignment)
                 .setTextDirection(TextDirectionHeuristics.RTL)
                 .setIncludePad(false)
                 .setLineSpacing(2f, 1f)
@@ -68,9 +75,9 @@ class LegalReportPdfBuilder {
             return builder.build()
         }
 
-        fun drawRawLayout(layout: StaticLayout, top: Int) {
+        fun drawRawLayout(layout: StaticLayout, top: Int, left: Int = margin) {
             canvas.save()
-            canvas.translate(margin.toFloat(), top.toFloat())
+            canvas.translate(left.toFloat(), top.toFloat())
             layout.draw(canvas)
             canvas.restore()
         }
@@ -104,7 +111,8 @@ class LegalReportPdfBuilder {
             centered: Boolean = false,
             justified: Boolean = false,
             after: Int = 8,
-            minimumLinesWithBlock: Int = 0
+            minimumLinesWithBlock: Int = 0,
+            leftAligned: Boolean = false
         ) {
             if (text.isBlank()) return
             paint.textSize = size
@@ -112,7 +120,7 @@ class LegalReportPdfBuilder {
 
             var remaining = text.trim()
             while (remaining.isNotEmpty()) {
-                var layout = buildLayout(remaining, centered, justified)
+                var layout = buildLayout(remaining, centered, justified, leftAligned = leftAligned)
                 var availableHeight = pageBottom - y
 
                 if (minimumLinesWithBlock > 0 && layout.lineCount > 0) {
@@ -152,7 +160,7 @@ class LegalReportPdfBuilder {
                 val splitAt = layout.getLineEnd(lastFittingLine).coerceIn(1, remaining.length)
                 val pageText = remaining.substring(0, splitAt).trimEnd()
                 if (pageText.isNotEmpty()) {
-                    layout = buildLayout(pageText, centered, justified)
+                    layout = buildLayout(pageText, centered, justified, leftAligned = leftAligned)
                     drawLayout(layout)
                 }
 
@@ -178,40 +186,65 @@ class LegalReportPdfBuilder {
 
         newPage()
 
-        val logoBitmap = logoBytes?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
-        if (logoBitmap != null) {
-            val logoHeight = if (compactCover) 46 else 56
-            val logoWidth = (logoBitmap.width.toFloat() / logoBitmap.height * logoHeight).toInt().coerceAtLeast(1)
-            val left = margin + (usableWidth - logoWidth) / 2
-            canvas.drawBitmap(logoBitmap, null, Rect(left, y, left + logoWidth, y + logoHeight), null)
-            y += logoHeight + 6
-        }
+        if (compactCover) {
+            paint.textSize = 14f
+            paint.typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            val half = usableWidth / 2
+            val rightText = listOf(ministry, sector, department).filter(String::isNotBlank).joinToString("\n")
+            val rightLayout = buildLayout(rightText, centered = false, justified = false, width = half)
+            val leftText = if (incoming.isBlank()) "" else "وارد $incoming"
+            val leftLayout = buildLayout(leftText, centered = false, justified = false, width = half, leftAligned = true)
+            val top = y
+            drawRawLayout(leftLayout, top, margin)
+            drawRawLayout(rightLayout, top, margin + half)
+            y += maxOf(leftLayout.height, rightLayout.height) + 8
 
-        val coverAfterSmall = if (compactCover) 1 else 3
-        val coverAfterMedium = if (compactCover) 2 else 5
-        drawBlock(ministry, if (compactCover) 15f else 17f, bold = true, centered = true, after = coverAfterSmall)
-        if (sector.isNotBlank()) drawBlock(sector, if (compactCover) 14f else 15f, bold = true, centered = true, after = coverAfterSmall)
-        if (department.isNotBlank()) drawBlock(department, if (compactCover) 14f else 15f, bold = true, centered = true, after = if (compactCover) 2 else 8)
-        drawBlock(reportTitle, if (compactCover) 19f else 22f, bold = true, centered = true, after = if (compactCover) 3 else 8)
-        if (expert.isNotBlank()) drawBlock("مقدم من $expert خبير وزارة العدل", if (compactCover) 13f else 14f, bold = true, centered = true, after = coverAfterSmall)
-        if (caseNumber.isNotBlank()) {
-            drawBlock("$caseIntro $caseNumber${if (court.isBlank()) "" else " $court"}", if (compactCover) 14f else 15f, bold = true, centered = true, after = coverAfterMedium)
-        }
-        if (plaintiffs.isNotBlank()) {
-            drawBlock(firstPartyLabel, if (compactCover) 13f else 14f, bold = true, centered = true, after = 1)
-            drawBlock(plaintiffs, if (compactCover) 13f else 14f, bold = true, centered = true, after = if (compactCover) 2 else 4)
-        }
-        if (defendants.isNotBlank()) {
-            drawBlock(secondPartyLabel, if (compactCover) 13f else 14f, bold = true, centered = true, after = 1)
-            drawBlock(defendants, if (compactCover) 13f else 14f, bold = true, centered = true, after = if (compactCover) 2 else 4)
-        }
-        if (incoming.isNotBlank()) {
-            val incomingParts = incoming.split(" لسنة ", limit = 2)
-            drawBlock("وارد ${incomingParts[0]}", if (compactCover) 12f else 13f, bold = true, centered = true, after = 1)
-            if (incomingParts.size == 2) drawBlock("لسنة ${incomingParts[1]}", if (compactCover) 12f else 13f, bold = true, centered = true, after = if (compactCover) 2 else 5)
-        }
+            drawBlock(reportTitle, 19f, bold = true, centered = true, after = 3)
+            if (caseNumber.isNotBlank()) {
+                drawBlock("$caseIntro $caseNumber${if (court.isBlank()) "" else " $court"}", 14f, bold = true, centered = true, after = 2)
+            }
+            if (plaintiffs.isNotBlank()) {
+                drawBlock(firstPartyLabel, 13f, bold = true, centered = true, after = 1)
+                drawBlock(plaintiffs, 13f, bold = true, centered = true, after = 2)
+            }
+            if (defendants.isNotBlank()) {
+                drawBlock(secondPartyLabel, 13f, bold = true, centered = true, after = 1)
+                drawBlock(defendants, 13f, bold = true, centered = true, after = 2)
+            }
+            y += 2
+        } else {
+            val logoBitmap = logoBytes?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+            if (logoBitmap != null) {
+                val logoHeight = 56
+                val logoWidth = (logoBitmap.width.toFloat() / logoBitmap.height * logoHeight).toInt().coerceAtLeast(1)
+                val left = margin + (usableWidth - logoWidth) / 2
+                canvas.drawBitmap(logoBitmap, null, Rect(left, y, left + logoWidth, y + logoHeight), null)
+                y += logoHeight + 6
+            }
 
-        y += if (compactCover) 2 else 6
+            drawBlock(ministry, 17f, bold = true, centered = true, after = 3)
+            if (sector.isNotBlank()) drawBlock(sector, 15f, bold = true, centered = true, after = 3)
+            if (department.isNotBlank()) drawBlock(department, 15f, bold = true, centered = true, after = 8)
+            drawBlock(reportTitle, 22f, bold = true, centered = true, after = 8)
+            if (expert.isNotBlank()) drawBlock("مقدم من $expert خبير وزارة العدل", 14f, bold = true, centered = true, after = 3)
+            if (caseNumber.isNotBlank()) {
+                drawBlock("$caseIntro $caseNumber${if (court.isBlank()) "" else " $court"}", 15f, bold = true, centered = true, after = 5)
+            }
+            if (plaintiffs.isNotBlank()) {
+                drawBlock(firstPartyLabel, 14f, bold = true, centered = true, after = 1)
+                drawBlock(plaintiffs, 14f, bold = true, centered = true, after = 4)
+            }
+            if (defendants.isNotBlank()) {
+                drawBlock(secondPartyLabel, 14f, bold = true, centered = true, after = 1)
+                drawBlock(defendants, 14f, bold = true, centered = true, after = 4)
+            }
+            if (incoming.isNotBlank()) {
+                val incomingParts = incoming.split(" لسنة ", limit = 2)
+                drawBlock("وارد ${incomingParts[0]}", 13f, bold = true, centered = true, after = 1)
+                if (incomingParts.size == 2) drawBlock("لسنة ${incomingParts[1]}", 13f, bold = true, centered = true, after = 5)
+            }
+            y += 6
+        }
         val siteSketch = siteSketchFile?.takeIf { it.isFile }?.let { BitmapFactory.decodeFile(it.absolutePath) }
         var sketchInserted = false
         fun drawInspectionSketch() {
@@ -236,8 +269,19 @@ class LegalReportPdfBuilder {
             val firstBodyLine = content.lineSequence().firstOrNull { it.isNotBlank() }
             ensureHeadingWithBody(heading, firstBodyLine)
             drawBlock(heading, 16f, bold = true, centered = false, after = 4)
+            val isExpertSignature = heading.contains("نتيجة أعمالنا") || content.trimStart().startsWith("الخبير")
             content.lines().forEach { line ->
-                if (line.isNotBlank()) drawBlock(line, 14f, bold = false, centered = false, justified = true, after = 4)
+                if (line.isNotBlank()) {
+                    drawBlock(
+                        line,
+                        14f,
+                        bold = isExpertSignature && line.trimStart().startsWith("الخبير"),
+                        centered = false,
+                        justified = !isExpertSignature,
+                        after = 4,
+                        leftAligned = isExpertSignature && line.trimStart().startsWith("الخبير")
+                    )
+                }
             }
             y += 5
             if (heading.contains("معاين")) drawInspectionSketch()
