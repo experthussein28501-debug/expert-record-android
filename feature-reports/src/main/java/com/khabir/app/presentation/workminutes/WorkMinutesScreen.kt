@@ -444,6 +444,8 @@ private fun WorkMinutesEntryCard(
 ) {
     var showOpeningDatePicker by remember { mutableStateOf(false) }
     var showFollowUpDatePicker by remember { mutableStateOf(false) }
+    var listMenuExpanded by remember(entry.number) { mutableStateOf(false) }
+    var activeListStyle by remember(entry.number) { mutableStateOf<WorkMinutesListStyle?>(null) }
     val dateFormat = remember { DateTimeFormatter.ofPattern("d/M/yyyy") }
 
     if (showOpeningDatePicker) {
@@ -509,14 +511,43 @@ private fun WorkMinutesEntryCard(
                     )
                 }
             }
+            if (entry.number >= 2) {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("ترقيم البنود", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+                    Box {
+                        FilledTonalButton(onClick = { listMenuExpanded = true }) {
+                            Icon(Icons.Filled.FormatListNumbered, contentDescription = null)
+                            Spacer(Modifier.width(4.dp))
+                            Text(activeListStyle?.label ?: "اختيار قائمة")
+                        }
+                        DropdownMenu(expanded = listMenuExpanded, onDismissRequest = { listMenuExpanded = false }) {
+                            WorkMinutesListStyle.entries.forEach { style ->
+                                DropdownMenuItem(
+                                    text = { Text(style.label) },
+                                    onClick = {
+                                        activeListStyle = style.takeUnless { it == WorkMinutesListStyle.PLAIN }
+                                        listMenuExpanded = false
+                                        if (style != WorkMinutesListStyle.PLAIN) {
+                                            onChange { e -> e.copy(bodyText = ensureListStarted(e.bodyText, style)) }
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
             KhabirTextField(
                 value = entry.bodyText,
-                onValueChange = { onChange { e -> e.copy(bodyText = it) } },
-                modifier = Modifier.onFocusChanged { if (it.isFocused) { onExpand(); onOpenEditor() } }.let { if (isExpanded) it.weight(1f) else it },
+                onValueChange = { value ->
+                    val adjusted = activeListStyle?.let { style -> continueListOnEnter(entry.bodyText, value, style) } ?: value
+                    onChange { e -> e.copy(bodyText = adjusted) }
+                },
+                modifier = Modifier.onFocusChanged { if (it.isFocused) onExpand() }.let { if (isExpanded) it.weight(1f) else it },
                 label = { Text("نص المحضر") },
                 placeholder = { Text("لإثبات ...") },
-                minLines = 3,
-                maxLines = if (isExpanded) Int.MAX_VALUE else 6
+                minLines = 8,
+                maxLines = if (isExpanded) Int.MAX_VALUE else 10
             )
             Text("إدخال خاص بهذا المحضر فقط", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -581,6 +612,61 @@ private fun WorkMinutesEntryCard(
             }
         }
     }
+}
+
+private enum class WorkMinutesListStyle(val label: String) {
+    WESTERN("1، 2، 3"),
+    ARABIC_INDIC("١، ٢، ٣"),
+    ARABIC_LETTERS("أ، ب، ج"),
+    BULLET("• نقطة"),
+    DASH("– شرطة"),
+    X_MARK("X"),
+    PLAIN("نص عادي")
+}
+
+private fun ensureListStarted(text: String, style: WorkMinutesListStyle): String {
+    val trimmed = text.trimEnd()
+    if (trimmed.isBlank()) return listMarker(style, 1)
+    val lastLine = trimmed.lineSequence().lastOrNull().orEmpty()
+    return if (looksLikeListLine(lastLine, style)) text else trimmed + "\n" + listMarker(style, 1)
+}
+
+private fun continueListOnEnter(oldValue: String, newValue: String, style: WorkMinutesListStyle): String {
+    if (newValue.length != oldValue.length + 1 || !newValue.endsWith("\n")) return newValue
+    val completed = oldValue.lineSequence().count { looksLikeListLine(it, style) }.coerceAtLeast(1)
+    return newValue + listMarker(style, completed + 1)
+}
+
+private fun looksLikeListLine(line: String, style: WorkMinutesListStyle): Boolean {
+    val value = line.trimStart()
+    return when (style) {
+        WorkMinutesListStyle.WESTERN -> Regex("""\d+[.)-]?\s+.*""").matches(value)
+        WorkMinutesListStyle.ARABIC_INDIC -> Regex("""[٠-٩]+[.)-]?\s+.*""").matches(value)
+        WorkMinutesListStyle.ARABIC_LETTERS -> Regex("""[أبجدهوزحطيكلمنسعفصقرشتثخذضظغ][.)-]?\s+.*""").matches(value)
+        WorkMinutesListStyle.BULLET -> value.startsWith("• ")
+        WorkMinutesListStyle.DASH -> value.startsWith("– ")
+        WorkMinutesListStyle.X_MARK -> value.startsWith("X ")
+        WorkMinutesListStyle.PLAIN -> false
+    }
+}
+
+private fun listMarker(style: WorkMinutesListStyle, index: Int): String = when (style) {
+    WorkMinutesListStyle.WESTERN -> "$index. "
+    WorkMinutesListStyle.ARABIC_INDIC -> arabicIndic(index) + ". "
+    WorkMinutesListStyle.ARABIC_LETTERS -> arabicListLetter(index) + ". "
+    WorkMinutesListStyle.BULLET -> "• "
+    WorkMinutesListStyle.DASH -> "– "
+    WorkMinutesListStyle.X_MARK -> "X "
+    WorkMinutesListStyle.PLAIN -> ""
+}
+
+private fun arabicIndic(index: Int): String = index.toString().map { ch ->
+    "٠١٢٣٤٥٦٧٨٩"[ch.digitToInt()]
+}.joinToString("")
+
+private fun arabicListLetter(index: Int): String {
+    val letters = listOf("أ", "ب", "ج", "د", "هـ", "و", "ز", "ح", "ط", "ي", "ك", "ل", "م", "ن", "س", "ع", "ف", "ص", "ق", "ر", "ش", "ت", "ث", "خ", "ذ", "ض", "ظ", "غ")
+    return letters[(index - 1).mod(letters.size)]
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
