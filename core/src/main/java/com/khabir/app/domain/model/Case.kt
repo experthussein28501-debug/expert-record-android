@@ -42,12 +42,17 @@ data class Case(
         return errors
     }
     fun usesJudicialYear(): Boolean {
-        val type = caseType.replace("أ", "ا").trim()
-        val courtName = court.replace("أ", "ا").trim()
+        val type = caseType.normalizeArabicAlef()
+        val courtName = court.normalizeArabicAlef()
         return type.contains("استئناف عالي") || type.contains("قضاء اداري") ||
             courtName.contains("استئناف عالي") || courtName.contains("قضاء اداري")
     }
 }
+
+private fun String.normalizeArabicAlef(): String = replace("أ", "ا")
+    .replace("إ", "ا")
+    .replace("آ", "ا")
+    .trim()
 
 private fun String.toWesternDigits(): String = map { char ->
     when (char) {
