@@ -39,6 +39,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
@@ -54,6 +57,10 @@ import java.io.File
 import java.io.FileOutputStream
 import java.time.LocalDate
 import java.time.YearMonth
+import kotlin.math.PI
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -206,6 +213,9 @@ private fun AgendaDayDialog(
     var manualLocation by remember(summary.date) { mutableStateOf("") }
     var manualDetails by remember(summary.date) { mutableStateOf("") }
     var currentStroke by remember(summary.date) { mutableStateOf<List<AgendaPoint>>(emptyList()) }
+    var selectedSketchTool by remember(summary.date) { mutableStateOf(AgendaSketchTool.FREEHAND) }
+    var selectedSketchColor by remember(summary.date) { mutableStateOf(0xFF1B1B1B.toInt()) }
+    var selectedSketchWidth by remember(summary.date) { mutableStateOf(4f) }
 
     val voiceLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val spoken = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
@@ -364,12 +374,58 @@ private fun AgendaDayDialog(
                     )
 
                     Text("لوحة الكتابة والرسم — إصبع / قلم / S Pen", fontWeight = FontWeight.Bold)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        FilterChip(selected = selectedSketchTool == AgendaSketchTool.FREEHAND, onClick = { selectedSketchTool = AgendaSketchTool.FREEHAND }, label = { Text("قلم") }, modifier = Modifier.weight(1f))
+                        FilterChip(selected = selectedSketchTool == AgendaSketchTool.LINE, onClick = { selectedSketchTool = AgendaSketchTool.LINE }, label = { Text("خط") }, modifier = Modifier.weight(1f))
+                        FilterChip(selected = selectedSketchTool == AgendaSketchTool.ARROW, onClick = { selectedSketchTool = AgendaSketchTool.ARROW }, label = { Text("سهم") }, modifier = Modifier.weight(1f))
+                        FilterChip(selected = selectedSketchTool == AgendaSketchTool.ERASER, onClick = { selectedSketchTool = AgendaSketchTool.ERASER }, label = { Text("استيكة") }, modifier = Modifier.weight(1f))
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        FilterChip(selected = selectedSketchTool == AgendaSketchTool.RECTANGLE, onClick = { selectedSketchTool = AgendaSketchTool.RECTANGLE }, label = { Text("مربع") }, modifier = Modifier.weight(1f))
+                        FilterChip(selected = selectedSketchTool == AgendaSketchTool.CIRCLE, onClick = { selectedSketchTool = AgendaSketchTool.CIRCLE }, label = { Text("دائرة") }, modifier = Modifier.weight(1f))
+                        FilterChip(selected = selectedSketchTool == AgendaSketchTool.TRIANGLE, onClick = { selectedSketchTool = AgendaSketchTool.TRIANGLE }, label = { Text("مثلث") }, modifier = Modifier.weight(1f))
+                        FilterChip(selected = selectedSketchTool == AgendaSketchTool.SEMICIRCLE, onClick = { selectedSketchTool = AgendaSketchTool.SEMICIRCLE }, label = { Text("نصف دائرة") }, modifier = Modifier.weight(1f))
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        listOf(
+                            0xFF1B1B1B.toInt() to "أسود",
+                            0xFFC62828.toInt() to "أحمر",
+                            0xFF1565C0.toInt() to "أزرق",
+                            0xFF2E7D32.toInt() to "أخضر"
+                        ).forEach { (argb, label) ->
+                            FilterChip(
+                                selected = selectedSketchColor == argb,
+                                onClick = { selectedSketchColor = argb },
+                                label = { Text(label) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        listOf(3f to "رفيع", 5f to "متوسط", 8f to "عريض").forEach { (width, label) ->
+                            FilterChip(
+                                selected = selectedSketchWidth == width,
+                                onClick = { selectedSketchWidth = width },
+                                label = { Text(label) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
                     DrawingBoard(
                         strokes = strokes,
                         currentStroke = currentStroke,
+                        selectedTool = selectedSketchTool,
+                        selectedColorArgb = selectedSketchColor,
+                        selectedWidth = selectedSketchWidth,
                         onCurrentStrokeChange = { currentStroke = it },
+                        onErase = { point ->
+                            val index = strokes.indexOfLast { agendaStrokeHit(it, point) }
+                            if (index >= 0) strokes.removeAt(index)
+                        },
                         onStrokeFinished = {
-                            if (currentStroke.size > 1) strokes.add(AgendaStroke(currentStroke))
+                            if (selectedSketchTool != AgendaSketchTool.ERASER && currentStroke.size > 1) {
+                                strokes.add(AgendaStroke(currentStroke, selectedSketchTool, selectedSketchColor, selectedSketchWidth))
+                            }
                             currentStroke = emptyList()
                         }
                     )
@@ -463,39 +519,121 @@ private fun EventCard(event: AgendaEvent) {
 private fun DrawingBoard(
     strokes: List<AgendaStroke>,
     currentStroke: List<AgendaPoint>,
+    selectedTool: AgendaSketchTool,
+    selectedColorArgb: Int,
+    selectedWidth: Float,
     onCurrentStrokeChange: (List<AgendaPoint>) -> Unit,
+    onErase: (AgendaPoint) -> Unit,
     onStrokeFinished: () -> Unit
 ) {
-    val color = MaterialTheme.colorScheme.primary
     val latestCurrentStroke by rememberUpdatedState(currentStroke)
     val latestOnCurrentStrokeChange by rememberUpdatedState(onCurrentStrokeChange)
     val latestOnStrokeFinished by rememberUpdatedState(onStrokeFinished)
+    val latestOnErase by rememberUpdatedState(onErase)
+    val latestTool by rememberUpdatedState(selectedTool)
     Canvas(
         modifier = Modifier.fillMaxWidth().height(230.dp)
             .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
             .pointerInput(Unit) {
                 detectDragGestures(
-                    onDragStart = { offset -> latestOnCurrentStrokeChange(listOf(AgendaPoint(offset.x, offset.y))) },
+                    onDragStart = { offset ->
+                        val point = AgendaPoint(offset.x, offset.y)
+                        if (latestTool == AgendaSketchTool.ERASER) {
+                            latestOnErase(point)
+                            latestOnCurrentStrokeChange(emptyList())
+                        } else latestOnCurrentStrokeChange(listOf(point))
+                    },
                     onDrag = { change, _ ->
-                        latestOnCurrentStrokeChange(latestCurrentStroke + AgendaPoint(change.position.x, change.position.y))
+                        val point = AgendaPoint(change.position.x, change.position.y)
+                        if (latestTool == AgendaSketchTool.ERASER) {
+                            latestOnErase(point)
+                            latestOnCurrentStrokeChange(emptyList())
+                        } else {
+                            latestOnCurrentStrokeChange(
+                                if (latestTool == AgendaSketchTool.FREEHAND) latestCurrentStroke + point
+                                else listOf(latestCurrentStroke.firstOrNull() ?: point, point)
+                            )
+                        }
                     },
                     onDragEnd = { latestOnStrokeFinished() },
                     onDragCancel = { latestOnStrokeFinished() }
                 )
             }
     ) {
-        (strokes.map { it.points } + listOf(currentStroke)).forEach { points ->
-            if (points.size > 1) {
-                val path = Path().apply {
-                    moveTo(points.first().x, points.first().y)
-                    points.drop(1).forEach { lineTo(it.x, it.y) }
-                }
-                drawPath(path, color = color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 4f))
-            } else if (points.size == 1) {
-                drawCircle(color, radius = 2f, center = Offset(points[0].x, points[0].y))
-            }
+        strokes.forEach { drawAgendaStroke(it) }
+        if (currentStroke.isNotEmpty() && selectedTool != AgendaSketchTool.ERASER) {
+            drawAgendaStroke(AgendaStroke(currentStroke, selectedTool, selectedColorArgb, selectedWidth))
         }
     }
+}
+
+private fun DrawScope.drawAgendaStroke(stroke: AgendaStroke) {
+    if (stroke.points.isEmpty() || stroke.tool == AgendaSketchTool.ERASER) return
+    val color = Color(stroke.colorArgb)
+    val width = stroke.width.coerceIn(2f, 16f)
+    val points = stroke.points.map { Offset(it.x, it.y) }
+    val start = points.first()
+    val end = points.last()
+    when (stroke.tool) {
+        AgendaSketchTool.FREEHAND -> {
+            if (points.size == 1) drawCircle(color, radius = width / 2f, center = start)
+            else {
+                val path = Path().apply {
+                    moveTo(start.x, start.y)
+                    points.drop(1).forEach { lineTo(it.x, it.y) }
+                }
+                drawPath(path, color, style = androidx.compose.ui.graphics.drawscope.Stroke(width))
+            }
+        }
+        AgendaSketchTool.LINE -> if (points.size >= 2) drawLine(color, start, end, strokeWidth = width)
+        AgendaSketchTool.ARROW -> if (points.size >= 2) {
+            drawLine(color, start, end, strokeWidth = width)
+            val angle = atan2((end.y - start.y).toDouble(), (end.x - start.x).toDouble())
+            val head = (18f + width * 2f).coerceAtMost(40f)
+            val spread = PI / 7.0
+            val left = Offset(end.x - (head * cos(angle - spread)).toFloat(), end.y - (head * sin(angle - spread)).toFloat())
+            val right = Offset(end.x - (head * cos(angle + spread)).toFloat(), end.y - (head * sin(angle + spread)).toFloat())
+            drawLine(color, end, left, strokeWidth = width)
+            drawLine(color, end, right, strokeWidth = width)
+        }
+        AgendaSketchTool.RECTANGLE -> if (points.size >= 2) {
+            val left=minOf(start.x,end.x); val top=minOf(start.y,end.y)
+            drawRect(color, Offset(left,top), Size(kotlin.math.abs(end.x-start.x), kotlin.math.abs(end.y-start.y)),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width))
+        }
+        AgendaSketchTool.CIRCLE -> if (points.size >= 2) {
+            val left=minOf(start.x,end.x); val top=minOf(start.y,end.y)
+            drawOval(color, Offset(left,top), Size(kotlin.math.abs(end.x-start.x), kotlin.math.abs(end.y-start.y)),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width))
+        }
+        AgendaSketchTool.TRIANGLE -> if (points.size >= 2) {
+            val left=minOf(start.x,end.x); val right=maxOf(start.x,end.x); val top=minOf(start.y,end.y); val bottom=maxOf(start.y,end.y)
+            val path = Path().apply { moveTo((left+right)/2f,top); lineTo(right,bottom); lineTo(left,bottom); close() }
+            drawPath(path, color, style = androidx.compose.ui.graphics.drawscope.Stroke(width))
+        }
+        AgendaSketchTool.SEMICIRCLE -> if (points.size >= 2) {
+            val left=minOf(start.x,end.x); val top=minOf(start.y,end.y)
+            drawArc(color, 180f, 180f, false, Offset(left,top), Size(kotlin.math.abs(end.x-start.x), kotlin.math.abs(end.y-start.y)),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width))
+        }
+        AgendaSketchTool.ERASER -> Unit
+    }
+}
+
+private fun agendaStrokeHit(stroke: AgendaStroke, point: AgendaPoint): Boolean {
+    if (stroke.points.isEmpty()) return false
+    val threshold = 26f
+    if (stroke.tool in setOf(AgendaSketchTool.FREEHAND, AgendaSketchTool.LINE, AgendaSketchTool.ARROW)) {
+        return stroke.points.any {
+            val dx = it.x - point.x
+            val dy = it.y - point.y
+            dx * dx + dy * dy <= threshold * threshold
+        }
+    }
+    val a = stroke.points.first()
+    val b = stroke.points.last()
+    return point.x in (minOf(a.x,b.x)-threshold)..(maxOf(a.x,b.x)+threshold) &&
+        point.y in (minOf(a.y,b.y)-threshold)..(maxOf(a.y,b.y)+threshold)
 }
 
 private fun saveAgendaBitmap(context: Context, bitmap: Bitmap): String? = runCatching {
