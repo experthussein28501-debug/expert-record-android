@@ -13,6 +13,7 @@ import android.print.PrintManager
 import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -58,7 +59,7 @@ import kotlinx.coroutines.launch
 private enum class FileAction { OPEN, SAVE_AS, SHARE, PRINT }
 private enum class VoiceChoice { GOOGLE, AI, KEYBOARD }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
