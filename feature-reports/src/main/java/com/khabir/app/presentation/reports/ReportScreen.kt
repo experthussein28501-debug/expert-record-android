@@ -105,6 +105,9 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
     val importWordLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(viewModel::onImportWord) }
     val importExcelLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(viewModel::onImportExcel) }
     val importPowerPointLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(viewModel::onImportPowerPoint) }
+    val editableTemplateLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let(viewModel::onImportEditableReportTemplate)
+    }
     val smartTemplateLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
             runCatching {
@@ -224,6 +227,7 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                     Box(Modifier.weight(1f)) {
                         Button(onClick = { fileMenuExpanded = true }, enabled = !state.isExporting, modifier = Modifier.fillMaxWidth()) { Text(if (state.isExporting) "جارٍ التجهيز..." else "ملف / طباعة") }
                         DropdownMenu(expanded = fileMenuExpanded, onDismissRequest = { fileMenuExpanded = false }) {
+                            DropdownMenuItem(text = { Text("استيراد قالب للعمل عليه داخل التقرير") }, onClick = { fileMenuExpanded = false; editableTemplateLauncher.launch(arrayOf(ReportViewModel.WORD_MIME, "application/msword")) })
                             DropdownMenuItem(text = { Text("تعبئة قالب Word بنفس التنسيق") }, onClick = { fileMenuExpanded = false; smartTemplateLauncher.launch(arrayOf(ReportViewModel.WORD_MIME, "application/msword")) })
                             if (state.savedWordTemplateUri.isNotBlank()) {
                                 DropdownMenuItem(text = { Text("استخدام قالب Word الشخصي لهذا النوع") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.SAVE_AS; viewModel.onUseSavedWordTemplate() })
@@ -307,11 +311,15 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
+                    FilledTonalButton(
+                        onClick = { editableTemplateLauncher.launch(arrayOf(ReportViewModel.WORD_MIME, "application/msword")) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("استيراد قالب للعمل عليه داخل التقرير") }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilledTonalButton(
+                        OutlinedButton(
                             onClick = { smartTemplateLauncher.launch(arrayOf(ReportViewModel.WORD_MIME, "application/msword")) },
                             modifier = Modifier.weight(1f)
-                        ) { Text("استيراد قالب تقرير") }
+                        ) { Text("قالب Word بنفس التنسيق") }
                         OutlinedButton(
                             onClick = { styleLearningPreview = viewModel.assistantContext() },
                             modifier = Modifier.weight(1f)
