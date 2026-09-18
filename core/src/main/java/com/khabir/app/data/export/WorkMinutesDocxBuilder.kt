@@ -1,6 +1,7 @@
 package com.khabir.app.data.export
 
 import com.khabir.app.domain.model.WorkMinutesEntry
+import com.khabir.app.domain.model.toArabicIndicDigits
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.time.LocalDate
@@ -78,7 +79,7 @@ class WorkMinutesDocxBuilder {
             }
             if (entry.expertName.isNotBlank()) {
                 body.append(compactSpacer())
-                body.append(startAligned("الخبير/ ${entry.expertName}", bold = true))
+                body.append(endAligned("الخبير/ ${entry.expertName}", bold = true))
             }
         }
 
@@ -114,8 +115,10 @@ class WorkMinutesDocxBuilder {
 
     private fun startAligned(text: String, bold: Boolean, size: Int = 24): String = paragraph(text, "start", bold, size, after = 10, line = 280, keepNext = true)
 
+    private fun endAligned(text: String, bold: Boolean, size: Int = 24): String = paragraph(text, "end", bold, size, after = 10, line = 280, keepNext = true)
+
     private fun underlinedCentered(text: String): String {
-        return "<w:p><w:pPr><w:bidi/><w:keepNext/><w:jc w:val=\"center\"/><w:spacing w:before=\"0\" w:after=\"15\" w:line=\"320\" w:lineRule=\"auto\"/></w:pPr><w:r><w:rPr><w:rtl/><w:b/><w:u w:val=\"single\"/><w:lang w:val=\"ar-EG\" w:bidi=\"ar-EG\"/><w:rFonts w:ascii=\"Traditional Arabic\" w:hAnsi=\"Traditional Arabic\" w:cs=\"Traditional Arabic\"/><w:sz w:val=\"26\"/><w:szCs w:val=\"26\"/></w:rPr><w:t xml:space=\"preserve\">${escape(text)}</w:t></w:r></w:p>"
+        return "<w:p><w:pPr><w:bidi/><w:keepNext/><w:jc w:val=\"center\"/><w:spacing w:before=\"0\" w:after=\"15\" w:line=\"320\" w:lineRule=\"auto\"/></w:pPr><w:r><w:rPr><w:rtl/><w:b/><w:u w:val=\"single\"/><w:lang w:val=\"ar-EG\" w:bidi=\"ar-EG\"/><w:rFonts w:ascii=\"Traditional Arabic\" w:hAnsi=\"Traditional Arabic\" w:cs=\"Traditional Arabic\"/><w:sz w:val=\"26\"/><w:szCs w:val=\"26\"/></w:rPr><w:t xml:space=\"preserve\">${escape(text.toArabicIndicDigits())}</w:t></w:r></w:p>"
     }
 
     private fun normal(text: String): String = paragraph(text, "both", bold = true, size = 24, after = 8, line = 360, keepNext = false)
