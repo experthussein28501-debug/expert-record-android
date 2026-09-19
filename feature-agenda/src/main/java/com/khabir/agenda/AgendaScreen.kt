@@ -201,7 +201,7 @@ private fun AgendaDayCell(summary: AgendaDaySummary, onClick: (LocalDate) -> Uni
 }
 
 @Composable
-private fun AgendaDayDialog(
+internal fun AgendaDayDialog(
     summary: AgendaDaySummary,
     onDismiss: () -> Unit,
     onSave: (String, List<AgendaStroke>, List<String>, List<AgendaManualAppointment>) -> Unit
@@ -261,17 +261,17 @@ private fun AgendaDayDialog(
     val cameraFile = remember(summary.date) {
         File(context.cacheDir, "camera").apply { mkdirs() }.let { File(it, "agenda-${summary.date}.jpg") }
     }
-    val cameraUri = remember(cameraFile) { androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", cameraFile) }
+    fun cameraUri() = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", cameraFile)
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
         if (success) {
-            val path = copyAgendaImage(context, cameraUri)
+            val path = copyAgendaImage(context, cameraUri())
             if (path != null) { images.add(path); if (editingText) readImage(path) }
             else inputError = "تعذر حفظ صورة الكاميرا"
         }
     }
     var launchCameraAfterPermission by remember { mutableStateOf(false) }
     val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted && launchCameraAfterPermission) runCatching { cameraLauncher.launch(cameraUri) }.onFailure { inputError = "تعذر فتح الكاميرا" }
+        if (granted && launchCameraAfterPermission) runCatching { cameraLauncher.launch(cameraUri()) }.onFailure { inputError = "تعذر فتح الكاميرا" }
         if (!granted) inputError = "يلزم السماح بالكاميرا لالتقاط المستند"
         launchCameraAfterPermission = false
     }
@@ -486,7 +486,7 @@ private fun AgendaDayDialog(
                         OutlinedButton(
                             onClick = {
                                 if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-                                    runCatching { cameraLauncher.launch(cameraUri) }.onFailure { inputError = "تعذر فتح الكاميرا" }
+                                    runCatching { cameraLauncher.launch(cameraUri()) }.onFailure { inputError = "تعذر فتح الكاميرا" }
                                 } else {
                                     launchCameraAfterPermission = true
                                     cameraPermission.launch(Manifest.permission.CAMERA)
