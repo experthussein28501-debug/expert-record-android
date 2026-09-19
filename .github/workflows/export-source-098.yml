@@ -1,0 +1,21 @@
+name: Export Source 0.9.8 for Chat
+on:
+  push:
+    branches: [export-source-0.9.8-chat]
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 1a162eb3fba60991eaf22409b0947674438131d2
+      - name: Export exact tested source
+        run: git archive --format=zip --prefix=expert-record-0.9.8/ --output=expert-record-0.9.8-source.zip HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: expert-record-0.9.8-source
+          path: expert-record-0.9.8-source.zip
+          retention-days: 7
+          if-no-files-found: error
