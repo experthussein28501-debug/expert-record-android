@@ -65,25 +65,21 @@ jobs:
       - name: Make Gradle executable
         run: chmod +x gradlew
 
+      - name: Security gate regression tests
+        run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
+
       - name: Functional unit tests
         shell: bash
         run: |
           set -euo pipefail
-          for attempt in 1 2 3; do
-            if ./gradlew --no-daemon -PKHABIR_SKIP_SCREENSHOT_TESTS=true \
-              :core:testDebugUnitTest \
-              :feature-auth:testDebugUnitTest \
-              :feature-cases:testDebugUnitTest \
-              :feature-notifications:testDebugUnitTest \
-              :feature-reports:testDebugUnitTest \
-              :feature-agenda:testDebugUnitTest \
-              :app:testCombinedDebugUnitTest; then
-              exit 0
-            fi
-            if [ "$attempt" -eq 3 ]; then exit 1; fi
-            ./gradlew --stop || true
-            sleep 5
-          done
+          ./gradlew --no-daemon -PKHABIR_SKIP_SCREENSHOT_TESTS=true \
+            :core:testDebugUnitTest \
+            :feature-auth:testDebugUnitTest \
+            :feature-cases:testDebugUnitTest \
+            :feature-notifications:testDebugUnitTest \
+            :feature-reports:testDebugUnitTest \
+            :feature-agenda:testDebugUnitTest \
+            :app:testCombinedDebugUnitTest
 
   apk:
     needs: tests
@@ -124,14 +120,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for attempt in 1 2 3; do
-            if ./gradlew --no-daemon :app:assembleCombinedHardened; then
-              exit 0
-            fi
-            if [ "$attempt" -eq 3 ]; then exit 1; fi
-            ./gradlew --stop || true
-            sleep 5
-          done
+          ./gradlew --no-daemon :app:assembleCombinedHardened
 
       - name: Verify APK security properties
         shell: bash

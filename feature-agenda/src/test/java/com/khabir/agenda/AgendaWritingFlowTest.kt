@@ -17,6 +17,14 @@ class AgendaWritingFlowTest {
     @get:Rule val compose = createComposeRule()
     private val date = LocalDate.of(2026, 9, 20)
 
+    @Test fun tappingPenBoardSavesASingleDot() {
+        var saved = emptyList<AgendaStroke>()
+        compose.setContent { MaterialTheme { AgendaDayDialog(AgendaDaySummary(date), {}, { _, strokes, _, _ -> saved = strokes }) } }
+        compose.onNodeWithTag("agenda-writing-board").performScrollTo().performTouchInput { click(center) }
+        compose.onNodeWithText("حفظ اليوم", substring = true).performClick()
+        compose.runOnIdle { assertEquals(1, saved.size); assertEquals(1, saved.single().points.size) }
+    }
+
     @Test fun penToolsAreHiddenUntilRequestedAndNoShapesAreOffered() {
         compose.setContent { MaterialTheme { AgendaDayDialog(AgendaDaySummary(date), {}, { _, _, _, _ -> }) } }
         compose.onNodeWithText("رفيع").assertDoesNotExist()

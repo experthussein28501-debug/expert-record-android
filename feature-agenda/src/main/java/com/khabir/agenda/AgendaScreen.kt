@@ -20,6 +20,8 @@ import kotlinx.coroutines.launch
 import com.khabir.app.data.ocr.ArabicPetitionOcrService
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -336,9 +338,9 @@ internal fun AgendaDayDialog(
                             val index = strokes.indexOfLast { agendaStrokeHit(it, point) }
                             if (index >= 0) strokes.removeAt(index)
                         },
-                        onStrokeFinished = {
-                            if (selectedSketchTool != AgendaSketchTool.ERASER && currentStroke.isNotEmpty()) {
-                                strokes.add(AgendaStroke(currentStroke, selectedSketchTool, selectedSketchColor, selectedSketchWidth))
+                        onStrokeFinished = { points ->
+                            if (selectedSketchTool != AgendaSketchTool.ERASER && points.isNotEmpty()) {
+                                strokes.add(AgendaStroke(points, selectedSketchTool, selectedSketchColor, selectedSketchWidth))
                             }
                             currentStroke = emptyList()
                         }
@@ -583,7 +585,7 @@ private fun DrawingBoard(
     selectedWidth: Float,
     onCurrentStrokeChange: (List<AgendaPoint>) -> Unit,
     onErase: (AgendaPoint) -> Unit,
-    onStrokeFinished: () -> Unit
+    onStrokeFinished: (List<AgendaPoint>) -> Unit
 ) {
     val latestCurrentStroke by rememberUpdatedState(currentStroke)
     val latestOnCurrentStrokeChange by rememberUpdatedState(onCurrentStrokeChange)
@@ -591,7 +593,7 @@ private fun DrawingBoard(
     val latestOnErase by rememberUpdatedState(onErase)
     val latestTool by rememberUpdatedState(selectedTool)
     Canvas(
-        modifier = Modifier.fillMaxWidth().height(300.dp).clip(RoundedCornerShape(12.dp))
+        modifier = Modifier.fillMaxWidth().height(300.dp).testTag("agenda-writing-board").clip(RoundedCornerShape(12.dp))
             .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
             .pointerInput(Unit) {
                 detectDragGestures(
@@ -615,9 +617,16 @@ private fun DrawingBoard(
                             )
                         }
                     },
-                    onDragEnd = { latestOnStrokeFinished() },
-                    onDragCancel = { latestOnStrokeFinished() }
+                    onDragEnd = { latestOnStrokeFinished(latestCurrentStroke) },
+                    onDragCancel = { latestOnCurrentStrokeChange(emptyList()) }
                 )
+            }
+            .pointerInput(Unit) {
+                detectTapGestures { offset ->
+                    val point = AgendaPoint(offset.x, offset.y)
+                    if (latestTool == AgendaSketchTool.ERASER) latestOnErase(point)
+                    else latestOnStrokeFinished(listOf(point))
+                }
             }
     ) {
         drawRect(Color(0xFFFFFDF7))
