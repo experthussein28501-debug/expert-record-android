@@ -95,6 +95,7 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
     var expandedSectionId by remember { mutableStateOf<String?>(null) }
     var editingSectionHeaderId by remember { mutableStateOf<String?>(null) }
     var showReportTools by remember { mutableStateOf(false) }
+    com.khabir.app.data.monetization.BlockWorkAds(showInAppCamera || state.isOcrProcessing || state.pendingReportPages.isNotEmpty() || state.importedOfficeText != null || state.isSaving || state.isLoading || showAiRecording || showContinuousDictation)
     val screenHeightDp = LocalConfiguration.current.screenHeightDp.dp
 
     val saveAsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { destination ->
@@ -268,7 +269,7 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text("محرر التقرير", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text("واجهة مكتبية مألوفة بخانات مرتبة، مع حفظ تلقائي وصوت وكاميرا بجوار كل قسم.", style = MaterialTheme.typography.bodySmall)
+                    com.khabir.app.presentation.components.InlineHelp("مساعدة", "واجهة مكتبية مألوفة بخانات مرتبة، مع حفظ تلقائي وصوت وكاميرا بجوار كل قسم.")
                     Text("بيانات الدعوى المسجلة تنتقل للغلاف ورأس التقرير تلقائيًا.", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 }
             }
@@ -277,7 +278,7 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Link, null); Spacer(Modifier.width(8.dp)); Text("بيانات الدعوى للتقرير", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold) }
                     if (state.isIndependent) {
-                        Text("هذا التقرير غير مرتبط بقضية مسجلة. أدخل بيانات الغلاف ورأس التقرير هنا.", style = MaterialTheme.typography.bodySmall)
+                        com.khabir.app.presentation.components.InlineHelp("مساعدة", "هذا التقرير غير مرتبط بقضية مسجلة. أدخل بيانات الغلاف ورأس التقرير هنا.")
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             KhabirTextField(state.caseNo, viewModel::onCaseNoChanged, label = { Text("رقم الدعوى") }, modifier = Modifier.weight(1f), singleLine = true)
                             KhabirTextField(state.caseYear, viewModel::onCaseYearChanged, label = { Text("السنة") }, modifier = Modifier.weight(1f), singleLine = true)
@@ -289,10 +290,7 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                             label = { Text("رأس التقرير") },
                             minLines = 2
                         )
-                        Text(
-                            "مثال: تقرير في الدعوى رقم ... — اتركه فارغًا إذا لم ترغب في رأس صفحة",
-                            style = MaterialTheme.typography.bodySmall
-                        )
+                        com.khabir.app.presentation.components.InlineHelp("مساعدة", "مثال: تقرير في الدعوى رقم ... — اتركه فارغًا إذا لم ترغب في رأس صفحة")
                         ReportSectionField(
                             "الخصوم والصفات",
                             state.partiesSummary,
@@ -316,7 +314,7 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
             KhabirCard(contentPadding = PaddingValues(12.dp)) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("إدخال واستيراد", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                    Text("الصوت والصورة وملفات Office تُراجع قبل اعتمادها، ولا يتم استبدال محتوى التقرير تلقائيًا.", style = MaterialTheme.typography.bodySmall)
+                    com.khabir.app.presentation.components.InlineHelp("مساعدة", "الصوت والصورة وملفات Office تُراجع قبل اعتمادها، ولا يتم استبدال محتوى التقرير تلقائيًا.")
                     Text(
                         if (state.isOcrProcessing) "جارٍ قراءة صفحات المستند..." else "كل زر تصوير في التقرير يتيح تصوير مستند متعدد الصفحات ثم مراجعته دفعة واحدة.",
                         style = MaterialTheme.typography.labelMedium,
@@ -342,10 +340,7 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
             KhabirCard(contentPadding = PaddingValues(12.dp)) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("مساعد التقرير بالذكاء الاصطناعي", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                    Text(
-                        "اكتب المطلوب مثل: رتّب بحث المستندات أو صغ هذه الفقرة. لن يُضاف شيء للتقرير إلا بعد مراجعتك واعتمادك.",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    com.khabir.app.presentation.components.InlineHelp("مساعدة", "اكتب المطلوب مثل: رتّب بحث المستندات أو صغ هذه الفقرة. لن يُضاف شيء للتقرير إلا بعد مراجعتك واعتمادك.")
                     KhabirTextField(
                         value = assistantRequest,
                         onValueChange = { assistantRequest = it },
@@ -377,7 +372,7 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                         }
                     }
                     HorizontalDivider()
-                    Text("قواعد الصياغة فقط: لا تحفظ أسماء أو وقائع قضايا. تُرسل القواعد مع طلب AI بعد مراجعتك.", style = MaterialTheme.typography.labelSmall)
+                    com.khabir.app.presentation.components.InlineHelp("مساعدة", "قواعد الصياغة فقط: لا تحفظ أسماء أو وقائع قضايا. تُرسل القواعد مع طلب AI بعد مراجعتك.")
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         OutlinedButton(
                             onClick = { rulesEditor = viewModel.learnedRules().ifBlank { "استخدم عناوين واضحة وفقرات قصيرة. حافظ على الأسماء والأرقام كما وردت. لا تضف وقائع غير موجودة." } },
@@ -402,11 +397,11 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("قالب التقرير: ${state.template.name}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Text("العناوين والترتيب والبنود المختارة تُحفظ مع هذا التقرير وتظهر بنفسها في Word وPDF.", style = MaterialTheme.typography.bodySmall)
+                            com.khabir.app.presentation.components.InlineHelp("مساعدة", "العناوين والترتيب والبنود المختارة تُحفظ مع هذا التقرير وتظهر بنفسها في Word وPDF.")
                             if (state.template.referenceReport.isNotBlank()) {
                                 Text("النموذج المرجعي: ${state.template.referenceReport}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                             }
-                            Text("قاعدة ثابتة: نتائج AI وOCR والاستيراد لا تُطبق مباشرة؛ تظهر أولًا في شاشة مراجعة فوقية قبل الاعتماد.", style = MaterialTheme.typography.bodySmall)
+                            com.khabir.app.presentation.components.InlineHelp("مساعدة", "قاعدة ثابتة: نتائج AI وOCR والاستيراد لا تُطبق مباشرة؛ تظهر أولًا في شاشة مراجعة فوقية قبل الاعتماد.")
                         }
                         OutlinedButton(onClick = { showTemplateEditor = true }) { Text("تعديل القالب") }
                     }
@@ -462,7 +457,7 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                             KhabirCard(contentPadding = PaddingValues(12.dp)) {
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text("الخريطة والرسم الكروكي — ضمن المعاينة", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                                    Text("افتح الخريطة التفاعلية داخل التطبيق، حرّكها وكبّرها، ثم التقط الجزء المطلوب وارسم فوقه.", style = MaterialTheme.typography.bodySmall)
+                                    com.khabir.app.presentation.components.InlineHelp("مساعدة", "افتح الخريطة التفاعلية داخل التطبيق، حرّكها وكبّرها، ثم التقط الجزء المطلوب وارسم فوقه.")
                                     if (savedSketch != null) androidx.compose.foundation.Image(
                                         bitmap = savedSketch.asImageBitmap(), contentDescription = "معاينة مخطط الموقع",
                                         modifier = Modifier.fillMaxWidth().heightIn(max = 260.dp)
@@ -648,6 +643,11 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
         )
     }
 
+    if (state.pendingReportPages.isNotEmpty()) ReportDocumentRequestDialog(
+        pages = state.pendingReportPages, busy = state.isOcrProcessing, error = state.errorMessage,
+        onCancel = viewModel::cancelReportDocuments, onAnalyze = viewModel::analyzeRequestedDocuments
+    )
+
     if (showInAppCamera) {
         InAppCameraCapture(
             onDismiss = { showInAppCamera = false },
@@ -661,8 +661,9 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
             },
             onPagesCaptured = { pages, useAi ->
                 showInAppCamera = false
-                if (importedTarget == ReportCaptureField.SUBJECT) viewModel.onPetitionSubjectPagesCaptured(pages, useAi)
-                else viewModel.onDocumentPagesCaptured(pages, useAi)
+                if (useAi) viewModel.prepareReportDocuments(pages)
+                else if (importedTarget == ReportCaptureField.SUBJECT) viewModel.onPetitionSubjectPagesCaptured(pages, false)
+                else viewModel.onDocumentPagesCaptured(pages, false)
             },
             onError = { message -> scope.launch { snackbar.showSnackbar(message) } }
         )
@@ -1010,7 +1011,7 @@ private fun ReportTemplateSection(
                                 modifier = Modifier.weight(1f)
                             )
                         }
-                        Text("الاختيار يعيد ترتيب الموضوع الحالي ويُستخدم أيضًا عند استخراج موضوع الدعوى من العريضة.", style = MaterialTheme.typography.labelSmall)
+                        com.khabir.app.presentation.components.InlineHelp("مساعدة", "الاختيار يعيد ترتيب الموضوع الحالي ويُستخدم أيضًا عند استخراج موضوع الدعوى من العريضة.")
                     }
                 }
                 ReportSectionField(

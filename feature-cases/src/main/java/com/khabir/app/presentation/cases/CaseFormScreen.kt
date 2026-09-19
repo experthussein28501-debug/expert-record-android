@@ -70,6 +70,7 @@ fun CaseFormScreen(
     var showContinuousDictation by remember { mutableStateOf(false) }
     var useAiVoice by remember { mutableStateOf(false) }
     var pendingGoogleSpeech by remember { mutableStateOf(false) }
+    com.khabir.app.data.monetization.BlockWorkAds(showInAppCamera || showLensCamera || state.isOcrProcessing || state.isSaving || state.pendingPagePaths.isNotEmpty() || state.documentReview.isNotEmpty() || showContinuousDictation)
     val caseTypeOptions = listOf("مدني كلي", "مدني جزئي", "مدني مستأنف", "جنح", "أحوال شخصية", "شؤون الأسرة", "استئناف عالي", "قضاء إداري", "تنفيذ", "أخرى")
 
     val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -160,10 +161,7 @@ fun CaseFormScreen(
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("استيراد بيانات القضية والخصوم", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "أضف حتى 10 صور. يفحص التطبيق الصور ويجمع صفحات كل مستند ثم يعزل أي مستند مختلف قبل تعبئة القضية.",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    com.khabir.app.presentation.components.InlineHelp("مساعدة", "أضف حتى 10 صور. يفحص التطبيق الصور ويجمع صفحات كل مستند ثم يعزل أي مستند مختلف قبل تعبئة القضية.")
                     FilledTonalButton(
                         onClick = {
                             if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
@@ -279,7 +277,7 @@ fun CaseFormScreen(
             }
 
             Text("البيانات الأساسية للقضية", style = MaterialTheme.typography.titleLarge)
-            Text("هذه هي البيانات الأصلية التي يسحب منها التطبيق التقرير والإخطارات لاحقًا.", style = MaterialTheme.typography.bodySmall)
+            com.khabir.app.presentation.components.InlineHelp("مساعدة", "هذه هي البيانات الأصلية التي يسحب منها التطبيق التقرير والإخطارات لاحقًا.")
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 KhabirTextField(state.incomingNo, viewModel::onIncomingNoChanged, label = { Text("رقم الوارد") }, modifier = Modifier.weight(1f))
@@ -359,7 +357,7 @@ fun CaseFormScreen(
 
             HorizontalDivider()
             Text("أسماء الخصوم وعناوينهم", style = MaterialTheme.typography.titleMedium)
-            Text("اختر جهة الخصم: مدعي أو مدعى عليه، ثم فعّل «بصفته» للشخص عند الحاجة. كل اسم وعنوان يبقى محفوظًا للإخطارات.", style = MaterialTheme.typography.bodySmall)
+            com.khabir.app.presentation.components.InlineHelp("مساعدة", "اختر جهة الخصم: مدعي أو مدعى عليه، ثم فعّل «بصفته» للشخص عند الحاجة. كل اسم وعنوان يبقى محفوظًا للإخطارات.")
 
             if (state.parties.isNotEmpty()) {
                 KhabirCard(contentPadding = PaddingValues(10.dp)) {
@@ -447,10 +445,7 @@ fun CaseFormScreen(
                     FilledTonalButton(onClick = viewModel::savePartyEntry, modifier = Modifier.fillMaxWidth()) {
                         Text("حفظ الاسم وإضافة اسم آخر")
                     }
-                    Text(
-                        "بعد الحفظ يُمسح الاسم الأول فقط، وتبقى بقية الاسم والجهة و«بصفته» والعنوان للطرف التالي.",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    com.khabir.app.presentation.components.InlineHelp("مساعدة", "بعد الحفظ يُمسح الاسم الأول فقط، وتبقى بقية الاسم والجهة و«بصفته» والعنوان للطرف التالي.")
                 }
             }
             KhabirTextField(state.adminNotes, viewModel::onAdminNotesChanged, label = { Text("ملاحظات إدارية") }, minLines = 3, modifier = Modifier.fillMaxWidth())
@@ -614,7 +609,7 @@ private fun VoiceReviewDialog(
                 HorizontalDivider()
                 Text("الخصوم المستخرجون", style = MaterialTheme.typography.titleSmall)
                 if (reviewedParties.isEmpty()) {
-                    Text("لم يتم التعرف على أسماء خصوم. يمكنك تعديل النص ثم الضغط على «إعادة تحليل النص».", style = MaterialTheme.typography.bodySmall)
+                    com.khabir.app.presentation.components.InlineHelp("مساعدة", "لم يتم التعرف على أسماء خصوم. يمكنك تعديل النص ثم الضغط على «إعادة تحليل النص».")
                 }
                 reviewedParties.forEachIndexed { index, party ->
                     KhabirCard(contentPadding = PaddingValues(8.dp)) {

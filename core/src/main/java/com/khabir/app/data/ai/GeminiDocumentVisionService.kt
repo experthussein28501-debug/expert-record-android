@@ -54,7 +54,8 @@ class GeminiDocumentVisionService @Inject constructor(private val personalKeySto
                 ?: return@runCatching Result.Unavailable("لا يوجد نموذج صوت مهيأ لمزود ${provider.label}")
             val boundary = "Khabir" + java.util.UUID.randomUUID().toString().replace("-", "")
             val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
+                instanceFollowRedirects = false
+                    requestMethod = "POST"
                 connectTimeout = 30_000
                 readTimeout = 180_000
                 doOutput = true
@@ -111,6 +112,7 @@ class GeminiDocumentVisionService @Inject constructor(private val personalKeySto
 
             val endpoint = AiProviderHttp.modelsEndpoint(provider)
             val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+                instanceFollowRedirects = false
                 requestMethod = "GET"
                 connectTimeout = 20_000
                 readTimeout = 30_000
@@ -152,6 +154,7 @@ class GeminiDocumentVisionService @Inject constructor(private val personalKeySto
                     .put("purpose", purpose.name)
                     .put("instructions", expertInstructions)
                 val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+                    instanceFollowRedirects = false
                     requestMethod = "POST"
                     connectTimeout = 30_000
                     readTimeout = 180_000
@@ -208,6 +211,33 @@ class GeminiDocumentVisionService @Inject constructor(private val personalKeySto
             { text -> if (text.isBlank()) Result.Failure("لم يُرجع ${provider.label} نصًا من الصورة") else Result.Success(text.trim()) },
             { Result.Failure(friendlyError(it).takeIf(String::isNotBlank) ?: "تعذر تحليل الصورة بواسطة ${provider.label}") }
         )
+    }
+
+    suspend fun analyzeReportDocument(bitmaps: List<Bitmap>, instruction: String): Result = withContext(Dispatchers.IO) {
+        val key = personalKeyStore.read().trim()
+        if (key.isBlank()) return@withContext Result.Unavailable("أضف مفتاح الذكاء الاصطناعي في بيانات الخبير أولًا")
+        try {
+            require(bitmaps.size in 1..10)
+            val prompt = ReportDocumentPrompt.build(instruction)
+            val images = bitmaps.map { bitmap ->
+                val upload = resizeForUpload(bitmap)
+                try { ByteArrayOutputStream().use { out -> upload.compress(Bitmap.CompressFormat.JPEG, 78, out); out.toByteArray() } }
+                finally { if (upload !== bitmap) upload.recycle() }
+            }
+            val provider = personalKeyStore.readProvider()
+            val text = if (provider == AiProvider.GEMINI) {
+                val parts = org.json.JSONArray().put(JSONObject().put("text", prompt))
+                images.forEachIndexed { index, bytes ->
+                    parts.put(JSONObject().put("text", "الصفحة ${index + 1}"))
+                    parts.put(JSONObject().put("inline_data", JSONObject().put("mime_type", "image/jpeg")
+                        .put("data", Base64.encodeToString(bytes, Base64.NO_WRAP))))
+                }
+                generateGemini(key, JSONObject().put("contents", org.json.JSONArray().put(JSONObject().put("parts", parts)))
+                    .put("generationConfig", JSONObject().put("temperature", 0.1)).toString())
+            } else generateExternalProvider(key, provider, prompt, images)
+            if (text.isBlank()) Result.Failure("لم تُرجع الخدمة نتيجة للمستند") else Result.Success(text.trim())
+        } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+        catch (error: Exception) { Result.Failure(friendlyError(error)) }
     }
 
     suspend fun analyzePages(
@@ -547,7 +577,8 @@ class GeminiDocumentVisionService @Inject constructor(private val personalKeySto
         }
 
         val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
+            instanceFollowRedirects = false
+                    requestMethod = "POST"
             connectTimeout = 30_000
             readTimeout = 180_000
             doOutput = true

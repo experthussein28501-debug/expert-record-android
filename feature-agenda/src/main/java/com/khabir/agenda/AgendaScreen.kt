@@ -11,6 +11,12 @@ import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
+import com.khabir.app.presentation.components.InlineHelp
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.ui.draw.clip
@@ -76,6 +82,8 @@ fun AgendaScreen(
     viewModel: AgendaViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
+    val saveError by viewModel.saveError.collectAsState()
+    saveError?.let { message -> AlertDialog(onDismissRequest = { viewModel.saveError.value = null }, text = { Text(message) }, confirmButton = { TextButton(onClick = { viewModel.saveError.value = null }) { Text("حسنًا") } }) }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -229,12 +237,14 @@ internal fun AgendaDayDialog(
     var confirmClose by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
     var inputError by remember { mutableStateOf<String?>(null) }
-    var readingImage by remember { mutableStateOf(false) }
+    var pendingImageReads by remember { mutableStateOf(0) }
+    val readingImage = pendingImageReads > 0
+    com.khabir.app.data.monetization.BlockWorkAds(true)
     val scope = rememberCoroutineScope()
     val ocr = remember { ArabicPetitionOcrService(context.applicationContext) }
     fun readImage(path: String) {
+        pendingImageReads++
         scope.launch {
-            readingImage = true
             try {
                 val bitmap = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { decodeAgendaImage(path, 2600) }
                 if (bitmap == null) inputError = "تعذر فتح الصورة"
@@ -246,10 +256,11 @@ internal fun AgendaDayDialog(
                 } finally { bitmap.recycle() }
             } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled
             } catch (error: Exception) { inputError = "تعذر قراءة الصورة؛ حاول بصورة أوضح"
-            } finally { readingImage = false }
+            } finally { pendingImageReads-- }
         }
     }
     fun requestClose() {
+        if (readingImage) return
         if (editingText) editingText = false
         else if (text != summary.note?.text.orEmpty() || strokes.toList() != summary.note?.strokes.orEmpty() ||
             images.toList() != summary.note?.imagePaths.orEmpty() || manualAppointments.toList() != summary.note?.manualAppointments.orEmpty()) confirmClose = true
@@ -290,7 +301,7 @@ internal fun AgendaDayDialog(
         properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false)
     ) {
         Surface(
-            modifier = Modifier.fillMaxSize().imePadding(),
+            modifier = Modifier.fillMaxSize().safeDrawingPadding().imePadding(),
             shape = RoundedCornerShape(20.dp),
             tonalElevation = 8.dp
         ) {
@@ -302,17 +313,12 @@ internal fun AgendaDayDialog(
                         Text(formatDate(summary.date), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         summary.holiday?.let { Text(it.name, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold) }
                     }
-                    
+                    InlineHelp("ملاحظات اليوم", "اضغط على الورقة لفتح الكتابة بالكيبورد. استخدم القلم في المساحة السفلية، وافتح أدواته من أسفل. زر حفظ اليوم يحفظ النص والقلم والصور معًا.")
                 }
                 HorizontalDivider()
                 BackHandler { requestClose() }
                 if (editingText) {
-                    OutlinedTextField(
-                        value = text, onValueChange = { text = it },
-                        modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 12.dp),
-                        label = { Text("ملاحظات اليوم") },
-                        placeholder = { Text("اكتب هنا، أو استخدم الصوت والكاميرا من أسفل…") }
-                    )
+                    RuledAgendaEditor(text, { text = it }, Modifier.weight(1f).fillMaxWidth().padding(top = 8.dp))
                 } else Column(
                     Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(top = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -473,7 +479,6 @@ internal fun AgendaDayDialog(
                 if (readingImage) LinearProgressIndicator(Modifier.fillMaxWidth())
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
                 if (editingText) {
-                    Text("أدوات الملاحظة", fontWeight = FontWeight.Bold)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         OutlinedButton(
                             onClick = {
@@ -502,7 +507,7 @@ internal fun AgendaDayDialog(
                         ) { Icon(Icons.Filled.PhotoLibrary, null); Text(" صور") }
                     }
 
-                    Button(onClick = { editingText = false }, modifier = Modifier.fillMaxWidth()) { Text("تم — العودة لليوم") }
+                    TextButton(onClick = { editingText = false }, modifier = Modifier.fillMaxWidth()) { Text("تم — العودة لليوم") }
                 } else {
                     if (showTools) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -527,13 +532,14 @@ internal fun AgendaDayDialog(
                         TextButton(onClick = { requestClose() }) { Text("إغلاق") }
                     }
 
+                }
                 Button(
+                    enabled = !readingImage,
                     onClick = { onSave(text, strokes.toList(), images.toList(), manualAppointments.toList()) },
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("agenda-save")
                 ) {
                     Icon(Icons.Filled.Save, null)
-                    Text(" حفظ اليوم")
-                }
+                    Text("حفظ اليوم", fontWeight = FontWeight.Bold)
                 }
             }
         }

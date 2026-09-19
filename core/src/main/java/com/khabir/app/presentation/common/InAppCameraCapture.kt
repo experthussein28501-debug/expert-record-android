@@ -71,6 +71,7 @@ fun InAppCameraCapture(
     lensOnly: Boolean = false,
     onError: (String) -> Unit
 ) {
+    com.khabir.app.data.monetization.BlockWorkAds(true)
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val mainExecutor = remember(context) { ContextCompat.getMainExecutor(context) }

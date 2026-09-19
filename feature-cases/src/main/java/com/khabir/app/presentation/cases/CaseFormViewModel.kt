@@ -463,6 +463,7 @@ class CaseFormViewModel @Inject constructor(
                     } else {
                         clearPendingDocuments()
                         onSaved(r.caseId)
+                        com.khabir.app.data.monetization.WorkAdEvents.finished()
                     }
                 }
                 is SaveCaseUseCase.Result.Invalid -> _uiState.update { it.copy(isSaving = false, validationErrors = r.errors) }

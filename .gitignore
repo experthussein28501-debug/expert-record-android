@@ -27,3 +27,8 @@ Thumbs.db
 
 # Generated release material
 release-output/
+
+# Local tooling
+__pycache__/
+*.pyc
+node_modules/

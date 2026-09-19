@@ -1,212 +1,90 @@
 package com.khabir.app.presentation.auth
 
 import android.content.Context
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.Balance
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
-import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import androidx.credentials.exceptions.GetCredentialCancellationException
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
-import com.google.firebase.FirebaseApp
-import com.google.firebase.FirebaseOptions
-import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
+import com.khabir.app.data.auth.GoogleSession
+import com.khabir.app.presentation.components.InlineHelp
 import com.khabir.core.BuildConfig
-import com.khabir.app.data.auth.ActivationClient
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
 private val LoginGold = Color(0xFFD6B45A)
 
 @Composable
-fun LoginScreen(
-    onSkip: () -> Unit,
-    onGoogleSuccess: () -> Unit,
-    onActivationSuccess: () -> Unit
-) {
+fun LoginScreen(logoRes: Int, onGoogleSuccess: () -> Unit, onPreview: (() -> Unit)? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var activationCode by remember { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
-    var activating by remember { mutableStateOf(false) }
-    val activationClient = remember(context) { ActivationClient(context) }
-    val googleConfigured = remember {
-        isGoogleSignInConfigured(
-            BuildConfig.GOOGLE_WEB_CLIENT_ID,
-            BuildConfig.FIREBASE_API_KEY,
-            BuildConfig.FIREBASE_APP_ID,
-            BuildConfig.FIREBASE_PROJECT_ID
-        )
-    }
-
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black)
-            .imePadding()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 34.dp),
+        Modifier.fillMaxSize().background(Color.Black).safeDrawingPadding().imePadding()
+            .verticalScroll(rememberScrollState()).padding(28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Surface(shape = CircleShape, color = LoginGold.copy(alpha = 0.14f)) {
-            Icon(Icons.Filled.Balance, "ميزان العدالة", Modifier.padding(24.dp), tint = LoginGold)
-        }
-        Spacer(Modifier.height(18.dp))
-        Text("سجل الخبير", color = LoginGold, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text("إدارة أعمال الخبرة القضائية", color = Color.White.copy(alpha = 0.78f))
-        Spacer(Modifier.height(30.dp))
-
+        Image(painterResource(logoRes), "شعار سجل الخبير", Modifier.size(120.dp))
+        Spacer(Modifier.height(12.dp))
+        Text("سجل الخبير", color = LoginGold, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(40.dp))
         Button(
             onClick = {
-                busy = true
-                message = null
-                scope.launch {
-                    signInWithGoogle(context)
-                        .onSuccess { onGoogleSuccess() }
-                        .onFailure { message = it.message ?: "تعذر تسجيل الدخول باستخدام Google" }
-                    busy = false
+                if (!isGoogleSignInConfigured(BuildConfig.GOOGLE_WEB_CLIENT_ID, BuildConfig.FIREBASE_API_KEY, BuildConfig.FIREBASE_APP_ID, BuildConfig.FIREBASE_PROJECT_ID)) {
+                    message = "تسجيل Google غير متاح في هذه النسخة بعد."
+                } else scope.launch {
+                    busy = true; message = null
+                    try { signInWithGoogle(context); onGoogleSuccess() }
+                    catch (_: GetCredentialCancellationException) { /* Account picker dismissed. */ }
+                    catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: Exception) { message = "تعذر تسجيل الدخول. تأكد من الاتصال بالإنترنت وحاول مرة أخرى." }
+                    finally { busy = false }
                 }
             },
-            enabled = !busy && !activating && googleConfigured,
-            colors = ButtonDefaults.buttonColors(containerColor = LoginGold, contentColor = Color.Black),
-            modifier = Modifier.fillMaxWidth()
+            enabled = !busy,
+            colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)
         ) {
-            if (busy) CircularProgressIndicator(Modifier.size(20.dp), color = Color.Black, strokeWidth = 2.dp)
-            else Icon(Icons.Filled.AccountCircle, null)
-            Spacer(Modifier.width(8.dp))
-            Text("تسجيل الدخول باستخدام Google")
+            if (busy) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+            else Text("تسجيل الدخول باستخدام Google", fontWeight = FontWeight.Medium)
         }
-        if (!googleConfigured) {
-            Text(
-                "تسجيل Google غير مفعّل في إعدادات البناء الحالية؛ يمكن استخدام كود التفعيل أو التخطي.",
-                color = Color.White.copy(alpha = 0.62f),
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 8.dp)
-            )
-        }
-
-        Spacer(Modifier.height(22.dp))
-        OutlinedTextField(
-            value = activationCode,
-            onValueChange = { activationCode = it; message = null },
-            label = { Text("كود التفعيل") },
-            singleLine = true,
-            enabled = !activating,
-            visualTransformation = PasswordVisualTransformation(),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White,
-                focusedBorderColor = LoginGold,
-                unfocusedBorderColor = Color.White.copy(alpha = 0.5f),
-                focusedLabelColor = LoginGold,
-                unfocusedLabelColor = Color.White.copy(alpha = 0.7f)
-            ),
-            modifier = Modifier.fillMaxWidth()
-        )
-        Button(
-            onClick = {
-                activating = true
-                val submittedCode = activationCode
-                message = "جارٍ التحقق من كود التفعيل..."
-                scope.launch {
-                    try {
-                        activationClient.activate(submittedCode).fold(
-                            onSuccess = { activationCode = ""; onActivationSuccess() },
-                            onFailure = { message = it.message ?: "تعذر التفعيل" }
-                        )
-                    } finally { activating = false }
-                }
-            },
-            enabled = !busy && !activating && activationCode.isNotBlank(),
-            colors = ButtonDefaults.buttonColors(containerColor = LoginGold, contentColor = Color.Black),
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-        ) { Text(if (activating) "جارٍ التفعيل..." else "تفعيل") }
-
-        message?.let { Text(it, color = Color(0xFFFFB4AB), modifier = Modifier.padding(top = 12.dp)) }
-        Spacer(Modifier.height(28.dp))
-        OutlinedButton(onClick = onSkip, enabled = !busy && !activating, modifier = Modifier.fillMaxWidth()) {
-            Text("تخطي", color = LoginGold)
+        message?.let { Text(it, color = Color(0xFFFFB4AB), modifier = Modifier.padding(top = 16.dp)) }
+        InlineHelp("تسجيل الدخول", "اختر حساب Google لحفظ حالة اشتراكك ومكافآتك. المستندات تبقى على جهازك، ولا يرفعها تسجيل الدخول.")
+        onPreview?.let { action ->
+            TextButton(onClick = action, enabled = !busy) { Text("فتح النسخة التجريبية", color = LoginGold) }
         }
     }
 }
 
-internal fun isGoogleSignInConfigured(
-    googleWebClientId: String,
-    firebaseApiKey: String,
-    firebaseAppId: String,
-    firebaseProjectId: String
-): Boolean =
-    googleWebClientId.isNotBlank() && firebaseApiKey.isNotBlank() &&
-        firebaseAppId.isNotBlank() && firebaseProjectId.isNotBlank()
+internal fun isGoogleSignInConfigured(googleWebClientId: String, firebaseApiKey: String, firebaseAppId: String, firebaseProjectId: String): Boolean =
+    listOf(googleWebClientId, firebaseApiKey, firebaseAppId, firebaseProjectId).all { it.isNotBlank() }
 
-private suspend fun signInWithGoogle(context: Context): Result<Unit> = runCatching {
-    require(
-        isGoogleSignInConfigured(
-            BuildConfig.GOOGLE_WEB_CLIENT_ID,
-            BuildConfig.FIREBASE_API_KEY,
-            BuildConfig.FIREBASE_APP_ID,
-            BuildConfig.FIREBASE_PROJECT_ID
-        )
-    ) {
-        "تسجيل Google يحتاج إعداد Firebase الخاص بالمشروع؛ استخدم التخطي في نسخة التجربة"
-    }
-    val app = FirebaseApp.getApps(context).firstOrNull() ?: FirebaseApp.initializeApp(
-        context,
-        FirebaseOptions.Builder()
-            .setApiKey(BuildConfig.FIREBASE_API_KEY)
-            .setApplicationId(BuildConfig.FIREBASE_APP_ID)
-            .setProjectId(BuildConfig.FIREBASE_PROJECT_ID)
-            .build()
-    ) ?: error("تعذر تشغيل Firebase")
-    val option = GetGoogleIdOption.Builder()
-        .setServerClientId(BuildConfig.GOOGLE_WEB_CLIENT_ID)
-        .setFilterByAuthorizedAccounts(false)
-        .build()
-    val response = CredentialManager.create(context).getCredential(
-        context,
-        GetCredentialRequest.Builder().addCredentialOption(option).build()
-    )
-    val googleCredential = GoogleIdTokenCredential.createFrom(response.credential.data)
-    val firebaseCredential = GoogleAuthProvider.getCredential(googleCredential.idToken, null)
-    FirebaseAuth.getInstance(app).signInWithCredential(firebaseCredential).await()
+private suspend fun signInWithGoogle(context: Context) {
+    val auth = requireNotNull(GoogleSession.auth(context))
+    val option = GetSignInWithGoogleOption.Builder(BuildConfig.GOOGLE_WEB_CLIENT_ID).build()
+    val response = CredentialManager.create(context).getCredential(context,
+        GetCredentialRequest.Builder().addCredentialOption(option).build())
+    val credential = response.credential
+    require(credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL)
+    val token = GoogleIdTokenCredential.createFrom(credential.data).idToken
+    auth.signInWithCredential(GoogleAuthProvider.getCredential(token, null)).await()
 }

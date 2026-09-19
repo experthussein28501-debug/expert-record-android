@@ -45,6 +45,15 @@ class AgendaWritingFlowTest {
         compose.runOnIdle { assertEquals("مراجعة الدعوى يوم الأحد", saved) }
     }
 
+    @Test fun fullPageEditorHasVisibleSaveAndKeepsText() {
+        var saved = ""
+        compose.setContent { MaterialTheme { AgendaDayDialog(AgendaDaySummary(date), {}, { text, _, _, _ -> saved = text }) } }
+        compose.onNodeWithText("اضغط للكتابة في صفحة كاملة").performClick()
+        compose.onNodeWithTag("agenda-ruled-editor").performTextInput("المستند الأول\nالمستند الثاني")
+        compose.onNodeWithTag("agenda-save").assertIsDisplayed().performClick()
+        compose.runOnIdle { assertEquals("المستند الأول\nالمستند الثاني", saved) }
+    }
+
     @Test fun closingDirtyDayRequiresExplicitDecision() {
         var closed = false
         compose.setContent { MaterialTheme { AgendaDayDialog(AgendaDaySummary(date), { closed = true }, { _, _, _, _ -> }) } }

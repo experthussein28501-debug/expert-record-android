@@ -5,6 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.khabir.app.domain.repository.NotificationBatchRepository
 import com.khabir.app.domain.repository.WorkMinutesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -111,6 +114,9 @@ class AgendaViewModel @Inject constructor(
     fun selectDate(date: LocalDate) { selectedDate.value = date }
     fun closeDay() { selectedDate.value = null }
 
+    val saveError = MutableStateFlow<String?>(null)
+    val isSaving = MutableStateFlow(false)
+
     fun saveDay(
         date: LocalDate,
         text: String,
@@ -118,7 +124,11 @@ class AgendaViewModel @Inject constructor(
         imagePaths: List<String>,
         manualAppointments: List<AgendaManualAppointment>
     ) {
-        store.save(
+        if (isSaving.value) return
+        isSaving.value = true
+        viewModelScope.launch {
+        try {
+        withContext(Dispatchers.IO) { store.save(
             AgendaDayNote(
                 date = date,
                 text = text.trim(),
@@ -128,7 +138,12 @@ class AgendaViewModel @Inject constructor(
                 updatedAt = System.currentTimeMillis()
             )
         )
+        }
         selectedDate.value = null
+        com.khabir.app.data.monetization.WorkAdEvents.finished()
+        } catch (error: Exception) { saveError.value = "تعذر حفظ اليوم. حاول مرة أخرى." }
+        finally { isSaving.value = false }
+        }
     }
 
     private fun caseLabel(caseNo: String, caseYear: String): String = when {

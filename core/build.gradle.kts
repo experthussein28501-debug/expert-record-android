@@ -93,3 +93,19 @@ tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
         }
     }
 }
+
+val prepareArabicModel by tasks.registering {
+    val compressed = rootProject.layout.projectDirectory.file("ci-assets/ara.traineddata.gz")
+    val generated = layout.buildDirectory.dir("generated/ocrAssets")
+    inputs.file(compressed)
+    outputs.dir(generated)
+    doLast {
+        val model = generated.get().file("tessdata/ara.traineddata").asFile
+        model.parentFile.mkdirs()
+        java.util.zip.GZIPInputStream(compressed.asFile.inputStream()).use { input -> model.outputStream().use { input.copyTo(it) } }
+        val hash = java.security.MessageDigest.getInstance("SHA-256").digest(model.readBytes()).joinToString("") { "%02x".format(it) }
+        check(hash == "e3206d3dc87fd50c24a0fb9f01838615911d25168f4e64415244b67d2bb3e729") { "Arabic OCR model checksum mismatch" }
+    }
+}
+android.sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/ocrAssets"))
+tasks.named("preBuild").configure { dependsOn(prepareArabicModel) }

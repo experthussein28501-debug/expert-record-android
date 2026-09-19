@@ -454,7 +454,7 @@ class NotificationBatchViewModel @Inject constructor(
             val activeKeys = state.authorityCandidates.map { it.key }.toSet()
             val approved = state.approvedAuthorityNotices.filterKeys { it in activeKeys }.values.toList()
             when (val result = createBatch(state.appointmentDate, state.appointmentTime, state.appointmentLocation, state.requestedDocuments, selections, authorityNotices = approved)) {
-                is CreateNotificationBatchUseCase.Result.Success -> _uiState.update {
+                is CreateNotificationBatchUseCase.Result.Success -> { _uiState.update {
                     it.copy(
                         isCreating = false,
                         lastCreatedBatchId = result.batchId,
@@ -465,6 +465,8 @@ class NotificationBatchViewModel @Inject constructor(
                         manualRecipients = emptyList(),
                         requestedDocuments = ""
                     )
+                }
+                    com.khabir.app.data.monetization.WorkAdEvents.finished()
                 }
                 CreateNotificationBatchUseCase.Result.EmptySelection -> _uiState.update { it.copy(isCreating = false, errorMessage = "اختر طرفًا واحدًا على الأقل") }
                 CreateNotificationBatchUseCase.Result.MissingExpertProfile -> _uiState.update { it.copy(isCreating = false, errorMessage = "أكمل بيانات الخبير أولًا") }

@@ -35,8 +35,13 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         minSdk = 26
         targetSdk = 36
-        versionCode = 98
-        versionName = "0.9.8-agenda-security"
+        versionCode = 99
+        versionName = "0.9.9-play-preparation"
+        buildConfigField("String", "MONETIZATION_BASE_URL", "\"${providers.gradleProperty("KHABIR_MONETIZATION_BASE_URL").orNull.orEmpty()}\"")
+        listOf("BANNER", "INTERSTITIAL", "REWARDED").forEach { kind ->
+            buildConfigField("String", "ADMOB_${kind}_ID", "\"${providers.gradleProperty("KHABIR_ADMOB_${kind}_ID").orNull.orEmpty()}\"")
+        }
+        manifestPlaceholders["admobAppId"] = providers.gradleProperty("KHABIR_ADMOB_APP_ID").getOrElse("ca-app-pub-3940256099942544~3347511713")
         buildConfigField("String", "ACTIVATION_ENDPOINT", "\"${activationEndpoint.replace("\"", "\\\"")}\"")
         buildConfigField("String", "GEMINI_VISION_ENDPOINT", "\"${geminiVisionEndpoint.replace("\"", "\\\"")}\"")
         buildConfigField("String", "FIREBASE_API_KEY", "\"${firebaseApiKey.replace("\"", "\\\"")}\"")
@@ -75,9 +80,9 @@ android {
         }
         create("hardened") {
             initWith(getByName("debug"))
-            applicationIdSuffix = ".security.preview"
+            applicationIdSuffix = ".preview.v099"
             versionNameSuffix = "-preview"
-            manifestPlaceholders["appLabel"] = "سجل الخبير — تجربة الحماية والأجندة"
+            manifestPlaceholders["appLabel"] = "سجل الخبير — تجربة 0.9.9"
             isDebuggable = false
             isMinifyEnabled = true
             isShrinkResources = true
@@ -109,7 +114,7 @@ android {
             applicationIdSuffix = ".combined"
             versionNameSuffix = "-combined"
             buildConfigField("String", "MODULE_MODE", "\"COMBINED\"")
-            manifestPlaceholders["appLabel"] = "سجل الخبير — النسخة المجمعة 0.9.8"
+            manifestPlaceholders["appLabel"] = "سجل الخبير — النسخة المجمعة 0.9.9"
         }
         create("notifications") {
             dimension = "module"
@@ -159,6 +164,9 @@ tasks.withType<JavaCompile>().configureEach {
 }
 
 dependencies {
+    implementation("com.android.billingclient:billing-ktx:9.1.0")
+    implementation("com.google.android.gms:play-services-ads:25.5.0")
+    implementation("com.google.android.ump:user-messaging-platform:4.0.0")
     implementation(project(":core"))
     implementation(project(":feature-auth"))
     implementation(project(":feature-cases"))

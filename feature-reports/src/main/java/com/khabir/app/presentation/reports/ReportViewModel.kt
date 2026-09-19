@@ -67,6 +67,7 @@ data class ReportUiState(
     val isSaving: Boolean = false,
     val isExporting: Boolean = false,
     val isOcrProcessing: Boolean = false,
+    val pendingReportPages: List<File> = emptyList(),
     val autoSaveStatus: String = "",
     val errorMessage: String? = null,
     val exportedFileUri: Uri? = null,
@@ -89,6 +90,7 @@ data class ReportUiState(
 @HiltViewModel
 @OptIn(FlowPreview::class)
 class ReportViewModel @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
     private val getOrCreateReport: GetOrCreateReportUseCase,
     private val saveReport: SaveReportUseCase,
     private val exportReportToWord: ExportReportToWordUseCase,
@@ -231,6 +233,57 @@ class ReportViewModel @Inject constructor(
                 is GeminiDocumentVisionService.Result.Unavailable -> useLocalOcrFallback(bitmap, result.message)
                 is GeminiDocumentVisionService.Result.Failure -> useLocalOcrFallback(bitmap, result.message)
             }
+        }
+    }
+
+    private val documentResults = mutableMapOf<String, String>()
+
+    fun prepareReportDocuments(pages: List<File>) {
+        if (_uiState.value.isOcrProcessing) return
+        documentResults.clear()
+        _uiState.update { it.copy(pendingReportPages = pages.take(10), errorMessage = null) }
+    }
+
+    fun cancelReportDocuments() {
+        if (_uiState.value.isOcrProcessing) return
+        _uiState.value.pendingReportPages.forEach { it.delete() }
+        documentResults.clear()
+        _uiState.update { it.copy(pendingReportPages = emptyList(), errorMessage = null) }
+        com.khabir.app.data.monetization.WorkAdEvents.finished()
+    }
+
+    fun analyzeRequestedDocuments(documents: List<ReportDocumentRequest>) {
+        if (_uiState.value.isOcrProcessing) return
+        val expected = _uiState.value.pendingReportPages
+        if (documents.flatMap { it.pages } != expected || expected.isEmpty()) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isOcrProcessing = true, errorMessage = null) }
+            try {
+                val texts = documents.mapIndexed { index, document ->
+                    val cacheKey = document.pages.joinToString("|") { it.path } + "\n" + document.instruction
+                    val resultText = documentResults[cacheKey] ?: run {
+                        val bitmaps = mutableListOf<Bitmap>()
+                        try {
+                            for (file in document.pages) {
+                                val bitmap = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                    com.khabir.app.presentation.common.decodeCameraBitmap(context, Uri.fromFile(file), 1400)
+                                } ?: error("تعذر فتح صورة من المستند ${index + 1}")
+                                bitmaps += bitmap
+                            }
+                            when (val result = geminiVision.analyzeReportDocument(bitmaps, document.instruction)) {
+                                is GeminiDocumentVisionService.Result.Success -> result.text.also { documentResults[cacheKey] = it }
+                                is GeminiDocumentVisionService.Result.Failure -> error("المستند ${index + 1}: ${result.message}")
+                                is GeminiDocumentVisionService.Result.Unavailable -> error(result.message)
+                            }
+                        } finally { bitmaps.forEach { it.recycle() } }
+                    }
+                    "المستند ${index + 1}\n$resultText"
+                }
+                expected.forEach { it.delete() }; documentResults.clear()
+                _uiState.update { it.copy(pendingReportPages = emptyList(), importedOfficeText = texts.joinToString("\n\n"), importedOfficeSource = "نتائج المستندات") }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (error: Exception) { _uiState.update { it.copy(errorMessage = error.message ?: "تعذر تحليل المستندات") } }
+            finally { _uiState.update { it.copy(isOcrProcessing = false) } }
         }
     }
 
@@ -397,7 +450,7 @@ class ReportViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true, errorMessage = null) }
             runCatching { saveReport(_uiState.value.toReport()) }
-                .onSuccess { id -> _uiState.update { it.copy(reportId = id, isSaving = false, autoSaveStatus = "تم الحفظ") } }
+                .onSuccess { id -> _uiState.update { it.copy(reportId = id, isSaving = false, autoSaveStatus = "تم الحفظ") }; com.khabir.app.data.monetization.WorkAdEvents.finished() }
                 .onFailure { e -> _uiState.update { it.copy(isSaving = false, errorMessage = e.message ?: "تعذر حفظ التقرير") } }
         }
     }
@@ -641,7 +694,10 @@ class ReportViewModel @Inject constructor(
     }
 
     fun onCancelExcelImport() = _uiState.update { it.copy(pendingExcelImport = emptyMap(), importedOfficeSource = null) }
-    fun onImportedOfficeTextConsumed() = _uiState.update { it.copy(importedOfficeText = null, importedOfficeSource = null) }
+    fun onImportedOfficeTextConsumed() {
+        _uiState.update { it.copy(importedOfficeText = null, importedOfficeSource = null) }
+        com.khabir.app.data.monetization.WorkAdEvents.finished()
+    }
     fun onExportWord() = exportWord()
     fun onExportPdf() = exportPdf()
 

@@ -65,6 +65,9 @@ jobs:
       - name: Make Gradle executable
         run: chmod +x gradlew
 
+      - name: Backend policy and callback security tests
+        run: node --test backend/functions/test/*.test.js
+
       - name: Security gate regression tests
         run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
 
@@ -132,19 +135,29 @@ jobs:
           python3 scripts/verify_apk_security.py "$APK" /tmp/khabir-manifest.xml app/build/outputs/mapping/combinedHardened/mapping.txt
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify "$APK"
 
+      - name: Export exact source and evidence
+        run: |
+          git archive --format=zip --prefix=expert-record-0.9.9/ --output=expert-record-0.9.9-source.zip HEAD
+          cp /tmp/khabir-manifest.xml release-manifest.xml
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$(find app/build/outputs/apk/combined/hardened -name '*.apk' | head -n 1)" > signing-fingerprint.txt
+
       - name: Prepare chat APK
         shell: bash
         run: |
           set -euo pipefail
           APK="$(find app/build/outputs/apk -type f -name '*.apk' | head -n 1)"
           test -n "$APK"
-          cp "$APK" expert-record-0.9.8-hardened.apk
+          cp "$APK" expert-record-0.9.9-hardened.apk
 
       - name: Upload APK for chat transfer
         uses: actions/upload-artifact@v4
         with:
           name: expert-record-chat-download
-          path: expert-record-0.9.8-hardened.apk
+          path: |
+            expert-record-0.9.9-hardened.apk
+            expert-record-0.9.9-source.zip
+            release-manifest.xml
+            signing-fingerprint.txt
           if-no-files-found: error
           retention-days: 7
           compression-level: 0
