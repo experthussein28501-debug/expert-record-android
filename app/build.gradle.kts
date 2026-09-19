@@ -75,7 +75,9 @@ android {
         }
         create("hardened") {
             initWith(getByName("debug"))
-            applicationIdSuffix = ".test.modular"
+            applicationIdSuffix = ".security.preview"
+            versionNameSuffix = "-preview"
+            manifestPlaceholders["appLabel"] = "سجل الخبير — تجربة الحماية والأجندة"
             isDebuggable = false
             isMinifyEnabled = true
             isShrinkResources = true
