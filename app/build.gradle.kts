@@ -35,8 +35,8 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         minSdk = 26
         targetSdk = 36
-        versionCode = 95
-        versionName = "0.9.6-live-agenda"
+        versionCode = 98
+        versionName = "0.9.8-agenda-security"
         buildConfigField("String", "ACTIVATION_ENDPOINT", "\"${activationEndpoint.replace("\"", "\\\"")}\"")
         buildConfigField("String", "GEMINI_VISION_ENDPOINT", "\"${geminiVisionEndpoint.replace("\"", "\\\"")}\"")
         buildConfigField("String", "FIREBASE_API_KEY", "\"${firebaseApiKey.replace("\"", "\\\"")}\"")
@@ -73,8 +73,22 @@ android {
                 "proguard-rules.pro"
             )
         }
+        create("hardened") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".test.modular"
+            isDebuggable = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            matchingFallbacks += listOf("release")
+            buildConfigField("String", "TEST_ACTIVATION_CODE", "\"\"")
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
         release {
-            isMinifyEnabled = false
+            isDebuggable = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            buildConfigField("String", "TEST_ACTIVATION_CODE", "\"\"")
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (uploadSigningReady) signingConfig = signingConfigs.getByName("upload")
         }
     }
@@ -93,7 +107,7 @@ android {
             applicationIdSuffix = ".combined"
             versionNameSuffix = "-combined"
             buildConfigField("String", "MODULE_MODE", "\"COMBINED\"")
-            manifestPlaceholders["appLabel"] = "سجل الخبير — النسخة المجمعة 0.9.6"
+            manifestPlaceholders["appLabel"] = "سجل الخبير — النسخة المجمعة 0.9.8"
         }
         create("notifications") {
             dimension = "module"
@@ -196,3 +210,4 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
+

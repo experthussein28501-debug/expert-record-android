@@ -26,6 +26,7 @@
     <application
         android:name=".KhabirApplication"
         android:allowBackup="false"
+        android:usesCleartextTraffic="false"
         android:icon="@drawable/ic_launcher"
         android:label="${appLabel}"
         android:supportsRtl="true"
@@ -51,3 +52,4 @@
         </provider>
     </application>
 </manifest>
+
