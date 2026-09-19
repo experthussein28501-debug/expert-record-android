@@ -1,3 +1,6 @@
+import java.util.zip.GZIPInputStream
+import java.security.MessageDigest
+
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
@@ -48,7 +51,7 @@ dependencies {
     api("com.google.firebase:firebase-common:21.0.0")
 
     // The internal camera is the default. Google Lens is an explicit optional action.
-    val cameraXVersion = "1.3.4"
+    val cameraXVersion = "1.4.2"
     api("androidx.camera:camera-core:$cameraXVersion")
     api("androidx.camera:camera-camera2:$cameraXVersion")
     api("androidx.camera:camera-lifecycle:$cameraXVersion")
@@ -102,8 +105,8 @@ val prepareArabicModel by tasks.registering {
     doLast {
         val model = generated.get().file("tessdata/ara.traineddata").asFile
         model.parentFile.mkdirs()
-        java.util.zip.GZIPInputStream(compressed.asFile.inputStream()).use { input -> model.outputStream().use { input.copyTo(it) } }
-        val hash = java.security.MessageDigest.getInstance("SHA-256").digest(model.readBytes()).joinToString("") { "%02x".format(it) }
+        GZIPInputStream(compressed.asFile.inputStream()).use { input -> model.outputStream().use { input.copyTo(it) } }
+        val hash = MessageDigest.getInstance("SHA-256").digest(model.readBytes()).joinToString("") { "%02x".format(it) }
         check(hash == "e3206d3dc87fd50c24a0fb9f01838615911d25168f4e64415244b67d2bb3e729") { "Arabic OCR model checksum mismatch" }
     }
 }
