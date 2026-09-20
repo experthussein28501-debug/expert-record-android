@@ -124,6 +124,7 @@ fun AgendaScreen(
         AgendaDayDialog(
             summary = summary,
             saving = saving,
+            draft = viewModel.draft,
             onDismiss = viewModel::closeDay,
             onSave = { text, strokes, images, manualAppointments ->
                 viewModel.saveDay(date, text, strokes, images, manualAppointments)
@@ -217,19 +218,19 @@ internal fun AgendaDayDialog(
     summary: AgendaDaySummary,
     onDismiss: () -> Unit,
     onSave: (String, List<AgendaStroke>, List<String>, List<AgendaManualAppointment>) -> Unit,
-    saving: Boolean = false
+    saving: Boolean = false,
+    draft: AgendaDraft? = null
 ) {
     val context = LocalContext.current
-    var text by rememberSaveable(summary.date) { mutableStateOf(summary.note?.text.orEmpty()) }
-    val strokes = remember(summary.date) { mutableStateListOf<AgendaStroke>().apply { addAll(summary.note?.strokes.orEmpty()) } }
-    val images = remember(summary.date) { mutableStateListOf<String>().apply { addAll(summary.note?.imagePaths.orEmpty()) } }
-    val manualAppointments = remember(summary.date) {
-        mutableStateListOf<AgendaManualAppointment>().apply { addAll(summary.note?.manualAppointments.orEmpty()) }
-    }
-    var manualTitle by remember(summary.date) { mutableStateOf("") }
-    var manualTime by remember(summary.date) { mutableStateOf("") }
-    var manualLocation by remember(summary.date) { mutableStateOf("") }
-    var manualDetails by remember(summary.date) { mutableStateOf("") }
+    val retained = draft ?: remember(summary.date) { AgendaDraft(summary.note) }
+    var text by retained.text
+    val strokes = retained.strokes
+    val images = retained.images
+    val manualAppointments = retained.appointments
+    var manualTitle by retained.manualTitle
+    var manualTime by retained.manualTime
+    var manualLocation by retained.manualLocation
+    var manualDetails by retained.manualDetails
     var currentStroke by remember(summary.date) { mutableStateOf<List<AgendaPoint>>(emptyList()) }
     var selectedSketchTool by remember(summary.date) { mutableStateOf(AgendaSketchTool.FREEHAND) }
     var selectedSketchColor by remember(summary.date) { mutableStateOf(0xFF1B1B1B.toInt()) }

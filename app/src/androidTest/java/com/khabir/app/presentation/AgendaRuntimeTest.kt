@@ -26,6 +26,9 @@ class AgendaRuntimeTest {
         compose.onNodeWithTag("agenda-ruled-editor").performClick().performTextInput("مراجعة المستندات\nتدوين نتيجة المعاينة\nمتابعة موعد الجلسة")
         compose.onNodeWithTag("agenda-save").assertIsDisplayed()
         snapshot("03-agenda-keyboard")
+        compose.activityRule.scenario.recreate()
+        compose.onNodeWithTag("agenda-ruled-editor").assertTextContains("مراجعة المستندات", substring = true)
+        compose.onNodeWithTag("agenda-save").assertIsDisplayed()
         compose.onNodeWithTag("agenda-save").performClick()
         compose.waitUntil(timeoutMillis = 10_000) { compose.onAllNodesWithTag("agenda-save").fetchSemanticsNodes().isEmpty() }
         compose.onNodeWithContentDescription("اليوم").performClick()

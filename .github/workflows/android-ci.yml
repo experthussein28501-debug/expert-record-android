@@ -1,6 +1,5 @@
 name: Android CI
-# Functional tests and installable APK build run independently so one failure
-# does not hide the next actionable build problem.
+# Build and device checks run only after functional and security tests pass.
 
 on:
   workflow_dispatch:

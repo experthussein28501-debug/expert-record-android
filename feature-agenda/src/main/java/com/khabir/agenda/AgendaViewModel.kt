@@ -110,9 +110,15 @@ class AgendaViewModel @Inject constructor(
 
     fun previousMonth() { month.value = month.value.minusMonths(1) }
     fun nextMonth() { month.value = month.value.plusMonths(1) }
-    fun goToday() { month.value = YearMonth.now(); selectedDate.value = LocalDate.now() }
-    fun selectDate(date: LocalDate) { selectedDate.value = date }
-    fun closeDay() { selectedDate.value = null }
+    internal var draft: AgendaDraft? = null
+        private set
+    fun goToday() { month.value = YearMonth.now(); selectDate(LocalDate.now()) }
+    fun selectDate(date: LocalDate) {
+        if (isSaving.value) return
+        draft = AgendaDraft(store.get(date))
+        selectedDate.value = date
+    }
+    fun closeDay() { if (!isSaving.value) { selectedDate.value = null; draft = null } }
 
     val saveError = MutableStateFlow<String?>(null)
     val isSaving = MutableStateFlow(false)
@@ -140,7 +146,9 @@ class AgendaViewModel @Inject constructor(
         )
         }
         selectedDate.value = null
+        draft = null
         com.khabir.app.data.monetization.WorkAdEvents.finished()
+        } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled
         } catch (error: Exception) { saveError.value = "تعذر حفظ اليوم. حاول مرة أخرى." }
         finally { isSaving.value = false }
         }

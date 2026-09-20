@@ -16,7 +16,6 @@ android {
         versionName = "0.7.4-notifications"
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
-    kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
     sourceSets["main"].assets.srcDir("../app/src/main/assets")
 }
@@ -33,3 +32,5 @@ tasks.withType<JavaCompile>().configureEach {
         delete(fileTree(layout.buildDirectory.dir("generated/ksp")) { include("**/java/byRounds/**") })
     }
 }
+
+kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }

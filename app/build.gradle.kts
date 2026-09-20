@@ -146,7 +146,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
     testOptions.unitTests.all {
         it.testLogging.exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
     }
@@ -239,3 +238,5 @@ val validatePlayRelease by tasks.registering {
     }
 }
 tasks.matching { it.name == "preCombinedReleaseBuild" }.configureEach { dependsOn(validatePlayRelease) }
+
+kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }

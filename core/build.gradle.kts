@@ -22,7 +22,6 @@ android {
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"" + providers.gradleProperty("KHABIR_GOOGLE_WEB_CLIENT_ID").orNull.orEmpty().replace("\"", "\\\"") + "\"")
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
-    kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true; buildConfig = true }
     testOptions.unitTests.isIncludeAndroidResources = true
 }
@@ -112,3 +111,5 @@ val prepareArabicModel by tasks.registering {
 }
 android.sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/ocrAssets"))
 tasks.named("preBuild").configure { dependsOn(prepareArabicModel) }
+
+kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }

@@ -10,7 +10,6 @@ android {
     compileSdk = 36
     defaultConfig { minSdk = 26 }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
-    kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
 }
 dependencies {
@@ -19,3 +18,5 @@ dependencies {
     ksp("com.google.dagger:hilt-compiler:2.58")
     testImplementation("junit:junit:4.13.2")
 }
+
+kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
