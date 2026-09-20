@@ -196,8 +196,7 @@ jobs:
           disable-animations: true
           script: |
             chmod +x gradlew
-            ./gradlew --no-daemon :app:connectedCombinedDebugAndroidTest
-            adb pull /sdcard/Android/data/com.khabir.app.combined.test.modular/files/ui-evidence ui-evidence
+            ./gradlew --no-daemon :app:connectedCombinedDebugAndroidTest; result=$?; adb pull /sdcard/Android/data/com.khabir.app.combined.test.modular/files/ui-evidence ui-evidence || true; exit "$result"
       - name: Upload runtime evidence
         if: always()
         uses: actions/upload-artifact@v4

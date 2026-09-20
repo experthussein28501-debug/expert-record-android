@@ -32,7 +32,7 @@ class AgendaRuntimeTest {
         compose.onNodeWithTag("agenda-save").performClick()
         compose.waitUntil(timeoutMillis = 10_000) { compose.onAllNodesWithTag("agenda-save").fetchSemanticsNodes().isEmpty() }
         compose.onNodeWithContentDescription("اليوم").performClick()
-        compose.onNodeWithText("مراجعة المستندات", substring = true).assertIsDisplayed()
+        compose.onNode(hasText("مراجعة المستندات", substring = true) and hasAnyAncestor(isDialog())).assertIsDisplayed()
         snapshot("04-agenda-saved")
     }
 
