@@ -1,5 +1,6 @@
 package com.khabir.agenda
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -48,5 +49,26 @@ internal fun RuledAgendaEditor(value: String, onValueChange: (String) -> Unit, m
                 }
             )
         }
+    }
+}
+
+
+@Composable
+internal fun RuledAgendaPreview(value: String, onOpen: () -> Unit) {
+    Box(Modifier.fillMaxWidth().height(180.dp).clip(RoundedCornerShape(10.dp))
+        .background(Color(0xFFFFFDF7)).testTag("agenda-text-preview")
+        .verticalScroll(rememberScrollState())) {
+        Text(value.ifBlank { "اضغط للكتابة في صفحة كاملة" },
+            style = TextStyle(color = Color(0xFF222222), fontSize = 18.sp, lineHeight = 34.sp, textDirection = TextDirection.ContentOrRtl),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 180.dp)
+                .clickable(onClickLabel = "فتح صفحة الكتابة", onClick = onOpen)
+                .padding(horizontal = 12.dp, vertical = 8.dp).drawBehind {
+                    val spacing = 34.sp.toPx()
+                    var y = spacing
+                    while (y < size.height) {
+                        drawLine(Color(0xFFDADFE3), Offset(0f, y), Offset(size.width, y), 1.dp.toPx())
+                        y += spacing
+                    }
+                })
     }
 }

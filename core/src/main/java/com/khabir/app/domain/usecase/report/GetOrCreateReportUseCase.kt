@@ -32,7 +32,7 @@ class GetOrCreateReportUseCase @Inject constructor(
                     templateId = template.id,
                     templateName = template.name,
                     templateSectionsSpec = ReportTemplateCodec.encode(template),
-                    partiesSummary = case.parties
+                    partiesSummary = case.parties.filter { it.role != com.khabir.app.domain.model.PartyRole.LAWYER }
                         .sortedBy { it.orderIndex }
                         .joinToString("، ") { it.reportDisplayName },
                     subjectOfCase = composedSubject,

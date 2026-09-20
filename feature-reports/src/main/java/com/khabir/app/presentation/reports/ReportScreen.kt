@@ -63,6 +63,23 @@ private enum class VoiceChoice { GOOGLE, AI, KEYBOARD }
 @Composable
 fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
+    androidx.activity.compose.BackHandler { viewModel.saveAndClose(onBack) }
+    if (state.isLeaving || state.isSaving || state.isExporting) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = {}) {
+            androidx.compose.material3.Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)) {
+                Row(Modifier.padding(24.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(28.dp))
+                    Text("جارٍ الحفظ والتجهيز…", Modifier.padding(start = 12.dp))
+                }
+            }
+        }
+    }
+    if (state.caseUpdates.isNotEmpty()) com.khabir.app.presentation.components.CaseUpdatesDialog(
+        state.caseUpdates, viewModel::dismissCaseUpdates, viewModel::applyCaseUpdates)
+    if (state.canRetryPages) AlertDialog(onDismissRequest = {}, title = { Text("الصفحات لم تكتمل") },
+        text = { Text(state.errorMessage ?: "لم يتم اعتماد نص ناقص. يمكنك إعادة القراءة أو إلغاء المجموعة وإعادة التصوير.") },
+        confirmButton = { TextButton(onClick = viewModel::retryPages) { Text("إعادة المحاولة") } },
+        dismissButton = { TextButton(onClick = viewModel::cancelPageRetry) { Text("إلغاء المجموعة") } })
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     val snackbar = remember { SnackbarHostState() }
@@ -227,7 +244,7 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
-        topBar = { TopAppBar(title = { Column { Text("تقرير الخبرة", fontWeight = FontWeight.Bold); Text(if (state.isIndependent) "تقرير مستقل" else "مرتبط بقضية مسجلة", style = MaterialTheme.typography.labelMedium) } }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") } }) },
+        topBar = { TopAppBar(title = { Column { Text("تقرير الخبرة", fontWeight = FontWeight.Bold); Text(if (state.isIndependent) "تقرير مستقل" else "مرتبط بقضية مسجلة", style = MaterialTheme.typography.labelMedium) } }, actions = { if (!state.isIndependent) TextButton(enabled = !state.isLoading, onClick = viewModel::reviewCaseUpdates) { Text("تحديثات القضية") } }, navigationIcon = { IconButton(onClick = { viewModel.saveAndClose(onBack) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") } }) },
         bottomBar = {
             BottomAppBar {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {

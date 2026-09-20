@@ -88,6 +88,24 @@ jobs:
             :feature-agenda:testDebugUnitTest \
             :app:testCombinedDebugUnitTest
 
+      - name: Render Word regression fixture
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libreoffice-writer fonts-hosny-amiri poppler-utils
+          mkdir -p document-evidence
+          libreoffice -env:UserInstallation=file:///tmp/expert-word-render --headless --convert-to pdf --outdir document-evidence core/build/visual-evidence/work-minutes-long.docx
+          pdftoppm -scale-to 1400 -png document-evidence/work-minutes-long.pdf document-evidence/minutes
+      - name: Upload functional and document evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: expert-record-functional-evidence
+          path: |
+            **/build/test-results/
+            core/build/visual-evidence/
+            document-evidence/
+          retention-days: 7
+
   apk:
     needs: tests
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
@@ -143,7 +161,7 @@ jobs:
 
       - name: Export exact source and evidence
         run: |
-          git archive --format=zip --prefix=expert-record-0.9.9/ --output=expert-record-0.9.9-source.zip HEAD
+          git archive --format=zip --prefix=expert-record-0.9.10/ --output=expert-record-0.9.10-source.zip HEAD
           cp /tmp/khabir-manifest.xml release-manifest.xml
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$(find app/build/outputs/apk/combined/hardened -name '*.apk' | head -n 1)" > signing-fingerprint.txt
 
@@ -153,15 +171,15 @@ jobs:
           set -euo pipefail
           APK="$(find app/build/outputs/apk -type f -name '*.apk' | head -n 1)"
           test -n "$APK"
-          cp "$APK" expert-record-0.9.9-hardened.apk
+          cp "$APK" expert-record-0.9.10-hardened.apk
 
       - name: Upload APK for chat transfer
         uses: actions/upload-artifact@v4
         with:
           name: expert-record-chat-download
           path: |
-            expert-record-0.9.9-hardened.apk
-            expert-record-0.9.9-source.zip
+            expert-record-0.9.10-hardened.apk
+            expert-record-0.9.10-source.zip
             release-manifest.xml
             signing-fingerprint.txt
           if-no-files-found: error
@@ -196,7 +214,8 @@ jobs:
           disable-animations: true
           script: |
             chmod +x gradlew
-            ./gradlew --no-daemon :app:connectedCombinedDebugAndroidTest; result=$?; adb pull /sdcard/Android/data/com.khabir.app.combined.test.modular/files/ui-evidence ui-evidence || true; exit "$result"
+            adb shell settings put secure show_ime_with_hard_keyboard 1
+            ./gradlew --no-daemon :app:connectedCombinedDebugAndroidTest; result=$?; adb pull /sdcard/Download/expert-record-ui ui-evidence || true; exit "$result"
       - name: Upload runtime evidence
         if: always()
         uses: actions/upload-artifact@v4

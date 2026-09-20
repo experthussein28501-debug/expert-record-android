@@ -76,6 +76,10 @@ class MultiPageDocumentReader @Inject constructor(
                 decodeCameraBitmap(context, Uri.fromFile(file), MAX_ANALYSIS_EDGE)
                     ?: run { warnings += "تعذر قراءة الصفحة ${firstPage + offset}"; null }
             }
+            if (bitmaps.size != files.size) {
+                bitmaps.forEach { if (!it.isRecycled) it.recycle() }
+                return@batchLoop
+            }
             if (bitmaps.isEmpty()) return@batchLoop
             try {
                 val result = if (useAi) aiVision.analyzePages(bitmaps, purpose, detectMultipleDocuments) else null
@@ -112,6 +116,10 @@ class MultiPageDocumentReader @Inject constructor(
             } finally {
                 bitmaps.forEach { if (!it.isRecycled) it.recycle() }
             }
+        }
+        if (pagesRead != pageFiles.size) {
+            warnings.add(0, "لم تكتمل قراءة جميع الصفحات ($pagesRead من ${pageFiles.size}). لم يتم اعتماد نص ناقص؛ الصور محفوظة لإعادة المحاولة.")
+            return Result("", pagesRead, localFallback, warnings, aiError)
         }
         if (deleteAfterRead) pageFiles.forEach { it.delete() }
         return Result(pages.joinToString("\n\n"), pagesRead, localFallback, warnings, aiError)

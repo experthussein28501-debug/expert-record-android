@@ -34,15 +34,30 @@ class AgendaRuntimeTest {
         compose.onNodeWithContentDescription("اليوم").performClick()
         compose.onNode(hasText("مراجعة المستندات", substring = true) and hasAnyAncestor(isDialog())).assertIsDisplayed()
         snapshot("04-agenda-saved")
+        compose.onNodeWithTag("agenda-text-preview").assertIsDisplayed()
+        compose.onNode(hasText("مراجعة المستندات", substring = true) and hasAnyAncestor(isDialog())).performClick()
+        compose.onNodeWithTag("agenda-ruled-editor").performTextReplacement((1..24).joinToString("\n") { "سطر المراجعة رقم $it" })
+        compose.onNodeWithText("تم — العودة لليوم").performClick()
+        compose.onNodeWithTag("agenda-text-preview").performTouchInput { swipeUp() }
+        compose.onNodeWithTag("agenda-ruled-editor").assertDoesNotExist()
+        snapshot("05-agenda-preview-scrolled")
+        compose.onNodeWithTag("agenda-text-preview").performTouchInput { click(center) }
+        compose.onNodeWithTag("agenda-ruled-editor").assertExists()
     }
 
     private fun snapshot(name: String) {
         compose.waitForIdle()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val image = instrumentation.uiAutomation.takeScreenshot() ?: return
+        val image = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         try {
-            val directory = File(instrumentation.targetContext.getExternalFilesDir(null), "ui-evidence").apply { mkdirs() }
-            File(directory, "$name.png").outputStream().use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            val resolver = instrumentation.targetContext.contentResolver
+            val values = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, "$name.png")
+                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "image/png")
+                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, "Download/expert-record-ui")
+            }
+            val uri = checkNotNull(resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values))
+            checkNotNull(resolver.openOutputStream(uri)).use { check(image.compress(Bitmap.CompressFormat.PNG, 100, it)) }
         } finally { image.recycle() }
     }
 }

@@ -54,6 +54,15 @@ fun CaseFormScreen(
     viewModel: CaseFormViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
+    state.partyConflicts.firstOrNull()?.let { (old, incoming) ->
+        AlertDialog(onDismissRequest = {}, title = { Text("مراجعة عنوان الاسم المتكرر") },
+            text = { Column { Text("${old.firstName} ${old.restName}"); Text("المحفوظ: ${old.address}"); Text("المستخرج: ${incoming.address}") } },
+            confirmButton = { Column {
+                TextButton(onClick = { viewModel.resolvePartyConflict(1) }) { Text("استخدام العنوان المستخرج") }
+                TextButton(onClick = { viewModel.resolvePartyConflict(2) }) { Text("شخصان مختلفان — احتفظ بالاثنين") }
+            } }, dismissButton = { TextButton(onClick = { viewModel.resolvePartyConflict(0) }) { Text("احتفظ بالمحفوظ") } })
+    }
+
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -370,9 +379,9 @@ fun CaseFormScreen(
                                         KhabirTextField(party.firstName, { value -> viewModel.updateParty(party.localId) { it.copy(firstName = value) } }, label = { Text("الاسم الأول") }, modifier = Modifier.weight(1f))
                                         KhabirTextField(party.restName, { value -> viewModel.updateParty(party.localId) { it.copy(restName = value) } }, label = { Text("باقي الاسم") }, modifier = Modifier.weight(1f))
                                     }
-                                    KhabirTextField(party.address, { value -> viewModel.updateParty(party.localId) { it.copy(address = value) } }, label = { Text("العنوان") }, modifier = Modifier.fillMaxWidth())
+                                    KhabirTextField(if (party.role == PartyRole.LAWYER) com.khabir.app.domain.model.LawyerNotification.city(party.address) else party.address, { value -> viewModel.updateParty(party.localId) { it.copy(address = value) } }, label = { Text(if (party.role == PartyRole.LAWYER) "مدينة المحامي" else "العنوان") }, modifier = Modifier.fillMaxWidth())
                                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        listOf(PartyRole.PLAINTIFF, PartyRole.DEFENDANT).forEach { role ->
+                                        listOf(PartyRole.PLAINTIFF, PartyRole.DEFENDANT, PartyRole.LAWYER).forEach { role ->
                                             FilterChip(selected = party.role == role, onClick = { viewModel.updateParty(party.localId) { it.copy(role = role) } }, label = { Text(role.arabicLabel) })
                                         }
                                         FilterChip(selected = party.withCapacity, onClick = { viewModel.updateParty(party.localId) { it.copy(withCapacity = !it.withCapacity) } }, label = { Text("بصفته") })
@@ -423,7 +432,7 @@ fun CaseFormScreen(
                             ExposedDropdownMenu(expanded = partyRoleMenuExpanded, onDismissRequest = { partyRoleMenuExpanded = false }) {
                                 PartyRole.entries.forEach { role ->
                                     DropdownMenuItem(text = { Text(role.arabicLabel) }, onClick = {
-                                        viewModel.updatePartyEntry { it.copy(role = role) }
+                                        viewModel.updatePartyEntry { it.copy(role = role, address = if (it.role != role && (it.role == PartyRole.LAWYER || role == PartyRole.LAWYER)) "" else it.address) }
                                         partyRoleMenuExpanded = false
                                     })
                                 }
@@ -439,7 +448,7 @@ fun CaseFormScreen(
                     KhabirTextField(
                         state.partyEntry.address,
                         { value -> viewModel.updatePartyEntry { it.copy(address = value) } },
-                        label = { Text("العنوان") },
+                        label = { Text(if (state.partyEntry.role == PartyRole.LAWYER) "مدينة المحامي" else "العنوان") },
                         modifier = Modifier.fillMaxWidth()
                     )
                     FilledTonalButton(onClick = viewModel::savePartyEntry, modifier = Modifier.fillMaxWidth()) {
@@ -638,7 +647,7 @@ private fun VoiceReviewDialog(
                                 label = { Text("الدعوى: أصلية / فرعية") }, modifier = Modifier.fillMaxWidth()
                             )
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                listOf(PartyRole.PLAINTIFF, PartyRole.DEFENDANT).forEach { role ->
+                                listOf(PartyRole.PLAINTIFF, PartyRole.DEFENDANT, PartyRole.LAWYER).forEach { role ->
                                     FilterChip(
                                         selected = party.role == role,
                                         onClick = {

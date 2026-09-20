@@ -121,6 +121,7 @@ class NotificationBatchViewModel @Inject constructor(
          */
         fun manualRecipientValidationError(state: NotificationScreenUiState): String? {
             val missingCaseInfo = state.manualCaseNo.isBlank() || state.manualCaseYear.isBlank() || state.manualCourt.isBlank()
+            if (state.manualRole == PartyRole.LAWYER && com.khabir.app.domain.model.LawyerNotification.address(state.manualAddress).isBlank()) return "اكتب مدينة المحامي لتحديد المحكمة ونقابة المحامين"
             val missingName = state.manualFirstName.isBlank() && state.manualRestName.isBlank()
             return if (missingCaseInfo || missingName) "أكمل رقم وسنة الدعوى والمحكمة واسم الطرف" else null
         }
@@ -267,7 +268,7 @@ class NotificationBatchViewModel @Inject constructor(
     fun onManualCourtChanged(v: String) = _uiState.update { it.copy(manualCourt = v) }
     fun onManualFirstNameChanged(v: String) = _uiState.update { it.copy(manualFirstName = v) }
     fun onManualRestNameChanged(v: String) = _uiState.update { it.copy(manualRestName = v) }
-    fun onManualRoleChanged(v: PartyRole) = _uiState.update { it.copy(manualRole = v) }
+    fun onManualRoleChanged(v: PartyRole) = _uiState.update { it.copy(manualRole = v, manualAddress = if (it.manualRole != v && (it.manualRole == PartyRole.LAWYER || v == PartyRole.LAWYER)) "" else it.manualAddress) }
     fun onManualWithCapacityChanged(v: Boolean) = _uiState.update { it.copy(manualWithCapacity = v) }
     fun onManualAddressChanged(v: String) = _uiState.update { it.copy(manualAddress = v) }
 
@@ -396,7 +397,7 @@ class NotificationBatchViewModel @Inject constructor(
             state.manualFirstName.trim(),
             state.manualRestName.trim(),
             state.manualRole,
-            state.manualAddress.trim(),
+            if (state.manualRole == PartyRole.LAWYER) com.khabir.app.domain.model.LawyerNotification.address(state.manualAddress) else state.manualAddress.trim(),
             state.manualWithCapacity
         )
         _uiState.update {
@@ -468,6 +469,7 @@ class NotificationBatchViewModel @Inject constructor(
                 }
                     com.khabir.app.data.monetization.WorkAdEvents.finished()
                 }
+                CreateNotificationBatchUseCase.Result.MissingLawyerCity -> _uiState.update { it.copy(isCreating = false, errorMessage = "حدد مدينة المحامي في بياناته قبل إنشاء الإخطار") }
                 CreateNotificationBatchUseCase.Result.EmptySelection -> _uiState.update { it.copy(isCreating = false, errorMessage = "اختر طرفًا واحدًا على الأقل") }
                 CreateNotificationBatchUseCase.Result.MissingExpertProfile -> _uiState.update { it.copy(isCreating = false, errorMessage = "أكمل بيانات الخبير أولًا") }
             }

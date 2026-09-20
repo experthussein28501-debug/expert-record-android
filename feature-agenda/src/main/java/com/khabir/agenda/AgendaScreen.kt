@@ -328,12 +328,12 @@ internal fun AgendaDayDialog(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Card(
-                        modifier = Modifier.fillMaxWidth().clickable { editingText = true; showTools = false },
+                        modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
                     ) {
                         Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text("ملاحظات اليوم", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Text(text.ifBlank { "اضغط للكتابة في صفحة كاملة" }, minLines = 3, maxLines = 5, overflow = TextOverflow.Ellipsis)
+                            RuledAgendaPreview(text, onOpen = { editingText = true; showTools = false })
                         }
                     }
                     Text("الكتابة بالقلم", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)

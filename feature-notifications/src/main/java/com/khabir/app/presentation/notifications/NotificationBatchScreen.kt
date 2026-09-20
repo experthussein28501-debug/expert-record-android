@@ -681,7 +681,7 @@ private fun ManualRecipientCard(
                 )
             }
             Spacer(Modifier.height(8.dp))
-            KhabirTextField(state.manualAddress, viewModel::onManualAddressChanged, label = { Text("العنوان") }, modifier = Modifier.fillMaxWidth(), trailingIcon = { IconButton(onClick = { onVoice(NotificationVoiceTarget.ADDRESS) }) { Icon(Icons.Filled.Mic, "إملاء العنوان") } })
+            KhabirTextField(state.manualAddress, viewModel::onManualAddressChanged, label = { Text(if (state.manualRole == PartyRole.LAWYER) "مدينة المحامي" else "العنوان") }, modifier = Modifier.fillMaxWidth(), trailingIcon = { IconButton(onClick = { onVoice(NotificationVoiceTarget.ADDRESS) }) { Icon(Icons.Filled.Mic, "إملاء العنوان") } })
             Spacer(Modifier.height(8.dp))
             FilledTonalButton(onClick = viewModel::onAddManualRecipient, modifier = Modifier.fillMaxWidth()) { Text("حفظ الطرف وإضافة طرف آخر") }
             if (state.manualRecipients.isNotEmpty()) {
