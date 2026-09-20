@@ -15,8 +15,8 @@ android {
 }
 dependencies {
     implementation(project(":core"))
-    implementation("com.google.dagger:hilt-android:2.51.1")
-    ksp("com.google.dagger:hilt-compiler:2.51.1")
+    implementation("com.google.dagger:hilt-android:2.58")
+    ksp("com.google.dagger:hilt-compiler:2.58")
     testImplementation("junit:junit:4.13.2")
 }
 

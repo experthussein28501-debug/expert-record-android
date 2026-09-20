@@ -48,7 +48,10 @@ async function currentEntitlements(uid) {
   let subscriptionUntil = 0;
   for (const record of records.docs) {
     // Revalidate refunds, cancellations and expiry; no device boolean grants premium.
-    const { expiry } = await fetchSubscription(record.get('token'), uid);
+    const { expiry } = await fetchSubscription(record.get('token'), uid).catch(error => {
+      if ([404, 410].includes(error.response?.status)) return { expiry: 0 };
+      throw error;
+    });
     subscriptionUntil = Math.max(subscriptionUntil, expiry);
     await record.ref.update({ expiry, checkedAt: Date.now() });
   }
@@ -77,7 +80,22 @@ export const api = onRequest({ region: 'europe-west1', maxInstances: 10, cors: f
       await recordPurchase(req.body?.purchaseToken, uid);
       res.json(await currentEntitlements(uid)); return;
     }
+    if (action === 'deleteAccount') {
+      if (Date.now() / 1000 - identity.auth_time > 300) { res.status(401).json({ error: 'Recent sign-in required' }); return; }
+      // Mark first, so retries and delayed SSV callbacks cannot recreate rewards.
+      await userRef(uid).set({ deleting: true }, { merge: true });
+      for (const collection of ['rewardSessions', 'rewardTransactions', 'playPurchases']) {
+        const records = await db.collection(collection).where('uid', '==', uid).get();
+        const writer = db.bulkWriter();
+        records.docs.forEach(record => writer.delete(record.ref));
+        await writer.close();
+      }
+      await getAuth().deleteUser(uid);
+      await userRef(uid).delete();
+      res.json({ deleted: true }); return;
+    }
     if (action === 'rewardSession') {
+      if ((await userRef(uid).get()).get('deleting')) throw new Error('Account deletion pending');
       const e = await currentEntitlements(uid);
       if (!e.adsEnabled || Date.now() < e.adsStartAt || e.subscriptionUntil > Date.now()) { res.status(409).json({ error: 'Rewards unavailable' }); return; }
       const sessionId = randomUUID();
@@ -119,6 +137,7 @@ export const rewardSsv = onRequest({ region: 'europe-west1', maxInstances: 10 },
     await db.runTransaction(async tx => {
       const [session, transaction, account] = await Promise.all([tx.get(sessionRef), tx.get(transactionRef), tx.get(accountRef)]);
       if (transaction.exists) return; // A retry of a signed callback is idempotent.
+      if (account.get('deleting')) throw new Error('Account deletion pending');
       const signedAt = Number(verified.timestamp);
       if (!session.exists || session.get('uid') !== verified.user_id || session.get('consumed') ||
           signedAt < session.get('createdAt') - 60_000 || signedAt > session.get('expiresAt').toMillis()) throw new Error('Invalid reward session');

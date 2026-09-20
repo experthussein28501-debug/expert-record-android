@@ -338,8 +338,11 @@ class CaseFormViewModel @Inject constructor(
     fun dismissDocumentReview() = _uiState.update { it.copy(documentReview = emptyList()) }
 
     fun clearPendingDocuments() {
+        if (_uiState.value.isOcrProcessing) return
+        val hadDocuments = _uiState.value.pendingPagePaths.isNotEmpty()
         _uiState.value.pendingPagePaths.forEach { File(it).delete() }
         _uiState.update { it.copy(pendingPagePaths = emptyList(), documentReview = emptyList(), aiFailureMessage = null) }
+        if (hadDocuments) com.khabir.app.data.monetization.WorkAdEvents.finished()
     }
 
     private suspend fun useLocalOcrFallback(bitmap: Bitmap, reason: String) {

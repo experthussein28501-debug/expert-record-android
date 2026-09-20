@@ -7,6 +7,8 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 
 /** Events are never replayed: an unloaded ad cannot interrupt subsequent work. */
 object WorkAdEvents {
+    val interactions = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    fun interacted() { interactions.tryEmit(Unit) }
     val boundaries = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     private val blockers = mutableSetOf<Any>()
     @Synchronized fun block(token: Any) { blockers.add(token) }

@@ -27,7 +27,7 @@ internal fun RuledAgendaEditor(value: String, onValueChange: (String) -> Unit, m
         Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             BasicTextField(
                 value = value,
-                onValueChange = onValueChange,
+                onValueChange = { com.khabir.app.data.monetization.WorkAdEvents.interacted(); onValueChange(it) },
                 cursorBrush = SolidColor(Color(0xFF80601F)),
                 textStyle = TextStyle(color = Color(0xFF222222), fontSize = 18.sp, lineHeight = 34.sp, textDirection = TextDirection.ContentOrRtl),
                 modifier = Modifier.fillMaxWidth().heightIn(min = pageHeight).padding(horizontal = 18.dp, vertical = 12.dp)

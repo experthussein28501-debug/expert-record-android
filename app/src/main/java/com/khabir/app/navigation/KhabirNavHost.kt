@@ -148,7 +148,10 @@ fun KhabirNavHost() {
             )
         }
 
-        composable(Routes.BENEFITS) { com.khabir.app.monetization.BenefitsScreen(onBack = { navController.popBackStack() }) }
+        composable(Routes.BENEFITS) { com.khabir.app.monetization.BenefitsScreen(onBack = { navController.popBackStack() }, onAccountDeleted = {
+            entryGate.showGateAgain()
+            navController.navigate(Routes.LOGIN) { popUpTo(Routes.HOME) { inclusive = true } }
+        }) }
 
         composable(Routes.BACKUP) { BackupScreen(onBack = { navController.popBackStack() }) }
         composable(Routes.REGISTERS) { RegisterScreen(onBack = { navController.popBackStack() }) }

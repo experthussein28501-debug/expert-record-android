@@ -22,11 +22,18 @@ import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BenefitsScreen(onBack: () -> Unit) {
+fun BenefitsScreen(onBack: () -> Unit, onAccountDeleted: () -> Unit) {
     val controller = LocalMonetization.current ?: return
     val context = LocalContext.current
+    var confirmDelete by remember { mutableStateOf(false) }
     val entitlement = controller.entitlement
     val activeSubscription = entitlement.fresh() && entitlement.subscriptionUntil > entitlement.now()
+    if (confirmDelete) AlertDialog(
+        onDismissRequest = { if (!controller.busy) confirmDelete = false }, title = { Text("حذف الحساب؟") },
+        text = { Text("سيُحذف حساب الدخول ورصيد المكافآت وربط الاشتراك. ستظل ملفاتك المحلية على الجهاز. حذف الحساب لا يلغي التجديد في Google Play؛ ألغِ الاشتراك من المتجر إذا أردت إيقاف الدفع.") },
+        confirmButton = { TextButton(enabled = !controller.busy, onClick = { controller.deleteAccount { confirmDelete = false; onAccountDeleted() } }) { Text("حذف حسابي") } },
+        dismissButton = { TextButton(enabled = !controller.busy, onClick = { confirmDelete = false }) { Text("رجوع") } }
+    )
     Scaffold(topBar = { TopAppBar(title = { Text("المهام والاشتراك") }, navigationIcon = {
         IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") }
     }) }) { padding ->
@@ -66,6 +73,10 @@ fun BenefitsScreen(onBack: () -> Unit) {
                 runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/account/subscriptions?sku=${PlayBillingManager.PRODUCT_ID}&package=${context.packageName}"))) }
             }) { Text("إدارة الاشتراك وإلغاؤه") }
             if (controller.privacyOptionsRequired()) TextButton(onClick = controller::showPrivacyOptions) { Text("اختيارات خصوصية الإعلانات") }
+            if (BuildConfig.PRIVACY_POLICY_URL.startsWith("https://")) TextButton(onClick = {
+                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(BuildConfig.PRIVACY_POLICY_URL))) }
+            }) { Text("سياسة الخصوصية") }
+            TextButton(enabled = controller.api.configured && !controller.busy && entitlement.uid.isNotBlank(), onClick = { confirmDelete = true }) { Text("حذف حسابي") }
             if (controller.message.isNotBlank()) Text(controller.message)
             InlineHelp("بداية الإعلانات", "تبدأ الإعلانات بعد مرور شهرين على إطلاق التطبيق في Google Play. يحصل الحساب الجديد على شهر مجاني من أول تسجيل دخول. يبدأ الإعلان عند انتهاء الفترتين، وبعد ٢٠ دقيقة استخدام فعلي وعند إنهاء عملك فقط.")
         }

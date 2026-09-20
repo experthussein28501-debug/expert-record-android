@@ -624,6 +624,7 @@ class GeminiDocumentVisionService @Inject constructor(private val personalKeySto
 
     private fun geminiRequest(key: String, endpoint: String, payload: String? = null): JSONObject {
         val connection = openGeminiConnection(endpoint).apply {
+            instanceFollowRedirects = false
             requestMethod = if (payload == null) "GET" else "POST"
             connectTimeout = 30_000
             readTimeout = if (payload == null) 30_000 else 180_000

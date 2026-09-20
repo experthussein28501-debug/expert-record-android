@@ -21,10 +21,10 @@ android {
     sourceSets["main"].assets.srcDir("../app/src/main/assets")
 }
 dependencies {
-    implementation("com.google.dagger:hilt-android:2.51.1")
+    implementation("com.google.dagger:hilt-android:2.58")
     implementation(project(":core"))
     implementation(project(":feature-notifications"))
-    ksp("com.google.dagger:hilt-android-compiler:2.51.1")
+    ksp("com.google.dagger:hilt-android-compiler:2.58")
 }
 
 // Same KSP snapshot exclusion as the integration app.

@@ -38,6 +38,9 @@ android {
         versionCode = 99
         versionName = "0.9.9-play-preparation"
         buildConfigField("String", "MONETIZATION_BASE_URL", "\"${providers.gradleProperty("KHABIR_MONETIZATION_BASE_URL").orNull.orEmpty()}\"")
+        listOf("PRIVACY_POLICY_URL", "ACCOUNT_DELETION_URL").forEach { key ->
+            buildConfigField("String", key, "\"${providers.gradleProperty("KHABIR_$key").orNull.orEmpty()}\"")
+        }
         listOf("BANNER", "INTERSTITIAL", "REWARDED").forEach { kind ->
             buildConfigField("String", "ADMOB_${kind}_ID", "\"${providers.gradleProperty("KHABIR_ADMOB_${kind}_ID").orNull.orEmpty()}\"")
         }
@@ -195,18 +198,18 @@ dependencies {
     implementation("com.google.firebase:firebase-auth:23.0.0")
     implementation("com.google.firebase:firebase-common:21.0.0")
 
-    val cameraXVersion = "1.3.4"
+    val cameraXVersion = "1.4.2"
     implementation("androidx.camera:camera-core:$cameraXVersion")
     implementation("androidx.camera:camera-camera2:$cameraXVersion")
     implementation("androidx.camera:camera-lifecycle:$cameraXVersion")
     implementation("androidx.camera:camera-view:$cameraXVersion")
 
-    implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1")
-    ksp("androidx.room:room-compiler:2.6.1")
+    implementation("androidx.room:room-runtime:2.8.4")
+    implementation("androidx.room:room-ktx:2.8.4")
+    ksp("androidx.room:room-compiler:2.8.4")
 
-    implementation("com.google.dagger:hilt-android:2.51.1")
-    ksp("com.google.dagger:hilt-android-compiler:2.51.1")
+    implementation("com.google.dagger:hilt-android:2.58")
+    ksp("com.google.dagger:hilt-android-compiler:2.58")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
@@ -221,3 +224,18 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
 
+
+val validatePlayRelease by tasks.registering {
+    doLast {
+        check(uploadSigningReady) { "A stable upload keystore is required for the Play release." }
+        listOf("KHABIR_FIREBASE_API_KEY", "KHABIR_FIREBASE_APP_ID", "KHABIR_FIREBASE_PROJECT_ID", "KHABIR_GOOGLE_WEB_CLIENT_ID", "KHABIR_MONETIZATION_BASE_URL", "KHABIR_PRIVACY_POLICY_URL", "KHABIR_ACCOUNT_DELETION_URL").forEach { key ->
+            check(!providers.gradleProperty(key).orNull.isNullOrBlank()) { "Missing release configuration: $key" }
+        }
+        check(providers.gradleProperty("KHABIR_MONETIZATION_BASE_URL").get().startsWith("https://"))
+        listOf("KHABIR_ADMOB_APP_ID", "KHABIR_ADMOB_BANNER_ID", "KHABIR_ADMOB_INTERSTITIAL_ID", "KHABIR_ADMOB_REWARDED_ID").forEach { key ->
+            val value = providers.gradleProperty(key).orNull.orEmpty()
+            check(value.startsWith("ca-app-pub-") && !value.contains("3940256099942544")) { "Production AdMob configuration required: $key" }
+        }
+    }
+}
+tasks.matching { it.name == "preCombinedReleaseBuild" }.configureEach { dependsOn(validatePlayRelease) }

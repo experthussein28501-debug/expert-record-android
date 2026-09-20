@@ -37,6 +37,7 @@ class MonetizationController(private val activity: Activity) {
     private var showing = false
     var homeVisible = false
     private var refreshing = false
+    private var clockEnabled = false
     private val authListener = com.google.firebase.auth.FirebaseAuth.AuthStateListener {
         entitlement = Entitlements(); product = null; clearAds()
         scope.launch { refresh(); billing.connect(); if (homeVisible) prepareAds() }
@@ -45,6 +46,13 @@ class MonetizationController(private val activity: Activity) {
 
     init {
         GoogleSession.auth(activity)?.addAuthStateListener(authListener)
+        scope.launch { WorkAdEvents.interactions.collect { onInteraction() } }
+        scope.launch {
+            while (isActive) {
+                delay(5 * 60_000L)
+                if (foreground) { refresh(); preload() }
+            }
+        }
         scope.launch {
             WorkAdEvents.boundaries.collect {
                 // Let the UI close its review/capture surface before checking blockers.
@@ -54,11 +62,20 @@ class MonetizationController(private val activity: Activity) {
         }
     }
     fun onResume() {
-        foreground = true; clock.resume(SystemClock.elapsedRealtime())
+        foreground = true; syncClock()
         scope.launch { refresh(); billing.connect(); if (homeVisible) prepareAds() }
     }
-    fun onPause() { foreground = false; clock.pause(SystemClock.elapsedRealtime()) }
-    fun onInteraction() { if (!showing && !busy) clock.interact(SystemClock.elapsedRealtime()) }
+    fun onPause() { foreground = false; clock.pause(SystemClock.elapsedRealtime()); clockEnabled = false }
+    fun onInteraction() { syncClock(); if (clockEnabled && !showing && !busy) clock.interact(SystemClock.elapsedRealtime()) }
+    private fun syncClock() {
+        val enabled = foreground && !showing && entitlement.canAdvertise() && sameAccount()
+        if (enabled && !clockEnabled) clock.resume(SystemClock.elapsedRealtime())
+        if (!enabled && clockEnabled) {
+            clock.pause(SystemClock.elapsedRealtime())
+            if (!entitlement.canAdvertise()) clock.adShown(SystemClock.elapsedRealtime())
+        }
+        clockEnabled = enabled
+    }
     suspend fun refresh() {
         if (refreshing) return
         if (!api.configured || GoogleSession.auth(activity)?.currentUser == null) { entitlement = Entitlements(); return }
@@ -68,6 +85,7 @@ class MonetizationController(private val activity: Activity) {
         catch (_: Exception) { message = "تعذر تحديث الاشتراكات والمكافآت الآن" }
         finally { refreshing = false }
         if (!entitlement.canAdvertise()) interstitial = null
+        syncClock()
     }
     fun onHomeVisible(visible: Boolean) {
         homeVisible = visible
@@ -118,7 +136,7 @@ class MonetizationController(private val activity: Activity) {
         if (!foreground || showing || busy || WorkAdEvents.isBlocked() || !entitlement.canAdvertise() || !sameAccount() || !consent.canRequestAds() || !clock.isDue(now)) return
         val ad = interstitial ?: run { preload(); return }
         if (now - loadedInterstitialAt > 55 * 60_000L) { interstitial = null; preload(); return }
-        interstitial = null; showing = true; clock.pause(now)
+        interstitial = null; showing = true; clock.pause(now); clockEnabled = false
         ad.fullScreenContentCallback = object : FullScreenContentCallback() {
             override fun onAdShowedFullScreenContent() { clock.adShown(SystemClock.elapsedRealtime()) }
             override fun onAdDismissedFullScreenContent() { finishFullScreen() }
@@ -126,7 +144,7 @@ class MonetizationController(private val activity: Activity) {
         }
         ad.show(activity)
     }
-    private fun finishFullScreen() { showing = false; if (foreground) clock.resume(SystemClock.elapsedRealtime()); preload() }
+    private fun finishFullScreen() { showing = false; syncClock(); preload() }
     fun watchReward() {
         if (!foreground || busy || showing || !canUseAds() || !consent.canRequestAds()) return
         val ad = rewarded ?: run { preload(); message = "الإعلان غير جاهز الآن"; return }
@@ -137,7 +155,7 @@ class MonetizationController(private val activity: Activity) {
                 val session = api.call("rewardSession").getString("sessionId")
                 if (!foreground || !canUseAds()) return@launch
                 ad.setServerSideVerificationOptions(ServerSideVerificationOptions.Builder().setUserId(entitlement.uid).setCustomData(session).build())
-                rewarded = null; rewardReady = false; showing = true; clock.pause(SystemClock.elapsedRealtime())
+                rewarded = null; rewardReady = false; showing = true; clock.pause(SystemClock.elapsedRealtime()); clockEnabled = false
                 ad.fullScreenContentCallback = object : FullScreenContentCallback() {
                     override fun onAdDismissedFullScreenContent() {
                         finishFullScreen()
@@ -150,6 +168,19 @@ class MonetizationController(private val activity: Activity) {
                 ad.show(activity) { message = "اكتملت المشاهدة. جارٍ تأكيد المكافأة…" }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { message = "تعذر بدء الإعلان الآن" }
+            finally { busy = false }
+        }
+    }
+    fun deleteAccount(onDeleted: () -> Unit) {
+        if (busy) return
+        busy = true
+        scope.launch {
+            try {
+                api.call("deleteAccount")
+                GoogleSession.auth(activity)?.signOut()
+                entitlement = Entitlements(); clearAds(); onDeleted()
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { message = "تعذر حذف الحساب. سجل الدخول مرة أخرى ثم أعد المحاولة خلال خمس دقائق." }
             finally { busy = false }
         }
     }

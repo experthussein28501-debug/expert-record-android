@@ -60,12 +60,12 @@ dependencies {
     // Gemini uses a protected HTTPS gateway configured at build time. The API key
     // remains on the protected gateway and is never packaged inside this app.
 
-    api("androidx.room:room-runtime:2.6.1")
-    api("androidx.room:room-ktx:2.6.1")
-    ksp("androidx.room:room-compiler:2.6.1")
+    api("androidx.room:room-runtime:2.8.4")
+    api("androidx.room:room-ktx:2.8.4")
+    ksp("androidx.room:room-compiler:2.8.4")
 
-    api("com.google.dagger:hilt-android:2.51.1")
-    ksp("com.google.dagger:hilt-android-compiler:2.51.1")
+    api("com.google.dagger:hilt-android:2.58")
+    ksp("com.google.dagger:hilt-android-compiler:2.58")
     api("androidx.hilt:hilt-navigation-compose:1.2.0")
     api("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     api("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")

@@ -83,6 +83,7 @@ fun AgendaScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val saveError by viewModel.saveError.collectAsState()
+    val saving by viewModel.isSaving.collectAsState()
     saveError?.let { message -> AlertDialog(onDismissRequest = { viewModel.saveError.value = null }, text = { Text(message) }, confirmButton = { TextButton(onClick = { viewModel.saveError.value = null }) { Text("حسنًا") } }) }
     Scaffold(
         topBar = {
@@ -122,6 +123,7 @@ fun AgendaScreen(
         val summary = state.days[date] ?: AgendaDaySummary(date)
         AgendaDayDialog(
             summary = summary,
+            saving = saving,
             onDismiss = viewModel::closeDay,
             onSave = { text, strokes, images, manualAppointments ->
                 viewModel.saveDay(date, text, strokes, images, manualAppointments)
@@ -214,7 +216,8 @@ private fun AgendaDayCell(summary: AgendaDaySummary, onClick: (LocalDate) -> Uni
 internal fun AgendaDayDialog(
     summary: AgendaDaySummary,
     onDismiss: () -> Unit,
-    onSave: (String, List<AgendaStroke>, List<String>, List<AgendaManualAppointment>) -> Unit
+    onSave: (String, List<AgendaStroke>, List<String>, List<AgendaManualAppointment>) -> Unit,
+    saving: Boolean = false
 ) {
     val context = LocalContext.current
     var text by rememberSaveable(summary.date) { mutableStateOf(summary.note?.text.orEmpty()) }
@@ -260,7 +263,7 @@ internal fun AgendaDayDialog(
         }
     }
     fun requestClose() {
-        if (readingImage) return
+        if (readingImage || saving) return
         if (editingText) editingText = false
         else if (text != summary.note?.text.orEmpty() || strokes.toList() != summary.note?.strokes.orEmpty() ||
             images.toList() != summary.note?.imagePaths.orEmpty() || manualAppointments.toList() != summary.note?.manualAppointments.orEmpty()) confirmClose = true
@@ -534,12 +537,12 @@ internal fun AgendaDayDialog(
 
                 }
                 Button(
-                    enabled = !readingImage,
+                    enabled = !readingImage && !saving,
                     onClick = { onSave(text, strokes.toList(), images.toList(), manualAppointments.toList()) },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("agenda-save")
                 ) {
                     Icon(Icons.Filled.Save, null)
-                    Text("حفظ اليوم", fontWeight = FontWeight.Bold)
+                    Text(if (saving) "جارٍ الحفظ…" else "حفظ اليوم", fontWeight = FontWeight.Bold)
                 }
             }
         }

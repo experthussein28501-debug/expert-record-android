@@ -172,6 +172,7 @@ private fun NewBatchSection(state: NotificationScreenUiState, viewModel: Notific
             reviewedParties = PetitionIntakeParser.parse(recognized).parties
         }
     }
+    com.khabir.app.data.monetization.BlockWorkAds(showInAppCamera || state.isOcrProcessing || state.ocrReviewText != null || state.isCreating)
     val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
             if (pendingLensCamera) showLensCamera = true else showInAppCamera = true
