@@ -16,6 +16,7 @@ class AgendaRuntimeTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
 
     @Test fun fullPageWritingSavesAndReopensOnDevice() {
+        InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand("am force-stop com.android.launcher3").close()
         compose.onNodeWithText("كود التفعيل").assertDoesNotExist()
         snapshot("01-login")
         compose.onNodeWithText("فتح النسخة التجريبية").performClick()
@@ -48,7 +49,10 @@ class AgendaRuntimeTest {
     private fun snapshot(name: String) {
         compose.waitForIdle()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val image = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        val automation = instrumentation.uiAutomation
+        val root = automation.rootInActiveWindow
+        check(root?.findAccessibilityNodeInfosByText("isn't responding").isNullOrEmpty()) { "System ANR dialog obstructs the screenshot" }
+        val image = checkNotNull(automation.takeScreenshot())
         try {
             val resolver = instrumentation.targetContext.contentResolver
             val values = android.content.ContentValues().apply {
