@@ -4,7 +4,7 @@ import com.khabir.app.domain.model.LawyerNotification
 import com.khabir.app.domain.model.PartyRole
 
 internal object LawyerIntakeParser {
-    fun parse(text: String): List<PetitionIntakeParser.ParsedParty> = text.lines().mapNotNull { raw ->
+    fun parse(text: String): List<PetitionIntakeParser.ParsedParty> = text.replace(Regex("\\n\\s*(?=المحام[يى]\\s*(?:ب|في|فى))"), " ").lines().mapNotNull { raw ->
         val line = raw.trim()
         val structured = Regex("^(?:المحامي|المحامى|مخاطبة المحامي)\\s*:").find(line)
         val name: String
@@ -17,7 +17,7 @@ internal object LawyerIntakeParser {
         } else {
             val match = Regex("(?:مكتب\\s+)?(?:الأستاذ|الاستاذ|الأستاذة|الاستاذة|أ\\.)\\s*[/：:]?\\s*(.+?)\\s+المحام[يى](?:\\s*(?:ب|في|فى)\\s*([^،؛.\\n]+))?(?:$|[،؛.])").find(line) ?: return@mapNotNull null
             name = match.groupValues[1].trim()
-            city = match.groupValues[2].substringBefore(" والكائن").substringBefore(" الكائن").substringBefore(" وشارع").substringBefore(" شارع")
+            city = match.groupValues[2].substringBefore(" ضد ").substringBefore(" أنا ").substringBefore(" انا ").substringBefore(" والكائن").substringBefore(" الكائن").substringBefore(" وشارع").substringBefore(" شارع")
         }
         val cleanName = name.replace(Regex("^(?:الأستاذ|الاستاذ|الأستاذة|أ\\.)\\s*[/：:]?\\s*"), "").trim()
         if (cleanName.isBlank() || cleanName.contains("غير مذكور")) null

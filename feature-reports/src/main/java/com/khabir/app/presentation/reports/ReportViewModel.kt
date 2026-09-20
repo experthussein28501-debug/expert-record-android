@@ -64,6 +64,7 @@ data class ReportUiState(
     val depositDate: LocalDate? = null,
     val updatedAt: Long = 0L,
     val caseUpdates: List<com.khabir.app.domain.model.CaseFieldUpdate> = emptyList(),
+    val pageRetryMessage: String = "",
     val canRetryPages: Boolean = false,
     val isLeaving: Boolean = false,
     val isLoading: Boolean = true,
@@ -182,9 +183,14 @@ class ReportViewModel @Inject constructor(
                 val case = caseRepository.getById(caseId) ?: error("تعذر العثور على القضية")
                 val state = _uiState.value
                 val current = mapOf("رقم الدعوى" to state.caseNo, "السنة" to state.caseYear, "المحكمة" to state.court,
-                    "الخصوم" to state.partiesSummary, "موضوع الدعوى" to state.subjectOfCase, "المأمورية" to state.assignment)
+                    "الخصوم" to state.partiesSummary, "موضوع الدعوى" to state.subjectOfCase, "المأمورية" to state.assignment,
+                    "المدعون في الغلاف" to state.customSectionContents[com.khabir.app.domain.model.ReportCaseSnapshot.PLAINTIFFS].orEmpty(),
+                    "المدعى عليهم في الغلاف" to state.customSectionContents[com.khabir.app.domain.model.ReportCaseSnapshot.DEFENDANTS].orEmpty())
                 pendingCasePartySnapshot = com.khabir.app.domain.model.ReportCaseSnapshot.parties(case)
-                val updates = com.khabir.app.domain.model.CaseDocumentFields.report(case).mapNotNull { (key, value) ->
+                val proposed = com.khabir.app.domain.model.CaseDocumentFields.report(case) + mapOf(
+                    "المدعون في الغلاف" to pendingCasePartySnapshot[com.khabir.app.domain.model.ReportCaseSnapshot.PLAINTIFFS].orEmpty(),
+                    "المدعى عليهم في الغلاف" to pendingCasePartySnapshot[com.khabir.app.domain.model.ReportCaseSnapshot.DEFENDANTS].orEmpty())
+                val updates = proposed.mapNotNull { (key, value) ->
                     if (current[key] == value) null else com.khabir.app.domain.model.CaseFieldUpdate(key, current[key].orEmpty(), value)
                 }
                 _uiState.update { it.copy(caseUpdates = updates, autoSaveStatus = if (updates.isEmpty()) "بيانات القضية مطابقة للمحفوظ" else it.autoSaveStatus) }
@@ -198,7 +204,10 @@ class ReportViewModel @Inject constructor(
             state.copy(caseNo = changes["رقم الدعوى"] ?: state.caseNo, caseYear = changes["السنة"] ?: state.caseYear,
                 court = changes["المحكمة"] ?: state.court, partiesSummary = changes["الخصوم"] ?: state.partiesSummary,
                 subjectOfCase = changes["موضوع الدعوى"] ?: state.subjectOfCase, assignment = changes["المأمورية"] ?: state.assignment,
-                customSectionContents = if ("الخصوم" in changes) state.customSectionContents + pendingCasePartySnapshot else state.customSectionContents,
+                customSectionContents = state.customSectionContents + buildMap {
+                    changes["المدعون في الغلاف"]?.let { put(com.khabir.app.domain.model.ReportCaseSnapshot.PLAINTIFFS, it) }
+                    changes["المدعى عليهم في الغلاف"]?.let { put(com.khabir.app.domain.model.ReportCaseSnapshot.DEFENDANTS, it) }
+                },
                 caseUpdates = emptyList())
         }
     }
@@ -359,7 +368,7 @@ class ReportViewModel @Inject constructor(
             retryFiles = pageFiles
             retryPageRead = { onDocumentPagesCaptured(pageFiles, useAi) }
             val result = multiPageReader.read(pageFiles, LegalDocumentPurpose.REPORT, useAi)
-            _uiState.update { it.copy(canRetryPages = result.text.isBlank()) }
+            _uiState.update { it.copy(canRetryPages = result.text.isBlank(), pageRetryMessage = result.warnings.joinToString("\n")) }
             _uiState.update {
                 if (result.text.isBlank()) it.copy(
                     isOcrProcessing = false,
@@ -380,7 +389,7 @@ class ReportViewModel @Inject constructor(
             retryFiles = pageFiles
             retryPageRead = { onPetitionSubjectPagesCaptured(pageFiles, useAi) }
             val result = multiPageReader.read(pageFiles, LegalDocumentPurpose.PETITION_SUBJECT, useAi)
-            _uiState.update { it.copy(canRetryPages = result.text.isBlank()) }
+            _uiState.update { it.copy(canRetryPages = result.text.isBlank(), pageRetryMessage = result.warnings.joinToString("\n")) }
             _uiState.update {
                 if (result.text.isBlank()) it.copy(
                     isOcrProcessing = false,

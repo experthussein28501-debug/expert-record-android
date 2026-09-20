@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package com.khabir.app.presentation.notifications
 
 import android.Manifest
@@ -574,14 +576,14 @@ private fun OcrReviewDialog(
                                 modifier = Modifier.fillMaxWidth()
                             )
                             KhabirTextField(
-                                value = party.address,
+                                value = if (party.role == PartyRole.LAWYER) com.khabir.app.domain.model.LawyerNotification.city(party.address) else party.address,
                                 onValueChange = { value ->
                                     onReviewedPartiesChange(reviewedParties.toMutableList().also { list -> list[index] = party.copy(address = value) })
                                 },
-                                label = { Text("العنوان") },
+                                label = { Text(if (party.role == PartyRole.LAWYER) "مدينة المحامي" else "العنوان") },
                                 modifier = Modifier.fillMaxWidth()
                             )
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 PartyRole.entries.forEach { role ->
                                     FilterChip(
                                         selected = party.role == role,

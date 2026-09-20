@@ -251,7 +251,7 @@ class CaseFormViewModel @Inject constructor(
             _uiState.update {
                 if (result.text.isBlank()) it.copy(
                     isOcrProcessing = false,
-                    aiFailureMessage = result.aiError ?: result.warnings.firstOrNull() ?: "لم يتم استخراج نص من الصور",
+                    aiFailureMessage = result.aiError ?: result.warnings.joinToString("\n").takeIf(String::isNotBlank) ?: "لم يتم استخراج نص من الصور",
                     ocrMessage = null
                 ) else it.copy(
                     isOcrProcessing = false,
@@ -281,7 +281,7 @@ class CaseFormViewModel @Inject constructor(
             _uiState.update {
                 if (result.text.isBlank()) it.copy(
                     isOcrProcessing = false,
-                    ocrMessage = result.warnings.firstOrNull() ?: "لم يتم استخراج نص من الصور"
+                    ocrMessage = result.warnings.joinToString("\n").takeIf(String::isNotBlank) ?: "لم يتم استخراج نص من الصور"
                 ) else it.copy(
                     isOcrProcessing = false,
                     voiceReviewText = result.text,

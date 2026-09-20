@@ -24,6 +24,11 @@ class LawyerNotificationTest {
         assertEquals("أحمد محمد", lawyer.name)
         assertEquals("محكمة كوم أمبو — نقابة المحامين بكوم أمبو", lawyer.address)
     }
+    @Test fun splitLawyerTitleAndCityRemainLinkedToTheName() {
+        val lawyer = LawyerIntakeParser.parse("ومحله المختار مكتب الأستاذ أحمد محمد\nالمحامي بأسوان، شارع تجريبي").single()
+        assertEquals("أحمد محمد", lawyer.name)
+        assertEquals("محكمة أسوان — نقابة المحامين بأسوان", lawyer.address)
+    }
     @Test fun roleSurvivesDatabaseStringRoundTripWithoutBecomingALitigant() {
         val lawyer = Party(firstName = "أحمد", restName = "محمد", role = PartyRole.LAWYER, address = LawyerNotification.address("إدفو"), orderIndex = 0)
         assertEquals(PartyRole.LAWYER, PartyRole.parseStored(lawyer.storedRoleValue).first)

@@ -71,7 +71,7 @@ fun WorkMinutesScreen(onBack: () -> Unit, viewModel: WorkMinutesViewModel = hilt
     if (state.caseUpdates.isNotEmpty()) com.khabir.app.presentation.components.CaseUpdatesDialog(
         state.caseUpdates, viewModel::dismissCaseUpdates, viewModel::applyCaseUpdates)
     if (state.canRetryPages) AlertDialog(onDismissRequest = {}, title = { Text("الصفحات لم تكتمل") },
-        text = { Text(state.errorMessage ?: "لم يتم اعتماد نص ناقص. يمكنك إعادة القراءة أو إلغاء المجموعة وإعادة التصوير.") },
+        text = { Text(state.pageRetryMessage.ifBlank { "لم يتم اعتماد نص ناقص. يمكنك إعادة القراءة أو إلغاء المجموعة وإعادة التصوير." }) },
         confirmButton = { TextButton(onClick = viewModel::retryPages) { Text("إعادة المحاولة") } },
         dismissButton = { TextButton(onClick = viewModel::cancelPageRetry) { Text("إلغاء المجموعة") } })
     val context = LocalContext.current

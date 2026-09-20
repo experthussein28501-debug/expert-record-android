@@ -77,7 +77,7 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
     if (state.caseUpdates.isNotEmpty()) com.khabir.app.presentation.components.CaseUpdatesDialog(
         state.caseUpdates, viewModel::dismissCaseUpdates, viewModel::applyCaseUpdates)
     if (state.canRetryPages) AlertDialog(onDismissRequest = {}, title = { Text("الصفحات لم تكتمل") },
-        text = { Text(state.errorMessage ?: "لم يتم اعتماد نص ناقص. يمكنك إعادة القراءة أو إلغاء المجموعة وإعادة التصوير.") },
+        text = { Text(state.pageRetryMessage.ifBlank { "لم يتم اعتماد نص ناقص. يمكنك إعادة القراءة أو إلغاء المجموعة وإعادة التصوير." }) },
         confirmButton = { TextButton(onClick = viewModel::retryPages) { Text("إعادة المحاولة") } },
         dismissButton = { TextButton(onClick = viewModel::cancelPageRetry) { Text("إلغاء المجموعة") } })
     val context = LocalContext.current
@@ -236,6 +236,8 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
             FileAction.PRINT -> if (mime == ReportViewModel.PDF_MIME) {
                 val pm = context.getSystemService(Context.PRINT_SERVICE) as PrintManager
                 pm.print("تقرير ${state.caseNo}/${state.caseYear}", PdfUriPrintAdapter(context, uri, "report.pdf"), PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).build())
+            } else {
+                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW).apply { setDataAndType(uri, mime); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }) }
             }
         }
         pendingAction = FileAction.OPEN
@@ -263,13 +265,14 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                             HorizontalDivider()
                             DropdownMenuItem(text = { Text("فتح نسخة Word") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.OPEN; viewModel.onExportWord() })
                             DropdownMenuItem(text = { Text("حفظ باسم Word") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.SAVE_AS; viewModel.onExportWord() })
-                            DropdownMenuItem(text = { Text("فتح نسخة PDF") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.OPEN; viewModel.onExportPdf() })
-                            DropdownMenuItem(text = { Text("حفظ باسم PDF") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.SAVE_AS; viewModel.onExportPdf() })
+                            DropdownMenuItem(text = { Text("فتح PDF بتنسيق التطبيق") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.OPEN; viewModel.onExportPdf() })
+                            DropdownMenuItem(text = { Text("حفظ PDF بتنسيق التطبيق") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.SAVE_AS; viewModel.onExportPdf() })
                             DropdownMenuItem(text = { Text("حفظ بيانات التقرير Excel") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.SAVE_AS; viewModel.onExportExcel() })
                             HorizontalDivider()
-                            DropdownMenuItem(text = { Text("طباعة مباشرة") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.PRINT; viewModel.onExportPdf() })
+                            if (state.savedWordTemplateUri.isNotBlank()) DropdownMenuItem(text = { Text("فتح القالب الشخصي للطباعة في Word") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.PRINT; viewModel.onUseSavedWordTemplate() })
+                            DropdownMenuItem(text = { Text("طباعة بتنسيق التطبيق") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.PRINT; viewModel.onExportPdf() })
                             DropdownMenuItem(text = { Text("مشاركة Word") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.SHARE; viewModel.onExportWord() })
-                            DropdownMenuItem(text = { Text("مشاركة PDF") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.SHARE; viewModel.onExportPdf() })
+                            DropdownMenuItem(text = { Text("مشاركة PDF بتنسيق التطبيق") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.SHARE; viewModel.onExportPdf() })
                             DropdownMenuItem(text = { Text("مشاركة Excel") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.SHARE; viewModel.onExportExcel() })
                         }
                     }

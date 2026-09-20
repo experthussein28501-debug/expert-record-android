@@ -43,6 +43,7 @@ data class WorkMinutesUiState(
     val copiesCount: Int = 1,
     val expandedEntryNumber: Int? = null,
     val caseUpdates: List<com.khabir.app.domain.model.CaseFieldUpdate> = emptyList(),
+    val pageRetryMessage: String = "",
     val canRetryPages: Boolean = false,
     val isLeaving: Boolean = false,
     val isSaving: Boolean = false,
@@ -255,7 +256,7 @@ class WorkMinutesViewModel @Inject constructor(
             retryFiles = pageFiles.take(10)
             retryPageRead = { onDocumentPagesCaptured(entryNumber, pageFiles, useAi) }
             val result = multiPageReader.read(pageFiles.take(10), LegalDocumentPurpose.REPORT, useAi)
-            _uiState.update { it.copy(canRetryPages = result.text.isBlank()) }
+            _uiState.update { it.copy(canRetryPages = result.text.isBlank(), pageRetryMessage = result.warnings.joinToString("\n")) }
             _uiState.update { state ->
                 if (result.text.isBlank()) state.copy(
                     isCaptureProcessing = false,

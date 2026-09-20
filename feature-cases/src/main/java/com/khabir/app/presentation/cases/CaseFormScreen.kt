@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package com.khabir.app.presentation.cases
 
 import android.Manifest
@@ -380,7 +382,7 @@ fun CaseFormScreen(
                                         KhabirTextField(party.restName, { value -> viewModel.updateParty(party.localId) { it.copy(restName = value) } }, label = { Text("باقي الاسم") }, modifier = Modifier.weight(1f))
                                     }
                                     KhabirTextField(if (party.role == PartyRole.LAWYER) com.khabir.app.domain.model.LawyerNotification.city(party.address) else party.address, { value -> viewModel.updateParty(party.localId) { it.copy(address = value) } }, label = { Text(if (party.role == PartyRole.LAWYER) "مدينة المحامي" else "العنوان") }, modifier = Modifier.fillMaxWidth())
-                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                         listOf(PartyRole.PLAINTIFF, PartyRole.DEFENDANT, PartyRole.LAWYER).forEach { role ->
                                             FilterChip(selected = party.role == role, onClick = { viewModel.updateParty(party.localId) { it.copy(role = role) } }, label = { Text(role.arabicLabel) })
                                         }
@@ -633,11 +635,11 @@ private fun VoiceReviewDialog(
                                 modifier = Modifier.weight(1f)
                             )
                             KhabirTextField(
-                                value = party.address,
+                                value = if (party.role == PartyRole.LAWYER) com.khabir.app.domain.model.LawyerNotification.city(party.address) else party.address,
                                 onValueChange = { value ->
                                     onReviewedPartiesChange(reviewedParties.toMutableList().also { list -> list[index] = party.copy(address = value) })
                                 },
-                                label = { Text("العنوان") },
+                                label = { Text(if (party.role == PartyRole.LAWYER) "مدينة المحامي" else "العنوان") },
                                 modifier = Modifier.weight(1f)
                             )
                             }
@@ -646,7 +648,7 @@ private fun VoiceReviewDialog(
                                 onValueChange = { value -> onReviewedPartiesChange(reviewedParties.toMutableList().also { list -> list[index] = party.copy(claimKind = value) }) },
                                 label = { Text("الدعوى: أصلية / فرعية") }, modifier = Modifier.fillMaxWidth()
                             )
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 listOf(PartyRole.PLAINTIFF, PartyRole.DEFENDANT, PartyRole.LAWYER).forEach { role ->
                                     FilterChip(
                                         selected = party.role == role,
