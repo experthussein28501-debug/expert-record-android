@@ -12,6 +12,8 @@ import com.khabir.app.data.ocr.MultiPageDocumentReader
 import com.khabir.app.data.ai.GeminiDocumentVisionService
 import com.khabir.app.data.ai.LegalDocumentPurpose
 import com.khabir.app.data.ai.PersonalAiKeyStore
+import com.khabir.app.presentation.cases.PetitionIntakeParser
+import com.khabir.app.presentation.cases.IntakeNarrative
 import com.khabir.app.domain.model.Report
 import com.khabir.app.domain.model.ReportCustomSectionCodec
 import com.khabir.app.domain.model.ReportSectionDefinition
@@ -410,20 +412,191 @@ class ReportViewModel @Inject constructor(
             _uiState.update { it.copy(isOcrProcessing = true, errorMessage = null) }
             retryFiles = pageFiles
             retryPageRead = { onPetitionSubjectPagesCaptured(pageFiles, useAi) }
-            val result = multiPageReader.read(pageFiles, LegalDocumentPurpose.PETITION_SUBJECT, useAi)
-            _uiState.update { it.copy(canRetryPages = result.text.isBlank(), pageRetryMessage = result.warnings.joinToString("\n")) }
-            _uiState.update {
-                if (result.text.isBlank()) it.copy(
+            try {
+                // Use the same intake parser as "إضافة قضية" so parties/case identity do not diverge.
+                val result = multiPageReader.read(pageFiles, LegalDocumentPurpose.PETITION, useAi)
+                _uiState.update { it.copy(canRetryPages = result.text.isBlank(), pageRetryMessage = result.warnings.joinToString("\n")) }
+                if (result.text.isBlank()) {
+                    _uiState.update { it.copy(
+                        isOcrProcessing = false,
+                        errorMessage = result.warnings.joinToString("\n").takeIf(String::isNotBlank) ?: "لم يتم استخراج موضوع الدعوى من الصفحات"
+                    ) }
+                    return@launch
+                }
+                val parsed = PetitionIntakeParser.parse(result.text)
+                val plaintiffs = summarizeReportParties(parsed, plaintiff = true)
+                val defendants = summarizeReportParties(parsed, plaintiff = false)
+                val subjectSource = buildString {
+                    parsed.finalRequests?.takeIf(String::isNotBlank)?.let { append("الطلبات الختامية:\n").append(it.trim()).append("\n\n") }
+                    parsed.subjectOfCase?.takeIf(String::isNotBlank)?.let { append("شرح الدعوى:\n").append(it.trim()) }
+                }.ifBlank { result.text }
+                val formatted = CaseSubjectFormatter.format(subjectSource, _uiState.value.finalRequestsPlacement)
+                applyIndependentCaseIdentity(parsed, plaintiffs, defendants)
+                _uiState.update { it.copy(
                     isOcrProcessing = false,
-                    errorMessage = result.warnings.joinToString("\n").takeIf(String::isNotBlank) ?: "لم يتم استخراج موضوع الدعوى من الصفحات"
-                ) else it.copy(
-                    isOcrProcessing = false,
-                    importedOfficeText = CaseSubjectFormatter.format(result.text),
-                    importedOfficeSource = "موضوع الدعوى — مراجعة قبل الاعتماد",
-                    errorMessage = if (result.usedLocalFallback) "استُخدم OCR المحلي لبعض الصفحات؛ راجع الطلبات والشرح." else null
-                )
+                    importedOfficeText = formatted,
+                    importedOfficeSource = "موضوع الدعوى وبيانات الخصوم — مراجعة قبل الاعتماد",
+                    errorMessage = if (result.usedLocalFallback) "استُخدم OCR المحلي لبعض الصفحات؛ راجع الطلبات والشرح والخصوم." else null
+                ) }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (error: Throwable) {
+                _uiState.update { it.copy(isOcrProcessing = false, errorMessage = "تعذر تحليل العريضة: " + (error.message ?: "خطأ غير متوقع")) }
             }
         }
+    }
+
+    fun onPreliminaryJudgmentPagesCaptured(pageFiles: List<File>, useAi: Boolean) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isOcrProcessing = true, errorMessage = null) }
+            retryFiles = pageFiles
+            retryPageRead = { onPreliminaryJudgmentPagesCaptured(pageFiles, useAi) }
+            try {
+                val result = multiPageReader.read(pageFiles, LegalDocumentPurpose.PETITION, useAi)
+                _uiState.update { it.copy(canRetryPages = result.text.isBlank(), pageRetryMessage = result.warnings.joinToString("\n")) }
+                if (result.text.isBlank()) {
+                    _uiState.update { it.copy(isOcrProcessing = false, errorMessage = "لم يتم استخراج بيانات الحكم التمهيدي") }
+                    return@launch
+                }
+                val parsed = PetitionIntakeParser.parse(result.text)
+                val plaintiffs = summarizeReportParties(parsed, plaintiff = true)
+                val defendants = summarizeReportParties(parsed, plaintiff = false)
+                applyIndependentCaseIdentity(parsed, plaintiffs, defendants)
+                val assignment = parsed.preliminaryMission?.takeIf(String::isNotBlank)?.let {
+                    IntakeNarrative.mission(it, parsed.preliminaryJudgmentDate)
+                }.orEmpty().ifBlank { result.text }
+                _uiState.update { it.copy(
+                    isOcrProcessing = false,
+                    importedOfficeText = assignment,
+                    importedOfficeSource = "مأمورية الحكم وبيانات الدعوى — مراجعة قبل الاعتماد",
+                    errorMessage = if (result.usedLocalFallback) "استُخدم OCR المحلي؛ راجع رقم الدعوى والمأمورية قبل الاعتماد." else null
+                ) }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (error: Throwable) {
+                _uiState.update { it.copy(isOcrProcessing = false, errorMessage = "تعذر تحليل الحكم التمهيدي: " + (error.message ?: "خطأ غير متوقع")) }
+            }
+        }
+    }
+
+    fun onResearchDocumentPagesCaptured(pageFiles: List<File>, useAi: Boolean) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isOcrProcessing = true, errorMessage = null) }
+            retryFiles = pageFiles
+            retryPageRead = { onResearchDocumentPagesCaptured(pageFiles, useAi) }
+            try {
+                val result = multiPageReader.read(pageFiles, LegalDocumentPurpose.REPORT, useAi)
+                _uiState.update { it.copy(canRetryPages = result.text.isBlank(), pageRetryMessage = result.warnings.joinToString("\n")) }
+                val formatted = if (useAi) result.text else formatResearchDocumentLocally(result.text)
+                _uiState.update {
+                    if (formatted.isBlank()) it.copy(isOcrProcessing = false, errorMessage = "لم يتم استخراج بيانات المستند")
+                    else it.copy(
+                        isOcrProcessing = false,
+                        importedOfficeText = formatted,
+                        importedOfficeSource = "بحث المستندات — مراجعة قبل الاعتماد",
+                        errorMessage = if (result.usedLocalFallback) "راجع بيانات المستند المستخرجة محليًا قبل الاعتماد." else null
+                    )
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (error: Throwable) {
+                _uiState.update { it.copy(isOcrProcessing = false, errorMessage = "تعذر تحليل المستند: " + (error.message ?: "خطأ غير متوقع")) }
+            }
+        }
+    }
+
+    private fun summarizeReportParties(parsed: PetitionIntakeParser.Result, plaintiff: Boolean): String {
+        val names = parsed.parties
+            .filter { if (plaintiff) it.role.isPlaintiff else it.role.isDefendant }
+            .map { it.name.replace(Regex("\\s+"), " ").trim() }
+            .filter(String::isNotBlank)
+            .distinct()
+        return when (names.size) {
+            0 -> ""
+            1 -> names.first()
+            else -> names.first() + " وآخرين"
+        }
+    }
+
+    private fun applyIndependentCaseIdentity(
+        parsed: PetitionIntakeParser.Result,
+        plaintiffs: String,
+        defendants: String
+    ) {
+        _uiState.update { state ->
+            val descriptor = listOf(parsed.caseType.orEmpty().trim(), parsed.court.orEmpty().trim())
+                .filter(String::isNotBlank).distinct().joinToString(" ")
+            val partySummary = buildString {
+                if (plaintiffs.isNotBlank()) append("المرفوعة من: ").append(plaintiffs)
+                if (defendants.isNotBlank()) {
+                    if (isNotEmpty()) append("\n")
+                    append("ضد: ").append(defendants)
+                }
+            }
+            state.copy(
+                caseNo = state.caseNo.ifBlank { parsed.caseNo.orEmpty() },
+                caseYear = state.caseYear.ifBlank { parsed.caseYear.orEmpty() },
+                court = state.court.ifBlank { descriptor },
+                partiesSummary = state.partiesSummary.ifBlank { partySummary },
+                customSectionContents = state.customSectionContents + buildMap {
+                    if (plaintiffs.isNotBlank()) put(com.khabir.app.domain.model.ReportCaseSnapshot.PLAINTIFFS, plaintiffs)
+                    if (defendants.isNotBlank()) put(com.khabir.app.domain.model.ReportCaseSnapshot.DEFENDANTS, defendants)
+                }
+            )
+        }
+        draftSaver.changed()
+        autoSaveRequests.tryEmit(Unit)
+    }
+
+    private fun formatResearchDocumentLocally(raw: String): String {
+        val text = raw.replace("\r\n", "\n").trim()
+        if (text.isBlank()) return ""
+        val date = Regex("[0-9٠-٩]{1,2}[./-][0-9٠-٩]{1,2}[./-][0-9٠-٩]{2,4}").find(text)?.value.orEmpty()
+        fun value(vararg labels: String): String {
+            val p = labels.joinToString("|") { Regex.escape(it) }
+            return Regex("(?:$p)\\s*[:：-]?\\s*([^\\n،؛]+)", RegexOption.IGNORE_CASE)
+                .find(text)?.groupValues?.getOrNull(1)?.trim().orEmpty()
+        }
+        fun boundary(label: String): String = value(label, "ال" + label)
+        if (Regex("عقد\\s+بيع|محرر\\s+بيع", RegexOption.IGNORE_CASE).containsMatchIn(text)) {
+            val seller = value("صادر من", "البائع", "الطرف الأول")
+            val buyer = value("إلى", "المشتري", "الطرف الثاني")
+            val area = Regex("(?:مساحة|بمساحة|مساحته|مساحتها)\\s*[:：-]?\\s*([^\\n،؛]+)", RegexOption.IGNORE_CASE)
+                .find(text)?.groupValues?.getOrNull(1)?.trim().orEmpty()
+            val isHouse = Regex("منزل|عقار|مبنى|بيت", RegexOption.IGNORE_CASE).containsMatchIn(text)
+            return buildString {
+                append("عقد بيع عرفي")
+                if (date.isNotBlank()) append(" مؤرخ ").append(date)
+                if (seller.isNotBlank()) append(" منسوب صدوره من البائع ").append(seller)
+                if (buyer.isNotBlank()) append(" إلى ").append(buyer)
+                append("، عبارة عن ").append(if (isHouse) "منزل" else "أرض زراعية")
+                if (area.isNotBlank()) append(" مساحتها ").append(area)
+                listOf("الحوض" to value("الحوض"), "القطعة" to value("القطعة", "قطعة رقم"),
+                    "الناحية" to value("الناحية", "ناحية"), "المركز" to value("المركز", "مركز"),
+                    "المحافظة" to value("المحافظة", "محافظة")).filter { it.second.isNotBlank() }
+                    .forEach { append("، ").append(it.first).append(" ").append(it.second) }
+                val bounds = listOf("البحري","القبلي","الشرقي","الغربي").mapNotNull { d -> boundary(d).takeIf(String::isNotBlank)?.let { d to it } }
+                if (bounds.isNotEmpty()) append("، وحدودها: ").append(bounds.joinToString("، ") { it.first + " " + it.second })
+                val price = value("نظير ثمن قدره", "ثمن قدره", "مبلغ قدره", "الثمن")
+                if (price.isNotBlank()) append("، نظير ثمن قدره ").append(price)
+                append(".")
+            }
+        }
+        if (Regex("عقد\\s+قسمة|محرر\\s+قسمة", RegexOption.IGNORE_CASE).containsMatchIn(text)) {
+            val heirs = value("ورثة", "فيما بين")
+            val area = value("مساحة", "بمساحة")
+            val shares = Regex("(?ims)(?:القسمة كالتالي|قسمت|اختص|آلت).*").find(text)?.value?.trim().orEmpty()
+            return buildString {
+                append("عقد قسمة")
+                if (date.isNotBlank()) append(" مؤرخ ").append(date)
+                if (heirs.isNotBlank()) append(" منسوب فيما بين ").append(heirs)
+                if (area.isNotBlank()) append(" عن مساحة ").append(area)
+                if (shares.isNotBlank()) append("، وقسمتها كالتالي: ").append(shares)
+            }
+        }
+        val minute = Regex("محضر\\s+(معاينة|استلام|تنفيذ)", RegexOption.IGNORE_CASE).find(text)
+        if (minute != null) {
+            return "محضر " + minute.groupValues[1] + (if (date.isNotBlank()) " مؤرخ $date" else "") +
+                "، ويتضمن: " + text.replace(Regex("\\s+"), " ").take(2500)
+        }
+        return text
     }
 
     suspend fun transcribeAudio(file: java.io.File): GeminiDocumentVisionService.Result = geminiVision.transcribeAudio(file)
