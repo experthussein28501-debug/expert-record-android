@@ -88,7 +88,8 @@ fun NotificationBatchScreen(onBack: () -> Unit, viewModel: NotificationBatchView
                     onToggle = viewModel::onTogglePastBatch,
                     onSelectAll = viewModel::onSelectAllPastBatches,
                     onClear = viewModel::onClearPastBatchSelection,
-                    onExport = viewModel::onExportSelected
+                    onExport = viewModel::onExportSelected,
+                    onDelete = viewModel::onDeletePastBatch
                 )
                 NotificationScreenUiState.Mode.BuildingNew -> NewBatchSection(state, viewModel)
             }
@@ -102,9 +103,20 @@ private fun BatchListSection(
     onToggle: (Long) -> Unit,
     onSelectAll: () -> Unit,
     onClear: () -> Unit,
-    onExport: (ExportNotificationBatchToWordUseCase.OutputType) -> Unit
+    onExport: (ExportNotificationBatchToWordUseCase.OutputType) -> Unit,
+    onDelete: (Long) -> Unit
 ) {
     val batches = state.pastBatches
+    var pendingDeleteBatchId by remember { mutableStateOf<Long?>(null) }
+    pendingDeleteBatchId?.let { batchId ->
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("تأكيد إزالة الإخطارات") },
+            text = { Text("هل تريد إزالة دفعة الإخطارات المحفوظة؟") },
+            confirmButton = { Button(onClick = { onDelete(batchId); pendingDeleteBatchId = null }) { Text("إزالة") } },
+            dismissButton = { TextButton(onClick = { pendingDeleteBatchId = null }) { Text("إلغاء") } }
+        )
+    }
     if (batches.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("لا توجد دفعات إخطارات بعد") }
         return
@@ -131,6 +143,9 @@ private fun BatchListSection(
                             Text("${batch.recipients.size} مُخطَر", style = MaterialTheme.typography.bodySmall)
                         }
                         if (batch.isReprint) AssistChip(onClick = {}, label = { Text("مُعاد") })
+                        IconButton(onClick = { pendingDeleteBatchId = batch.id }) {
+                            Icon(Icons.Filled.Delete, contentDescription = "إزالة دفعة الإخطارات")
+                        }
                     }
                 }
             }
