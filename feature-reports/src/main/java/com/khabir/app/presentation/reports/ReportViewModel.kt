@@ -114,10 +114,21 @@ class ReportViewModel @Inject constructor(
     val uiState: StateFlow<ReportUiState> = _uiState.asStateFlow()
     private var retryPageRead: (() -> Unit)? = null
     private var retryFiles: List<File> = emptyList()
+    private data class PendingImportedCaseIdentity(
+        val parsed: PetitionIntakeParser.Result,
+        val plaintiffs: String,
+        val defendants: String
+    )
+    private var pendingImportedCaseIdentity: PendingImportedCaseIdentity? = null
     fun retryPages() { _uiState.update { it.copy(canRetryPages = false) }; retryPageRead?.invoke() }
     fun cancelPageRetry() {
         retryFiles.forEach { it.delete() }; retryFiles = emptyList(); retryPageRead = null
         _uiState.update { it.copy(canRetryPages = false, errorMessage = null) }
+    }
+    private fun clearPageRetryAfterSuccess() {
+        retryFiles = emptyList()
+        retryPageRead = null
+        _uiState.update { it.copy(canRetryPages = false, pageRetryMessage = "") }
     }
     private val autoSaveRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     private val draftSaver = com.khabir.app.presentation.common.DraftSaveCoordinator(
@@ -393,6 +404,7 @@ class ReportViewModel @Inject constructor(
             retryPageRead = { onDocumentPagesCaptured(pageFiles, useAi) }
             val result = multiPageReader.read(pageFiles, LegalDocumentPurpose.REPORT, useAi)
             _uiState.update { it.copy(canRetryPages = result.text.isBlank(), pageRetryMessage = result.warnings.joinToString("\n")) }
+            if (result.text.isNotBlank()) clearPageRetryAfterSuccess()
             _uiState.update {
                 if (result.text.isBlank()) it.copy(
                     isOcrProcessing = false,
@@ -429,9 +441,19 @@ class ReportViewModel @Inject constructor(
                 val subjectSource = buildString {
                     parsed.finalRequests?.takeIf(String::isNotBlank)?.let { append("الطلبات الختامية:\n").append(it.trim()).append("\n\n") }
                     parsed.subjectOfCase?.takeIf(String::isNotBlank)?.let { append("شرح الدعوى:\n").append(it.trim()) }
-                }.ifBlank { result.text }
+                }
                 val formatted = CaseSubjectFormatter.format(subjectSource, _uiState.value.finalRequestsPlacement)
-                applyIndependentCaseIdentity(parsed, plaintiffs, defendants)
+                if (formatted.isBlank()) {
+                    pendingImportedCaseIdentity = null
+                    clearPageRetryAfterSuccess()
+                    _uiState.update { it.copy(
+                        isOcrProcessing = false,
+                        errorMessage = "تمت قراءة الصفحات لكن تعذر فصل موضوع الدعوى والطلبات الختامية بأمان. راجع الصور أو أعد التحليل بالـAI؛ لن يُضاف نص العريضة كاملًا إلى الموضوع."
+                    ) }
+                    return@launch
+                }
+                pendingImportedCaseIdentity = PendingImportedCaseIdentity(parsed, plaintiffs, defendants)
+                clearPageRetryAfterSuccess()
                 _uiState.update { it.copy(
                     isOcrProcessing = false,
                     importedOfficeText = formatted,
@@ -460,10 +482,20 @@ class ReportViewModel @Inject constructor(
                 val parsed = PetitionIntakeParser.parse(result.text)
                 val plaintiffs = summarizeReportParties(parsed, plaintiff = true)
                 val defendants = summarizeReportParties(parsed, plaintiff = false)
-                applyIndependentCaseIdentity(parsed, plaintiffs, defendants)
                 val assignment = parsed.preliminaryMission?.takeIf(String::isNotBlank)?.let {
                     IntakeNarrative.mission(it, parsed.preliminaryJudgmentDate)
-                }.orEmpty().ifBlank { result.text }
+                }.orEmpty()
+                if (assignment.isBlank()) {
+                    pendingImportedCaseIdentity = null
+                    clearPageRetryAfterSuccess()
+                    _uiState.update { it.copy(
+                        isOcrProcessing = false,
+                        errorMessage = "تمت قراءة الحكم لكن لم يمكن تحديد مأمورية الخبير بأمان. لن يُنسخ نص الحكم كاملًا إلى خانة المأمورية."
+                    ) }
+                    return@launch
+                }
+                pendingImportedCaseIdentity = PendingImportedCaseIdentity(parsed, plaintiffs, defendants)
+                clearPageRetryAfterSuccess()
                 _uiState.update { it.copy(
                     isOcrProcessing = false,
                     importedOfficeText = assignment,
@@ -485,7 +517,8 @@ class ReportViewModel @Inject constructor(
             try {
                 val result = multiPageReader.read(pageFiles, LegalDocumentPurpose.REPORT, useAi)
                 _uiState.update { it.copy(canRetryPages = result.text.isBlank(), pageRetryMessage = result.warnings.joinToString("\n")) }
-                val formatted = if (useAi) result.text else formatResearchDocumentLocally(result.text)
+                val formatted = if (useAi && !result.usedLocalFallback) result.text else formatResearchDocumentLocally(result.text)
+                if (formatted.isNotBlank()) clearPageRetryAfterSuccess()
                 _uiState.update {
                     if (formatted.isBlank()) it.copy(isOcrProcessing = false, errorMessage = "لم يتم استخراج بيانات المستند")
                     else it.copy(
@@ -980,7 +1013,17 @@ class ReportViewModel @Inject constructor(
     }
 
     fun onCancelExcelImport() = _uiState.update { it.copy(pendingExcelImport = emptyMap(), importedOfficeSource = null) }
+    fun onImportedOfficeTextApproved() {
+        pendingImportedCaseIdentity?.let { pending ->
+            applyIndependentCaseIdentity(pending.parsed, pending.plaintiffs, pending.defendants)
+        }
+        pendingImportedCaseIdentity = null
+        _uiState.update { it.copy(importedOfficeText = null, importedOfficeSource = null) }
+        com.khabir.app.data.monetization.WorkAdEvents.finished()
+    }
+
     fun onImportedOfficeTextConsumed() {
+        pendingImportedCaseIdentity = null
         _uiState.update { it.copy(importedOfficeText = null, importedOfficeSource = null) }
         com.khabir.app.data.monetization.WorkAdEvents.finished()
     }
