@@ -22,6 +22,71 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  full-tests-jdk21:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Install Android 36 SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | sort -V | tail -n 1)"
+          fi
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Make Gradle executable
+        run: chmod +x gradlew
+
+      - name: Backend dependencies, tests and audit
+        working-directory: backend/functions
+        run: |
+          npm ci --ignore-scripts --no-fund
+          npm run check
+          npm test
+          npm audit --omit=dev --audit-level=moderate
+
+      - name: Security gate regression tests
+        run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
+
+      - name: Full functional unit tests on JDK 21
+        run: |
+          ./gradlew --no-daemon -PKHABIR_SKIP_SCREENSHOT_TESTS=true \
+            :core:testDebugUnitTest \
+            :feature-auth:testDebugUnitTest \
+            :feature-cases:testDebugUnitTest \
+            :feature-notifications:testDebugUnitTest \
+            :feature-reports:testDebugUnitTest \
+            :feature-agenda:testDebugUnitTest \
+            :app:testCombinedDebugUnitTest
+
+      - name: Build trial APK
+        run: ./gradlew --no-daemon :app:assembleCombinedTrial
+
+      - name: Upload JDK21 test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: expert-record-jdk21-test-evidence
+          path: |
+            **/build/test-results/
+            app/build/outputs/apk/combined/trial/
+          retention-days: 7
+
   paparazzi:
     runs-on: ubuntu-latest
     timeout-minutes: 45
