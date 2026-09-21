@@ -18,6 +18,7 @@ import com.khabir.app.domain.usecase.notification.ExportNotificationBatchToWordU
 import com.khabir.app.domain.usecase.notification.ListNotificationBatchesUseCase
 import com.khabir.app.domain.usecase.notification.RecipientSelection
 import com.khabir.app.domain.usecase.notification.ReuseBatchAsNewUseCase
+import com.khabir.app.domain.repository.NotificationBatchRepository
 import com.khabir.app.presentation.cases.PetitionIntakeParser
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -111,7 +112,8 @@ class NotificationBatchViewModel @Inject constructor(
     private val exportBatch: ExportNotificationBatchToWordUseCase,
     private val arabicOcr: ArabicPetitionOcrService,
     private val geminiVision: GeminiDocumentVisionService,
-    private val multiPageReader: MultiPageDocumentReader
+    private val multiPageReader: MultiPageDocumentReader,
+    private val batchRepository: NotificationBatchRepository
 ) : ViewModel() {
 
     companion object {
@@ -257,6 +259,13 @@ class NotificationBatchViewModel @Inject constructor(
 
     fun onClearPastBatchSelection() = _uiState.update {
         it.copy(selectedPastBatchIds = emptySet(), errorMessage = null)
+    }
+
+    fun onDeletePastBatch(batchId: Long) {
+        viewModelScope.launch {
+            runCatching { batchRepository.delete(batchId) }
+                .onFailure { error -> _uiState.update { it.copy(errorMessage = error.message ?: "تعذر إزالة الإخطار") } }
+        }
     }
 
     fun onAppointmentDateChanged(v: LocalDate) = _uiState.update { it.copy(appointmentDate = v) }
