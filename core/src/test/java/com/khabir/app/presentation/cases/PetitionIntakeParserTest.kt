@@ -279,7 +279,7 @@ class PetitionIntakeParserTest {
         val plaintiffs = result.parties.filter { it.role == PartyRole.PLAINTIFF }
         val defendants = result.parties.filter { it.role == PartyRole.DEFENDANT }
         assertTrue(plaintiffs.any { it.name.contains("أحمد") })
-        assertTrue(plaintiffs.any { it.address.contains("كوم أمبو") || it.address.contains("مكتب الأستاذ") })
+        assertTrue(plaintiffs.all { it.address.contains("كوم أمبو") && !it.address.contains("مكتب الأستاذ") })
         assertTrue(defendants.any { it.name.contains("حسن علي محمود") })
     }
 
@@ -338,4 +338,36 @@ class PetitionIntakeParserTest {
         assertEquals(2, plaintiffs.size)
         assertTrue(plaintiffs.all { it.address == "ناحية الكوبانية - مركز أسوان" })
     }
+    @Test
+    fun `preserves judicial year suffix through shared petition parser`() {
+        val highAppeal = PetitionIntakeParser.parse(
+            "محكمة استئناف قنا\nالدعوى رقم 350 لسنة 21 ق استئناف عالي قنا"
+        )
+        val administrative = PetitionIntakeParser.parse(
+            "محكمة القضاء الإداري\nالدعوى رقم 180 لسنة ١٠١ ق قضاء إداري"
+        )
+        assertEquals("21ق", highAppeal.caseYear)
+        assertEquals("استئناف عالي", highAppeal.caseType)
+        assertEquals("101ق", administrative.caseYear)
+        assertEquals("قضاء إداري", administrative.caseType)
+    }
+
+    @Test
+    fun `chosen lawyer office is never copied as party address`() {
+        val result = PetitionIntakeParser.parse(
+            """
+            بناء على طلب السادة أحمد محمود علي وفاطمة حسن سالم
+            المقيمون بناحية كوم أمبو
+            ومحلهم المختار مكتب الأستاذ محمد عبد الله المحامي بأسوان
+            ضد حسن علي محمود
+            """.trimIndent()
+        )
+        val plaintiffs = result.parties.filter { it.role == PartyRole.PLAINTIFF }
+        assertTrue(plaintiffs.isNotEmpty())
+        assertTrue(plaintiffs.all { it.address.contains("كوم أمبو") })
+        assertTrue(plaintiffs.none { it.address.contains("مكتب") || it.address.contains("المحامي") })
+        val lawyer = result.parties.first { it.role == PartyRole.LAWYER }
+        assertEquals("محكمة أسوان — نقابة المحامين بأسوان", lawyer.address)
+    }
+
 }
