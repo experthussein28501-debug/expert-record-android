@@ -9,7 +9,7 @@ object IntakeNarrative {
         if (summary.isNullOrBlank()) return ""
         if (summary.trim().startsWith("أقام المدعي")) return summary.trim()
         val claims = requests?.takeIf { it.isNotBlank() } ?: "[الطلبات الختامية تحتاج استكمالًا]"
-        return "أقام المدعي دعواه بموجب صحيفة معلنة قانونًا، طلب في ختامها: $claims\n\n" +
+        return "أقام المدعي دعواه بموجب صحيفة أودعت قلم المحكمة ومعلنة قانونًا، وطلب في ختامها: $claims\n\n" +
             "وحيث قال شارحًا دعواه: ${summary.trim().trimEnd('،', ' ', '.')}، مما حدا به إلى إقامة الدعوى الماثلة."
     }
 
@@ -40,8 +40,8 @@ object IntakeNarrative {
 
     fun mission(body: String?, date: LocalDate?): String {
         if (body.isNullOrBlank()) return ""
-        if (body.trim().startsWith("يقضي حكم الإحالة")) return body.trim()
+        if (body.trim().startsWith("يقضي حكم الإحالة") || body.trim().startsWith("قضى حكم الإحالة")) return body.trim()
         val day = date?.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) ?: "[تاريخ الحكم يحتاج استكمالًا]"
-        return "يقضي حكم الإحالة الصادر من عدالة المحكمة بجلسة $day بالآتي:\n${body.trim()}"
+        return "قضى حكم الإحالة الصادر بجلسة $day بالآتي:\n${body.trim()}"
     }
 }
