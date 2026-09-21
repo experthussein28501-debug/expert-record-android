@@ -213,10 +213,11 @@ jobs:
           profile: pixel_2
           disable-animations: true
           script: |
-            chmod +x gradlew
+            chmod +x gradlew ci/verify_integrated_emulator.sh
             adb shell am force-stop com.android.launcher3
             adb shell settings put secure show_ime_with_hard_keyboard 1
-            ./gradlew --no-daemon :app:connectedCombinedDebugAndroidTest; result=$?; adb pull /sdcard/Download/expert-record-ui ui-evidence || true; exit "$result"
+            ./ci/verify_integrated_emulator.sh
+            adb pull /sdcard/Download/expert-record-ui ui-evidence || true
       - name: Upload runtime evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -226,4 +227,5 @@ jobs:
             ui-evidence/
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
+            release-output/integration-review-0.9.0/
           retention-days: 7
