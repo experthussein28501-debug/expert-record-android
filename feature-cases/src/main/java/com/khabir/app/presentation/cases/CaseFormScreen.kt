@@ -39,6 +39,8 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.khabir.app.domain.model.PartyRole
 import com.khabir.app.presentation.common.InAppCameraCapture
+import com.khabir.app.presentation.common.ExplicitDialogProperties
+import com.khabir.app.presentation.common.ExplicitDialogTitle
 import com.khabir.app.presentation.components.KhabirCard
 import com.khabir.app.presentation.components.KhabirTextField
 import kotlinx.coroutines.launch
@@ -562,7 +564,7 @@ private fun CaseVoiceChoiceDialog(
     onAiChosen: () -> Unit,
     onKeyboardChosen: () -> Unit
 ) {
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("اختر طريقة الإدخال الصوتي") }, text = {
+    AlertDialog(onDismissRequest = { }, properties = ExplicitDialogProperties, title = { ExplicitDialogTitle("اختر طريقة الإدخال الصوتي", onDismiss) }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             TextButton(onClick = onGoogleChosen, modifier = Modifier.fillMaxWidth()) { Text("صوت Google — جملة واحدة") }
             TextButton(onClick = onContinuousChosen, modifier = Modifier.fillMaxWidth()) { Text("استماع مستمر حتى «تم»") }
