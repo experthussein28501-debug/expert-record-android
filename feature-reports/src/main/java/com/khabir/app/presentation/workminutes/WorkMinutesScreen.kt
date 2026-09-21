@@ -491,21 +491,35 @@ private fun WorkMinutesEntryCard(
                 Text("محضر أعمال رقم (${entry.number})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 IconButton(onClick = onRemove) { Icon(Icons.Filled.Delete, "حذف المحضر") }
             }
-            Text("بيانات فتح المحضر", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                KhabirTextField(
-                    value = entry.openingDate?.format(dateFormat).orEmpty(),
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("تاريخ الفتح") },
-                    modifier = Modifier.weight(1f),
-                    trailingIcon = { IconButton(onClick = { showOpeningDatePicker = true }) { Icon(Icons.Filled.CalendarMonth, "اختيار التاريخ") } }
-                )
+            Text(
+                workMinutesOpeningLine(entry, dateFormat),
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedButton(
+                    onClick = { showOpeningDatePicker = true },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Filled.CalendarMonth, contentDescription = "اختيار اليوم والتاريخ")
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        entry.openingDate?.let { arabicWeekday(it) + " " + it.format(dateFormat) }
+                            ?: "اختيار اليوم والتاريخ"
+                    )
+                }
                 KhabirTextField(
                     value = entry.openingTime,
-                    onValueChange = { onChange { e -> e.copy(openingTime = it) } },
-                    label = { Text("ساعة الفتح") },
-                    modifier = Modifier.weight(1f)
+                    onValueChange = { value -> onChange { e -> e.copy(openingTime = value) } },
+                    label = { Text("الساعة") },
+                    placeholder = { Text("مثال: ٩ صباحًا") },
+                    singleLine = true,
+                    modifier = Modifier.weight(0.72f)
                 )
             }
             HorizontalDivider()
@@ -633,6 +647,25 @@ private fun WorkMinutesEntryCard(
             }
         }
     }
+}
+
+private fun workMinutesOpeningLine(entry: WorkMinutesEntry, dateFormat: DateTimeFormatter): String = buildString {
+    append("فتح هذا المحضر اليوم")
+    entry.openingDate?.let { date ->
+        append(" ").append(arabicWeekday(date))
+        append(" الموافق ").append(date.format(dateFormat))
+    }
+    if (entry.openingTime.isNotBlank()) append(" الساعة ").append(entry.openingTime.trim())
+}
+
+private fun arabicWeekday(date: LocalDate): String = when (date.dayOfWeek) {
+    java.time.DayOfWeek.SATURDAY -> "السبت"
+    java.time.DayOfWeek.SUNDAY -> "الأحد"
+    java.time.DayOfWeek.MONDAY -> "الاثنين"
+    java.time.DayOfWeek.TUESDAY -> "الثلاثاء"
+    java.time.DayOfWeek.WEDNESDAY -> "الأربعاء"
+    java.time.DayOfWeek.THURSDAY -> "الخميس"
+    java.time.DayOfWeek.FRIDAY -> "الجمعة"
 }
 
 private enum class WorkMinutesListStyle(val label: String) {
