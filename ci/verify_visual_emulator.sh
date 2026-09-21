@@ -77,10 +77,17 @@ PY
 
 # Login / entry gate.
 dump_ui "login"
-if grep -q 'text="تخطي"' "$review_dir/login.xml"; then
-  read -r x y < <(tap_text "$review_dir/login.xml" "تخطي")
+entry_label=""
+for candidate in "فتح النسخة التجريبية" "تخطي" "تخطي والدخول للتجربة"; do
+  if grep -q "text=\"$candidate\"" "$review_dir/login.xml"; then
+    entry_label="$candidate"
+    break
+  fi
+done
+if [ -n "$entry_label" ]; then
+  read -r x y < <(tap_text "$review_dir/login.xml" "$entry_label")
   adb shell input tap "$x" "$y"
-  sleep 2
+  sleep 3
 fi
 
 dump_ui "home"
