@@ -322,6 +322,16 @@ class WorkMinutesViewModel @Inject constructor(
         }
     }
 
+    private fun arabicWeekdayName(date: java.time.LocalDate): String = when (date.dayOfWeek) {
+        java.time.DayOfWeek.SATURDAY -> "السبت"
+        java.time.DayOfWeek.SUNDAY -> "الأحد"
+        java.time.DayOfWeek.MONDAY -> "الاثنين"
+        java.time.DayOfWeek.TUESDAY -> "الثلاثاء"
+        java.time.DayOfWeek.WEDNESDAY -> "الأربعاء"
+        java.time.DayOfWeek.THURSDAY -> "الخميس"
+        java.time.DayOfWeek.FRIDAY -> "الجمعة"
+    }
+
     fun onSave() {
         if (_uiState.value.isLoading || _uiState.value.isSaving) return
         _uiState.update { it.copy(isSaving = true, errorMessage = null) }
@@ -470,9 +480,11 @@ class WorkMinutesViewModel @Inject constructor(
         val dateFormat = java.time.format.DateTimeFormatter.ofPattern("d/M/yyyy")
         val sb = StringBuilder("محضر اعمال رقم (${entry.number})\n")
         sb.append("فتح هذا المحضر اليوم")
-        entry.openingDate?.let { sb.append(" ${it.format(dateFormat)}") }
-        if (entry.openingTime.isNotBlank()) sb.append(" الساعة ${entry.openingTime}")
-        sb.append(" بالمكتب")
+        entry.openingDate?.let {
+            sb.append(" ").append(arabicWeekdayName(it))
+            sb.append(" الموافق ").append(it.format(dateFormat))
+        }
+        if (entry.openingTime.isNotBlank()) sb.append(" الساعة ${entry.openingTime.trim()}")
         if (entry.bodyText.isNotBlank()) sb.append(" ${entry.bodyText}")
         entry.scheduledFollowUpDate?.let { followUp ->
             sb.append("\nوحددنا يوم ${followUp.format(dateFormat)}")
@@ -483,8 +495,7 @@ class WorkMinutesViewModel @Inject constructor(
         if (entry.closingTime.isNotBlank()) sb.append("\nواقفل المحضر على ذلك فى تاريخه الساعة ${entry.closingTime} بالمكتب")
         if (entry.expertName.isNotBlank()) sb.append("\nالخبير/ ${entry.expertName}")
         return sb.toString()
-    }
-}
+    }}
 
 private fun WorkMinutesUiState.toRecord() = WorkMinutesRecord(
     id = recordId,
