@@ -133,7 +133,7 @@ open_and_capture() {
   sleep 1
 }
 
-open_and_capture "القضايا" "cases" "بيانات القضايا" "قضية جديدة"
+open_and_capture "القضايا" "cases" "بيانات القضايا" "استخراج بيان القضايا حسب النوع والفترة"
 open_and_capture "التقارير" "reports" "التقارير" "تقرير جديد أو من دعوى مسجلة"
 open_and_capture "الإخطارات" "notifications" "الإخطارات وسركي الإخطارات"
 open_and_capture "محاضر الأعمال" "work-minutes" "محاضر الأعمال" "مجموعة جديدة أو من دعوى مسجلة"
