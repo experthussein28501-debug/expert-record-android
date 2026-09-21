@@ -357,8 +357,14 @@ object PetitionIntakeParser {
         return runCatching { LocalDate.of(year, month, day) }.getOrNull()
     }
 
-    private fun inferCaseType(text: String): String? = knownCaseTypes.firstOrNull { candidate ->
-        text.contains(candidate, ignoreCase = true)
+    private fun inferCaseType(text: String): String? {
+        if (Regex("(?:محكمة\\s+)?(?:القضاء|قضاء)\\s+[الإا]دار[يى]", RegexOption.IGNORE_CASE).containsMatchIn(text)) {
+            return "قضاء إداري"
+        }
+        if (Regex("(?:^|\\n)\\s*محكمة\\s+استئناف(?:\\s|$)", setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE)).containsMatchIn(text)) {
+            return "استئناف عالي"
+        }
+        return knownCaseTypes.firstOrNull { candidate -> text.contains(candidate, ignoreCase = true) }
     }
 
     private fun looksLikeSectionHeading(value: String): Boolean {
