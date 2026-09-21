@@ -80,14 +80,14 @@ internal object CaseSubjectFormatter {
     /** Prefer the petition body after "الموضوع/وأعلنته بالآتي" and stop before "بناء عليه". */
     private fun extractRawExplanation(text: String): String {
         val match = Regex(
-            "(?ims)(?:^|\\n)\\s*(?:الموضوع|وأعلنته بالآتي|الوقائع)\\s*[:：-]?\\s*(.*?)(?=\\bبناء\\s*عليه\\b|\\z)"
+            "(?ims)(?:^|\\n)\\s*(?:الموضوع|وأعلنته بالآتي|الوقائع)\\s*[:：-]?\\s*(.*?)(?=بناء\\s*عليه|\\z)"
         ).find(text)
         return match?.groupValues?.getOrNull(1)?.trim().orEmpty()
     }
 
     /** In unlabelled petitions, the final relief commonly follows "بناء عليه". */
     private fun extractRawFinalRequests(text: String): String {
-        val after = Regex("(?ims)\\bبناء\\s*عليه\\b\\s*[:：-]?\\s*(.+)$")
+        val after = Regex("(?ims)بناء\\s*عليه\\s*[:：-]?\\s*(.+)$")
             .find(text)?.groupValues?.getOrNull(1)?.trim().orEmpty()
         if (after.isBlank()) return ""
         return after
@@ -108,7 +108,7 @@ internal object CaseSubjectFormatter {
     }
 
     private fun trimAtBinaaAlaih(text: String): String {
-        val marker = Regex("(?i)\\bبناء\\s*عليه\\b").find(text)
+        val marker = Regex("(?i)بناء\\s*عليه").find(text)
         return if (marker == null) text.trim() else text.substring(0, marker.range.first).trim()
     }
 
