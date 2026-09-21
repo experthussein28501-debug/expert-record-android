@@ -78,12 +78,19 @@ fun InAppCameraCapture(
     val captureExecutor = remember { Executors.newSingleThreadExecutor() }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
     var boundCamera by remember { mutableStateOf<androidx.camera.core.Camera?>(null) }
+    var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
+    val cameraAlive = remember { java.util.concurrent.atomic.AtomicBoolean(true) }
     var isCapturing by remember { mutableStateOf(false) }
     var capturedPages by remember { mutableStateOf<List<File>>(emptyList()) }
     var pagesTransferred by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
+        cameraAlive.set(true)
         onDispose {
+            cameraAlive.set(false)
+            runCatching { cameraProvider?.unbindAll() }
+            imageCapture = null
+            boundCamera = null
             captureExecutor.shutdown()
             if (!pagesTransferred) capturedPages.forEach { it.delete() }
         }
@@ -105,6 +112,10 @@ fun InAppCameraCapture(
             isCapturing = true
             captureToFile(context, capture, captureExecutor) { result ->
                 mainExecutor.execute {
+                    if (!cameraAlive.get()) {
+                        result.getOrNull()?.delete()
+                        return@execute
+                    }
                     isCapturing = false
                     result.onSuccess { file -> capturedPages = capturedPages + file }
                         .onFailure { onError(it.message ?: "تعذر حفظ الصفحة") }
@@ -158,8 +169,11 @@ fun InAppCameraCapture(
 
                             val providerFuture = ProcessCameraProvider.getInstance(previewContext)
                             providerFuture.addListener({
+                                if (!cameraAlive.get()) return@addListener
                                 runCatching {
                                     val provider = providerFuture.get()
+                                    if (!cameraAlive.get()) return@runCatching
+                                    cameraProvider = provider
                                     val preview = Preview.Builder().build().also {
                                         it.setSurfaceProvider(surfaceProvider)
                                     }
