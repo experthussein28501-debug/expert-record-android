@@ -305,11 +305,20 @@ object PetitionIntakeParser {
             RegexOption.IGNORE_CASE
         ).find(text) ?: return null
         val mission = text.substring(start.range.first).trim()
-        val end = Regex(
-            "(?:و?تحقيق\\s+كافة\\s+عناصر\\s+الدعوى|بذات\\s+الأمانة\\s+السابقة|بأمانة\\s+تكميلية|وألزمت|والزمت|قدرت\\s+أمانة|وحددت\\s+جلسة|أمانة\\s+[0-9٠-٩])",
+        val inclusiveEnd = Regex(
+            "(?:و?تحقيق\\s+كافة\\s+عناصر\\s+الدعوى|بذات\\s+الأمانة\\s+السابقة|بأمانة\\s+تكميلية)",
             RegexOption.IGNORE_CASE
         ).find(mission)
-        val bounded = if (end == null) mission else mission.substring(0, end.range.first).trim()
+        val exclusiveEnd = Regex(
+            "(?:وألزمت|والزمت|قدرت\\s+أمانة|وحددت\\s+جلسة|أمانة\\s+[0-9٠-٩])",
+            RegexOption.IGNORE_CASE
+        ).find(mission)
+        val bounded = when {
+            inclusiveEnd != null && (exclusiveEnd == null || inclusiveEnd.range.first < exclusiveEnd.range.first) ->
+                mission.substring(0, inclusiveEnd.range.last + 1).trim()
+            exclusiveEnd != null -> mission.substring(0, exclusiveEnd.range.first).trim()
+            else -> mission
+        }
         return bounded.takeIf { it.length >= 20 }
     }
 
