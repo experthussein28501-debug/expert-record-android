@@ -81,7 +81,7 @@ object PetitionIntakeParser {
             text = text,
             starts = listOf("مأمورية الحكم التمهيدي", "المأمورية", "تكون مهمته", "تكون مهمتها"),
             stops = listOf("مباشرة المأمورية", "النتيجة النهائية")
-        )?.let { if (it.startsWith("يقضي حكم الإحالة")) it else IntakeNarrative.missionBody(it) ?: it } ?: IntakeNarrative.missionBody(text) ?: captureJudgmentMission(text)
+        )?.let { if (it.startsWith("يقضي حكم الإحالة") || it.startsWith("قضى حكم الإحالة")) it else IntakeNarrative.missionBody(it) ?: it } ?: IntakeNarrative.missionBody(text) ?: captureJudgmentMission(text)
 
         val plaintiffLabels = listOf(
             "المرفوعة من", "المرفوعه من", "المقامة من", "المقامه من", "مقامة من", "مرفوعة من",
@@ -110,11 +110,23 @@ object PetitionIntakeParser {
         val serviceParties = parseServiceParties(text)
         val candidates = if (structured.isNotEmpty()) structured else
             partyCandidates.filterNot { it.role == PartyRole.DEFENDANT && serviceParties.isNotEmpty() } + serviceParties
-        val parties = (candidates + LawyerIntakeParser.parse(originalText)).distinctBy {
-            listOf(it.role.name, normalizeName(it.name), normalizeName(it.address), it.claimKind)
+        val mergedParties = linkedMapOf<String, ParsedParty>()
+        (candidates + LawyerIntakeParser.parse(originalText)).forEach { party ->
+            val key = listOf(party.role.name, normalizeName(party.name), party.claimKind).joinToString("|")
+            val existing = mergedParties[key]
+            mergedParties[key] = when {
+                existing == null -> party
+                existing.address.isBlank() && party.address.isNotBlank() ->
+                    existing.copy(address = party.address, withCapacity = existing.withCapacity || party.withCapacity)
+                party.address.length > existing.address.length ->
+                    existing.copy(address = party.address, withCapacity = existing.withCapacity || party.withCapacity)
+                existing.withCapacity || party.withCapacity -> existing.copy(withCapacity = true)
+                else -> existing
+            }
         }
+        val parties = mergedParties.values.toList()
         val resolvedCaseType = judgmentIdentity?.type ?: explicitType ?: heading.caseType ?: inferredType
-        val resolvedCaseYear = (judgmentIdentity?.year ?: caseYear)?.let { rawYear ->
+        val resolvedCaseYear = (caseYear ?: judgmentIdentity?.year)?.let { rawYear ->
             val cleaned = rawYear.trim()
             if (resolvedCaseType in setOf("استئناف عالي", "قضاء إداري", "قضاء اداري") && !cleaned.endsWith("ق")) "${cleaned}ق"
             else cleaned
@@ -123,7 +135,7 @@ object PetitionIntakeParser {
         return Result(
             incomingNo = incomingNo,
             incomingDate = incomingDate,
-            caseNo = judgmentIdentity?.number ?: caseNo,
+            caseNo = caseNo ?: judgmentIdentity?.number,
             caseYear = resolvedCaseYear,
             court = judgmentIdentity?.court ?: (explicitCourt ?: heading.court)?.substringBefore("الدائرة")?.substringBefore("الدائره")?.trim(),
             caseType = resolvedCaseType,
@@ -358,7 +370,12 @@ object PetitionIntakeParser {
     }
 
     private fun inferCaseType(text: String): String? {
-        if (Regex("(?:محكمة\\s+)?(?:القضاء|قضاء)\\s+[الإا]دار[يى]", RegexOption.IGNORE_CASE).containsMatchIn(text)) {
+        if (
+            text.contains("القضاء الإداري", ignoreCase = true) ||
+            text.contains("القضاء الاداري", ignoreCase = true) ||
+            text.contains("قضاء إداري", ignoreCase = true) ||
+            text.contains("قضاء اداري", ignoreCase = true)
+        ) {
             return "قضاء إداري"
         }
         if (Regex("(?:^|\\n)\\s*محكمة\\s+استئناف(?:\\s|$)", setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE)).containsMatchIn(text)) {
