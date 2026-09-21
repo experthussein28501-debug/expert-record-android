@@ -1,0 +1,91 @@
+name: Visual CI
+
+on:
+  push:
+    branches: [ "visual-0.9.9-review" ]
+    paths:
+      - "**/*.kt"
+      - "**/*.kts"
+      - "gradle/**"
+      - "gradlew"
+      - "gradle.properties"
+      - ".github/workflows/visual-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: visual-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  paparazzi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Install Android 36 SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | sort -V | tail -n 1)"
+          fi
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Make Gradle executable
+        run: chmod +x gradlew
+
+      - name: Record visual baselines
+        run: ./gradlew --no-daemon :core:recordPaparazziDebug --stacktrace
+
+      - name: Verify Paparazzi snapshots
+        run: ./gradlew --no-daemon :core:verifyPaparazziDebug --stacktrace
+
+      - name: Sanity-check generated images
+        shell: bash
+        run: |
+          set -euo pipefail
+          count="$(find core/src/test/snapshots -type f -name '*.png' 2>/dev/null | wc -l)"
+          echo "Paparazzi PNG count: $count"
+          test "$count" -ge 10
+          while IFS= read -r file; do
+            test -s "$file"
+          done < <(find core/src/test/snapshots -type f -name '*.png')
+
+      - name: Commit visual baselines if changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "$(git status --porcelain core/src/test/snapshots)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add core/src/test/snapshots
+            git commit -m "Record 0.9.9 visual baselines"
+            git push
+          fi
+
+      - name: Upload visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: expert-record-visual-evidence
+          path: |
+            core/src/test/snapshots/
+            core/build/reports/paparazzi/
+            core/build/paparazzi/
+          retention-days: 7
