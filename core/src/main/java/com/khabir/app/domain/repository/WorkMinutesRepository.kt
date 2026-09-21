@@ -9,5 +9,5 @@ interface WorkMinutesRepository {
     suspend fun getById(id: Long): WorkMinutesRecord?
     suspend fun getForCase(caseId: Long): WorkMinutesRecord?
     suspend fun save(record: WorkMinutesRecord): Long
-    suspend fun delete(id: Long)
+    suspend fun delete(id: Long) { }
 }
