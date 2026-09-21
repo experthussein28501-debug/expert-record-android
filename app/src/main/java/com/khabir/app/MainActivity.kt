@@ -20,12 +20,20 @@ import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    private lateinit var monetization: com.khabir.app.monetization.MonetizationController
+    override fun onResume() { super.onResume(); if (::monetization.isInitialized) monetization.onResume() }
+    override fun onPause() { if (::monetization.isInitialized) monetization.onPause(); super.onPause() }
+    override fun onUserInteraction() { super.onUserInteraction(); if (::monetization.isInitialized) monetization.onInteraction() }
+    override fun onDestroy() { if (::monetization.isInitialized) monetization.close(); super.onDestroy() }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.decorView.layoutDirection = View.LAYOUT_DIRECTION_RTL
+        monetization = com.khabir.app.monetization.MonetizationController(this)
         setContent {
             KhabirTheme {
                 CompositionLocalProvider(
+                    com.khabir.app.monetization.LocalMonetization provides monetization,
                     LocalLayoutDirection provides LayoutDirection.Rtl,
                     LocalTextStyle provides MaterialTheme.typography.bodyLarge.copy(
                         textAlign = TextAlign.Right,

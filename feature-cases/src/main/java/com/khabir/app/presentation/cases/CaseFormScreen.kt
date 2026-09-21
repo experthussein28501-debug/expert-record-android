@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package com.khabir.app.presentation.cases
 
 import android.Manifest
@@ -37,6 +39,8 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.khabir.app.domain.model.PartyRole
 import com.khabir.app.presentation.common.InAppCameraCapture
+import com.khabir.app.presentation.common.ExplicitDialogProperties
+import com.khabir.app.presentation.common.ExplicitDialogTitle
 import com.khabir.app.presentation.components.KhabirCard
 import com.khabir.app.presentation.components.KhabirTextField
 import kotlinx.coroutines.launch
@@ -54,6 +58,15 @@ fun CaseFormScreen(
     viewModel: CaseFormViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
+    state.partyConflicts.firstOrNull()?.let { (old, incoming) ->
+        AlertDialog(onDismissRequest = {}, title = { Text("مراجعة عنوان الاسم المتكرر") },
+            text = { Column { Text("${old.firstName} ${old.restName}"); Text("المحفوظ: ${old.address}"); Text("المستخرج: ${incoming.address}") } },
+            confirmButton = { Column {
+                TextButton(onClick = { viewModel.resolvePartyConflict(1) }) { Text("استخدام العنوان المستخرج") }
+                TextButton(onClick = { viewModel.resolvePartyConflict(2) }) { Text("شخصان مختلفان — احتفظ بالاثنين") }
+            } }, dismissButton = { TextButton(onClick = { viewModel.resolvePartyConflict(0) }) { Text("احتفظ بالمحفوظ") } })
+    }
+
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -70,6 +83,7 @@ fun CaseFormScreen(
     var showContinuousDictation by remember { mutableStateOf(false) }
     var useAiVoice by remember { mutableStateOf(false) }
     var pendingGoogleSpeech by remember { mutableStateOf(false) }
+    com.khabir.app.data.monetization.BlockWorkAds(showInAppCamera || showLensCamera || state.isOcrProcessing || state.isSaving || state.pendingPagePaths.isNotEmpty() || state.documentReview.isNotEmpty() || showContinuousDictation)
     val caseTypeOptions = listOf("مدني كلي", "مدني جزئي", "مدني مستأنف", "جنح", "أحوال شخصية", "شؤون الأسرة", "استئناف عالي", "قضاء إداري", "تنفيذ", "أخرى")
 
     val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -160,10 +174,7 @@ fun CaseFormScreen(
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("استيراد بيانات القضية والخصوم", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "أضف حتى 10 صور. يفحص التطبيق الصور ويجمع صفحات كل مستند ثم يعزل أي مستند مختلف قبل تعبئة القضية.",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    com.khabir.app.presentation.components.InlineHelp("مساعدة", "أضف حتى 10 صور. يفحص التطبيق الصور ويجمع صفحات كل مستند ثم يعزل أي مستند مختلف قبل تعبئة القضية.")
                     FilledTonalButton(
                         onClick = {
                             if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
@@ -279,7 +290,7 @@ fun CaseFormScreen(
             }
 
             Text("البيانات الأساسية للقضية", style = MaterialTheme.typography.titleLarge)
-            Text("هذه هي البيانات الأصلية التي يسحب منها التطبيق التقرير والإخطارات لاحقًا.", style = MaterialTheme.typography.bodySmall)
+            com.khabir.app.presentation.components.InlineHelp("مساعدة", "هذه هي البيانات الأصلية التي يسحب منها التطبيق التقرير والإخطارات لاحقًا.")
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 KhabirTextField(state.incomingNo, viewModel::onIncomingNoChanged, label = { Text("رقم الوارد") }, modifier = Modifier.weight(1f))
@@ -359,7 +370,7 @@ fun CaseFormScreen(
 
             HorizontalDivider()
             Text("أسماء الخصوم وعناوينهم", style = MaterialTheme.typography.titleMedium)
-            Text("اختر جهة الخصم: مدعي أو مدعى عليه، ثم فعّل «بصفته» للشخص عند الحاجة. كل اسم وعنوان يبقى محفوظًا للإخطارات.", style = MaterialTheme.typography.bodySmall)
+            com.khabir.app.presentation.components.InlineHelp("مساعدة", "اختر جهة الخصم: مدعي أو مدعى عليه، ثم فعّل «بصفته» للشخص عند الحاجة. كل اسم وعنوان يبقى محفوظًا للإخطارات.")
 
             if (state.parties.isNotEmpty()) {
                 KhabirCard(contentPadding = PaddingValues(10.dp)) {
@@ -372,9 +383,9 @@ fun CaseFormScreen(
                                         KhabirTextField(party.firstName, { value -> viewModel.updateParty(party.localId) { it.copy(firstName = value) } }, label = { Text("الاسم الأول") }, modifier = Modifier.weight(1f))
                                         KhabirTextField(party.restName, { value -> viewModel.updateParty(party.localId) { it.copy(restName = value) } }, label = { Text("باقي الاسم") }, modifier = Modifier.weight(1f))
                                     }
-                                    KhabirTextField(party.address, { value -> viewModel.updateParty(party.localId) { it.copy(address = value) } }, label = { Text("العنوان") }, modifier = Modifier.fillMaxWidth())
-                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        listOf(PartyRole.PLAINTIFF, PartyRole.DEFENDANT).forEach { role ->
+                                    KhabirTextField(if (party.role == PartyRole.LAWYER) com.khabir.app.domain.model.LawyerNotification.city(party.address) else party.address, { value -> viewModel.updateParty(party.localId) { it.copy(address = value) } }, label = { Text(if (party.role == PartyRole.LAWYER) "مدينة المحامي" else "العنوان") }, modifier = Modifier.fillMaxWidth())
+                                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        listOf(PartyRole.PLAINTIFF, PartyRole.DEFENDANT, PartyRole.LAWYER).forEach { role ->
                                             FilterChip(selected = party.role == role, onClick = { viewModel.updateParty(party.localId) { it.copy(role = role) } }, label = { Text(role.arabicLabel) })
                                         }
                                         FilterChip(selected = party.withCapacity, onClick = { viewModel.updateParty(party.localId) { it.copy(withCapacity = !it.withCapacity) } }, label = { Text("بصفته") })
@@ -425,7 +436,7 @@ fun CaseFormScreen(
                             ExposedDropdownMenu(expanded = partyRoleMenuExpanded, onDismissRequest = { partyRoleMenuExpanded = false }) {
                                 PartyRole.entries.forEach { role ->
                                     DropdownMenuItem(text = { Text(role.arabicLabel) }, onClick = {
-                                        viewModel.updatePartyEntry { it.copy(role = role) }
+                                        viewModel.updatePartyEntry { it.copy(role = role, address = if (it.role != role && (it.role == PartyRole.LAWYER || role == PartyRole.LAWYER)) "" else it.address) }
                                         partyRoleMenuExpanded = false
                                     })
                                 }
@@ -441,16 +452,13 @@ fun CaseFormScreen(
                     KhabirTextField(
                         state.partyEntry.address,
                         { value -> viewModel.updatePartyEntry { it.copy(address = value) } },
-                        label = { Text("العنوان") },
+                        label = { Text(if (state.partyEntry.role == PartyRole.LAWYER) "مدينة المحامي" else "العنوان") },
                         modifier = Modifier.fillMaxWidth()
                     )
                     FilledTonalButton(onClick = viewModel::savePartyEntry, modifier = Modifier.fillMaxWidth()) {
                         Text("حفظ الاسم وإضافة اسم آخر")
                     }
-                    Text(
-                        "بعد الحفظ يُمسح الاسم الأول فقط، وتبقى بقية الاسم والجهة و«بصفته» والعنوان للطرف التالي.",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    com.khabir.app.presentation.components.InlineHelp("مساعدة", "بعد الحفظ يُمسح الاسم الأول فقط، وتبقى بقية الاسم والجهة و«بصفته» والعنوان للطرف التالي.")
                 }
             }
             KhabirTextField(state.adminNotes, viewModel::onAdminNotesChanged, label = { Text("ملاحظات إدارية") }, minLines = 3, modifier = Modifier.fillMaxWidth())
@@ -556,7 +564,7 @@ private fun CaseVoiceChoiceDialog(
     onAiChosen: () -> Unit,
     onKeyboardChosen: () -> Unit
 ) {
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("اختر طريقة الإدخال الصوتي") }, text = {
+    AlertDialog(onDismissRequest = { }, properties = ExplicitDialogProperties, title = { ExplicitDialogTitle("اختر طريقة الإدخال الصوتي", onDismiss) }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             TextButton(onClick = onGoogleChosen, modifier = Modifier.fillMaxWidth()) { Text("صوت Google — جملة واحدة") }
             TextButton(onClick = onContinuousChosen, modifier = Modifier.fillMaxWidth()) { Text("استماع مستمر حتى «تم»") }
@@ -614,7 +622,7 @@ private fun VoiceReviewDialog(
                 HorizontalDivider()
                 Text("الخصوم المستخرجون", style = MaterialTheme.typography.titleSmall)
                 if (reviewedParties.isEmpty()) {
-                    Text("لم يتم التعرف على أسماء خصوم. يمكنك تعديل النص ثم الضغط على «إعادة تحليل النص».", style = MaterialTheme.typography.bodySmall)
+                    com.khabir.app.presentation.components.InlineHelp("مساعدة", "لم يتم التعرف على أسماء خصوم. يمكنك تعديل النص ثم الضغط على «إعادة تحليل النص».")
                 }
                 reviewedParties.forEachIndexed { index, party ->
                     KhabirCard(contentPadding = PaddingValues(8.dp)) {
@@ -629,11 +637,11 @@ private fun VoiceReviewDialog(
                                 modifier = Modifier.weight(1f)
                             )
                             KhabirTextField(
-                                value = party.address,
+                                value = if (party.role == PartyRole.LAWYER) com.khabir.app.domain.model.LawyerNotification.city(party.address) else party.address,
                                 onValueChange = { value ->
                                     onReviewedPartiesChange(reviewedParties.toMutableList().also { list -> list[index] = party.copy(address = value) })
                                 },
-                                label = { Text("العنوان") },
+                                label = { Text(if (party.role == PartyRole.LAWYER) "مدينة المحامي" else "العنوان") },
                                 modifier = Modifier.weight(1f)
                             )
                             }
@@ -642,8 +650,8 @@ private fun VoiceReviewDialog(
                                 onValueChange = { value -> onReviewedPartiesChange(reviewedParties.toMutableList().also { list -> list[index] = party.copy(claimKind = value) }) },
                                 label = { Text("الدعوى: أصلية / فرعية") }, modifier = Modifier.fillMaxWidth()
                             )
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                listOf(PartyRole.PLAINTIFF, PartyRole.DEFENDANT).forEach { role ->
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                listOf(PartyRole.PLAINTIFF, PartyRole.DEFENDANT, PartyRole.LAWYER).forEach { role ->
                                     FilterChip(
                                         selected = party.role == role,
                                         onClick = {

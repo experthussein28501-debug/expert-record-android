@@ -6,6 +6,7 @@ import com.khabir.app.domain.model.Case
 import com.khabir.app.domain.model.Report
 import com.khabir.app.domain.usecase.cases.SearchCasesUseCase
 import com.khabir.app.domain.usecase.report.ListReportsUseCase
+import com.khabir.app.domain.repository.ReportRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class ReportsHubUiState(
@@ -29,7 +31,8 @@ data class ReportsHubUiState(
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 class ReportsHubViewModel @Inject constructor(
     private val searchCases: SearchCasesUseCase,
-    private val listReports: ListReportsUseCase
+    private val listReports: ListReportsUseCase,
+    private val reportRepository: ReportRepository
 ) : ViewModel() {
     private val query = MutableStateFlow("")
     private val casesFlow = query.debounce(200).flatMapLatest { searchCases(it) }
@@ -44,5 +47,6 @@ class ReportsHubViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReportsHubUiState())
 
     fun onQueryChanged(value: String) { query.value = value }
+    fun onDeleteReport(reportId: Long) { viewModelScope.launch { reportRepository.delete(reportId) } }
 }
 

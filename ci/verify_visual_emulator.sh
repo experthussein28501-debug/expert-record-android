@@ -1,0 +1,164 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+review_dir="release-output/visual-emulator-0.9.9"
+mkdir -p "$review_dir"
+
+./gradlew --no-daemon -PKHABIR_TEST_BUILD_TYPE=trial :app:assembleCombinedTrial --stacktrace
+apk="app/build/outputs/apk/combined/trial/app-combined-trial.apk"
+test -s "$apk"
+
+AAPT="$ANDROID_HOME/build-tools/36.0.0/aapt"
+if [ ! -x "$AAPT" ]; then
+  AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
+fi
+test -x "$AAPT"
+pkg=$("$AAPT" dump badging "$apk" | sed -n "s/package: name='\([^']*\)'.*/\1/p")
+test -n "$pkg"
+
+adb install -r "$apk"
+adb shell am force-stop "$pkg"
+adb shell am start -W -n "$pkg/com.khabir.app.MainActivity"
+sleep 2
+
+dump_ui() {
+  local name="$1"
+  adb shell uiautomator dump "/sdcard/khabir-$name.xml" >/dev/null
+  adb pull "/sdcard/khabir-$name.xml" "$review_dir/$name.xml" >/dev/null
+  adb exec-out screencap -p > "$review_dir/$name.png"
+  test -s "$review_dir/$name.png"
+}
+
+tap_text() {
+  local xml="$1"
+  local needle="$2"
+  python3 - "$xml" "$needle" <<'PY'
+import re, sys, xml.etree.ElementTree as ET
+path, needle = sys.argv[1], sys.argv[2]
+root = ET.parse(path).getroot()
+nodes = list(root.iter("node"))
+for exact in (True, False):
+    for n in nodes:
+        text = n.attrib.get("text", "")
+        desc = n.attrib.get("content-desc", "")
+        matched = (needle == text or needle == desc) if exact else (needle in text or needle in desc)
+        if matched:
+            m = re.match(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", n.attrib.get("bounds",""))
+            if m:
+                x1,y1,x2,y2 = map(int,m.groups())
+                print((x1+x2)//2, (y1+y2)//2)
+                raise SystemExit(0)
+raise SystemExit("Missing tappable text: " + needle)
+PY
+}
+
+assert_texts_and_bounds() {
+  local xml="$1"; shift
+  python3 - "$xml" "$@" <<'PY'
+import re, subprocess, sys, xml.etree.ElementTree as ET
+path, *needles = sys.argv[1:]
+size = subprocess.check_output(["adb","shell","wm","size"], text=True)
+m = re.search(r"(\d+)x(\d+)", size)
+if not m:
+    raise SystemExit("Could not read emulator screen size")
+width, height = map(int, m.groups())
+root = ET.parse(path).getroot()
+nodes = list(root.iter("node"))
+for needle in needles:
+    matches = [n for n in nodes if needle in n.attrib.get("text","") or needle in n.attrib.get("content-desc","")]
+    if not matches:
+        raise SystemExit(f"Missing expected UI text: {needle}")
+    for n in matches:
+        b = re.match(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", n.attrib.get("bounds",""))
+        if not b:
+            continue
+        x1,y1,x2,y2 = map(int,b.groups())
+        if x1 < 0 or y1 < 0 or x2 > width or y2 > height or x2 <= x1 or y2 <= y1:
+            raise SystemExit(f"Out-of-bounds UI for {needle}: {(x1,y1,x2,y2)} vs {(width,height)}")
+PY
+}
+
+# Login / entry gate.
+dump_ui "login"
+entry_label=""
+for candidate in "فتح النسخة التجريبية" "تخطي" "تخطي والدخول للتجربة"; do
+  if grep -q "text=\"$candidate\"" "$review_dir/login.xml"; then
+    entry_label="$candidate"
+    break
+  fi
+done
+if [ -n "$entry_label" ]; then
+  read -r x y < <(tap_text "$review_dir/login.xml" "$entry_label")
+  adb shell input tap "$x" "$y"
+  sleep 3
+fi
+
+dump_ui "home"
+assert_texts_and_bounds "$review_dir/home.xml" "القضايا" "التقارير" "محاضر الأعمال"
+
+scroll_home_to_top() {
+  for _ in 1 2 3 4; do
+    adb shell input swipe 540 350 540 1550 250 >/dev/null 2>&1 || true
+    sleep 0.3
+  done
+}
+
+find_home_label() {
+  local label="$1"
+  local name="$2"
+  scroll_home_to_top
+  for attempt in 1 2 3 4 5 6; do
+    dump_ui "home-find-$name-$attempt"
+    if grep -Fq "text=\"$label\"" "$review_dir/home-find-$name-$attempt.xml" || \
+       grep -Fq "content-desc=\"$label\"" "$review_dir/home-find-$name-$attempt.xml"; then
+      tap_text "$review_dir/home-find-$name-$attempt.xml" "$label"
+      return 0
+    fi
+    adb shell input swipe 540 1550 540 450 300
+    sleep 0.8
+  done
+  echo "Home module not found after scrolling: $label" >&2
+  return 1
+}
+
+open_and_capture() {
+  local home_label="$1"
+  local name="$2"
+  shift 2
+  read -r x y < <(find_home_label "$home_label" "$name")
+  adb shell input tap "$x" "$y"
+  sleep 2
+  dump_ui "$name"
+  assert_texts_and_bounds "$review_dir/$name.xml" "$@"
+  adb shell input keyevent KEYCODE_BACK
+  sleep 1
+}
+
+open_and_capture "القضايا" "cases" "بيانات القضايا" "استخراج بيان القضايا حسب النوع والفترة"
+open_and_capture "التقارير" "reports" "التقارير" "تقرير جديد أو من دعوى مسجلة"
+open_and_capture "الإخطارات" "notifications" "الإخطارات وسركي الإخطارات"
+open_and_capture "محاضر الأعمال" "work-minutes" "محاضر الأعمال" "مجموعة جديدة أو من دعوى مسجلة"
+open_and_capture "الأجندة" "agenda" "الأجندة"
+
+# Re-check home after all back navigation.
+scroll_home_to_top
+dump_ui "home-final"
+assert_texts_and_bounds "$review_dir/home-final.xml" "القضايا" "التقارير" "محاضر الأعمال"
+read -r ax ay < <(find_home_label "الأجندة" "agenda-final-check")
+test "$ax" -ge 0
+test "$ay" -ge 0
+
+# Detect blank or suspiciously tiny screenshots.
+python3 - "$review_dir" <<'PY'
+import os, sys, struct, zlib
+folder = sys.argv[1]
+pngs = [os.path.join(folder,f) for f in os.listdir(folder) if f.endswith(".png")]
+if len(pngs) < 7:
+    raise SystemExit(f"Expected at least 7 screenshots, got {len(pngs)}")
+for p in pngs:
+    if os.path.getsize(p) < 5000:
+        raise SystemExit(f"Screenshot unexpectedly small: {p}")
+print("Visual emulator screenshots:", len(pngs))
+PY
+
+echo "Emulator visual navigation and bounds checks passed."

@@ -71,9 +71,18 @@ class WorkMinutesDocxBuilder {
                 if (openingDateText.isNotBlank()) append(" $openingDateText")
                 if (entry.openingTime.isNotBlank()) append(" الساعة ${entry.openingTime}")
                 append(" بالمكتب")
-                if (entry.bodyText.isNotBlank()) append(" ${entry.bodyText}")
             }
             body.append(normal(openingLine))
+            if (entry.bodyText.isNotBlank()) {
+                entry.bodyText.replace("\r\n", "\n").lines().forEach { line ->
+                    if (line.isBlank()) {
+                        body.append(compactSpacer())
+                    } else {
+                        val qa = parseQuestionAnswerLine(line)
+                        if (qa != null) body.append(questionAnswerParagraph(qa.first, qa.second)) else body.append(normal(line))
+                    }
+                }
+            }
             entry.scheduledFollowUpDate?.let { followUp ->
                 val followUpLine = buildString {
                     append("وحددنا يوم ${followUp.format(dateFormat)}")
@@ -94,7 +103,7 @@ class WorkMinutesDocxBuilder {
 
         val imageRelId = "rId2"
         val document = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><w:body>$body<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="720" w:right="850" w:bottom="720" w:left="850"/><w:bidi/></w:sectPr></w:body></w:document>"""
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><w:body>$body<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="850" w:right="1550" w:bottom="850" w:left="1550"/><w:pgBorders w:offsetFrom="text" w:display="allPages"><w:top w:val="nil"/><w:left w:val="single" w:sz="10" w:space="12" w:color="000000"/><w:bottom w:val="nil"/><w:right w:val="single" w:sz="10" w:space="12" w:color="000000"/></w:pgBorders><w:bidi/></w:sectPr></w:body></w:document>"""
 
         val parts = mutableListOf(
             "[Content_Types].xml" to contentTypes(hasLogo = logoBytes != null).toByteArray(),
@@ -131,6 +140,26 @@ class WorkMinutesDocxBuilder {
     }
 
     private fun normal(text: String): String = paragraph(text, "both", bold = true, size = 24, after = 8, line = 360, keepNext = false)
+
+    private fun parseQuestionAnswerLine(text: String): Pair<String, String>? {
+        val trimmed = text.trimStart()
+        val punctuated = Regex("""^([سج])\s*([/:.\-–—])\s*(.*)$""").matchEntire(trimmed)
+        if (punctuated != null) {
+            val label = punctuated.groupValues[1]
+            val body = punctuated.groupValues[3]
+            return label to body
+        }
+        val spaced = Regex("""^([سج])\s+(.+)$""").matchEntire(trimmed)
+        return spaced?.let { it.groupValues[1] to it.groupValues[2] }
+    }
+
+    private fun questionAnswerParagraph(label: String, text: String): String {
+        val safeLabel = escape(label)
+        val safeText = escape(text.toArabicIndicDigits())
+        return "<w:p><w:pPr><w:bidi/><w:widowControl/><w:jc w:val=\"both\"/><w:ind w:right=\"0\" w:hanging=\"800\"/><w:tabs><w:tab w:val=\"right\" w:pos=\"0\"/></w:tabs><w:spacing w:before=\"0\" w:after=\"8\" w:line=\"360\" w:lineRule=\"auto\"/></w:pPr>" +
+            "<w:r><w:rPr><w:rtl/><w:b/><w:lang w:val=\"ar-EG\" w:bidi=\"ar-EG\"/><w:rFonts w:ascii=\"Traditional Arabic\" w:hAnsi=\"Traditional Arabic\" w:cs=\"Traditional Arabic\"/><w:sz w:val=\"24\"/><w:szCs w:val=\"24\"/></w:rPr><w:t xml:space=\"preserve\">$safeLabel/ </w:t><w:tab/></w:r>" +
+            "<w:r><w:rPr><w:rtl/><w:b/><w:lang w:val=\"ar-EG\" w:bidi=\"ar-EG\"/><w:rFonts w:ascii=\"Traditional Arabic\" w:hAnsi=\"Traditional Arabic\" w:cs=\"Traditional Arabic\"/><w:sz w:val=\"24\"/><w:szCs w:val=\"24\"/></w:rPr><w:t xml:space=\"preserve\">$safeText</w:t></w:r></w:p>"
+    }
 
     private fun compactSpacer(): String = "<w:p><w:pPr><w:bidi/><w:spacing w:before=\"0\" w:after=\"20\"/></w:pPr></w:p>"
 

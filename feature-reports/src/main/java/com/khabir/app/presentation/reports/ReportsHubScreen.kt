@@ -7,6 +7,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
@@ -28,6 +30,18 @@ fun ReportsHubScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     var showRegisteredCases by remember { mutableStateOf(false) }
+    var pendingDeleteReportId by remember { mutableStateOf<Long?>(null) }
+
+    pendingDeleteReportId?.let { reportId ->
+        val report = state.reports.firstOrNull { it.id == reportId }
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("تأكيد إزالة التقرير") },
+            text = { Text(if (report == null) "هل تريد إزالة هذا التقرير؟" else "هل تريد إزالة التقرير الخاص بالدعوى ${report.caseNo.ifBlank { "غير المسجلة" }}؟") },
+            confirmButton = { Button(onClick = { viewModel.onDeleteReport(reportId); pendingDeleteReportId = null }) { Text("إزالة") } },
+            dismissButton = { TextButton(onClick = { pendingDeleteReportId = null }) { Text("إلغاء") } }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -116,7 +130,8 @@ fun ReportsHubScreen(
                             val preview = report.subjectOfCase.ifBlank { report.partiesSummary }
                             if (preview.isNotBlank()) Text(preview.take(120), style = MaterialTheme.typography.bodySmall)
                         }
-                        Text("متابعة", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+                        IconButton(onClick = { onOpenSavedReport(report.id) }) { Icon(Icons.Filled.Edit, "تعديل التقرير") }
+                        IconButton(onClick = { pendingDeleteReportId = report.id }) { Icon(Icons.Filled.Delete, "إزالة التقرير") }
                     }
                 }
             }

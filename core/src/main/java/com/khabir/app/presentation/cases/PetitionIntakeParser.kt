@@ -53,7 +53,7 @@ object PetitionIntakeParser {
         val lawyerContact = Regex("(?:و?محل(?:هم|ها|ه) المختار)[^\\n]*?(?=ضد|أنا المحضر|انا المحضر|\\n|$)(?:\\n[^\\n]*المحامي[^\\n]*)?").find(originalText)?.value
         val text = originalText.replace(Regex("(?:و?محل(?:هم|ها|ه) المختار)[^\\n]*?(?=ضد|أنا المحضر|انا المحضر|\\n|$)"), "")
             .replace(Regex("مخاطب[ًااً]*\\s+مع[^\\n]*"), "")
-        if (text.isBlank()) return Result()
+        if (text.isBlank()) return Result(parties = LawyerIntakeParser.parse(originalText), lawyerContact = lawyerContact)
 
         val incomingNo = captureNumber(text, "رقم الوارد", "الوارد رقم", "الوارد")
         val judgmentIdentity = JudgmentCaseIdentity.parse(text)
@@ -97,7 +97,7 @@ object PetitionIntakeParser {
             "المخاطبون والعناوين", "المخاطبون", "المخاطبين", "العناوين"
         )
 
-        val partyText = text.substringBefore("موضوع الدعوى:").substringBefore("مأمورية الحكم التمهيدي:")
+        val partyText = text.lines().filterNot { Regex("^(?:المحامي|المحامى|مخاطبة المحامي)\\s*:").containsMatchIn(it.trim()) }.joinToString("\n").substringBefore("موضوع الدعوى:").substringBefore("مأمورية الحكم التمهيدي:")
         val partyCandidates = mutableListOf<ParsedParty>()
         partyCandidates.addAll(parseExplicitPartyLines(partyText))
         partyCandidates.addAll(
@@ -110,7 +110,7 @@ object PetitionIntakeParser {
         val serviceParties = parseServiceParties(text)
         val candidates = if (structured.isNotEmpty()) structured else
             partyCandidates.filterNot { it.role == PartyRole.DEFENDANT && serviceParties.isNotEmpty() } + serviceParties
-        val parties = candidates.distinctBy {
+        val parties = (candidates + LawyerIntakeParser.parse(originalText)).distinctBy {
             listOf(it.role.name, normalizeName(it.name), normalizeName(it.address), it.claimKind)
         }
 
@@ -140,7 +140,7 @@ object PetitionIntakeParser {
         fun field(label: String) = fields.drop(1).firstOrNull { it.startsWith("$label:") }?.substringAfter(':')?.trim().orEmpty()
         val roleText = field("الصفة")
         ParsedParty(PartyRole.fromArabicLabel(roleText), roleText.contains("بصفته"), name,
-            field("العنوان"), field("الدعوى").ifBlank { "أصلية" })
+            if (PartyRole.fromArabicLabel(roleText) == PartyRole.LAWYER) com.khabir.app.domain.model.LawyerNotification.address(field("العنوان")) else field("العنوان"), field("الدعوى").ifBlank { "أصلية" })
     }
 
     private fun parseServiceParties(text: String): List<ParsedParty> {

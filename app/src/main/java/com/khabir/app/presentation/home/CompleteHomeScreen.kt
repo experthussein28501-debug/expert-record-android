@@ -45,12 +45,18 @@ fun CompleteHomeScreen(
     onOpenReports: () -> Unit,
     onOpenRegisters: () -> Unit,
     onOpenWorkMinutes: () -> Unit,
+    onOpenBenefits: () -> Unit,
     onOpenAgenda: () -> Unit,
     onOpenExpertProfile: () -> Unit,
     onOpenBackup: () -> Unit,
     notificationsEnabled: Boolean,
     reportsEnabled: Boolean
 ) {
+    val monetization = com.khabir.app.monetization.LocalMonetization.current
+    androidx.compose.runtime.DisposableEffect(monetization) {
+        monetization?.onHomeVisible(true)
+        onDispose { monetization?.onHomeVisible(false) }
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -68,7 +74,7 @@ fun CompleteHomeScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text("اختصارات العمل", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text("كل وحدة رئيسية ظاهرة هنا مباشرة، والأجندة تجمع المواعيد ومحاضر الأعمال في تقويم واحد.", style = MaterialTheme.typography.bodyMedium)
+            com.khabir.app.presentation.components.InlineHelp("مساعدة", "كل وحدة رئيسية ظاهرة هنا مباشرة، والأجندة تجمع المواعيد ومحاضر الأعمال في تقويم واحد.")
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 HomeModuleCard("قضية جديدة", "إضافة قضية وخصومها", Icons.Filled.Add, onNewCase, Modifier.weight(1f))
@@ -87,9 +93,11 @@ fun CompleteHomeScreen(
                 HomeModuleCard("بيانات الخبير", "بيانات المكتب والذكاء الاصطناعي", Icons.Filled.Person, onOpenExpertProfile, Modifier.weight(1f))
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                HomeModuleCard("المهام والاشتراك", "المكافآت والوقت بدون إعلانات", Icons.Filled.Person, onOpenBenefits, Modifier.weight(1f))
                 HomeModuleCard("النسخ الاحتياطي", "نسخة مشفرة واستعادة", Icons.Filled.Backup, onOpenBackup, Modifier.weight(1f))
             }
 
+            com.khabir.app.monetization.HomeBanner()
             if (!notificationsEnabled) Text("ملاحظة: وحدة الإخطارات غير مفعلة في نمط البناء الحالي.", color = MaterialTheme.colorScheme.error)
             if (!reportsEnabled) Text("ملاحظة: وحدة التقارير غير مفعلة في نمط البناء الحالي.", color = MaterialTheme.colorScheme.error)
         }
@@ -119,7 +127,7 @@ private fun HomeModuleCard(
         ) {
             Icon(icon, contentDescription = title)
             Text(title, fontWeight = FontWeight.Bold)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall)
+            com.khabir.app.presentation.components.InlineHelp(title, subtitle)
         }
     }
 }

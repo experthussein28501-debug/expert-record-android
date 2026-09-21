@@ -23,4 +23,7 @@ interface WorkMinutesDao {
 
     @Query("SELECT * FROM work_minutes ORDER BY updatedAtEpochMillis DESC")
     fun observeAll(): Flow<List<WorkMinutesEntity>>
+
+    @Query("DELETE FROM work_minutes WHERE id = :id")
+    suspend fun deleteById(id: Long)
 }
