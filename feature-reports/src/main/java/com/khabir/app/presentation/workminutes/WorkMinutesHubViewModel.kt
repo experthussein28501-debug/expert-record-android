@@ -6,6 +6,7 @@ import com.khabir.app.domain.model.Case
 import com.khabir.app.domain.model.WorkMinutesRecord
 import com.khabir.app.domain.usecase.cases.SearchCasesUseCase
 import com.khabir.app.domain.usecase.workminutes.ListWorkMinutesUseCase
+import com.khabir.app.domain.repository.WorkMinutesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
@@ -29,7 +30,8 @@ data class WorkMinutesHubUiState(
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 class WorkMinutesHubViewModel @Inject constructor(
     private val searchCases: SearchCasesUseCase,
-    private val listWorkMinutes: ListWorkMinutesUseCase
+    private val listWorkMinutes: ListWorkMinutesUseCase,
+    private val workMinutesRepository: WorkMinutesRepository
 ) : ViewModel() {
     private val query = MutableStateFlow("")
     private val casesFlow = query.debounce(200).flatMapLatest { searchCases(it) }
@@ -44,4 +46,5 @@ class WorkMinutesHubViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), WorkMinutesHubUiState())
 
     fun onQueryChanged(value: String) { query.value = value }
+    fun onDeleteRecord(id: Long) { viewModelScope.launch { workMinutesRepository.delete(id) } }
 }
