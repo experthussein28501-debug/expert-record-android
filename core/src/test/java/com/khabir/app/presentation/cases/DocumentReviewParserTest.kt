@@ -36,7 +36,7 @@ class DocumentReviewParserTest {
     }
 
     @Test
-    fun `keeps incomplete identity uncertain`() {
+    fun `matches incomplete identity when party confidence exceeds threshold`() {
         val documents = DocumentReviewParser.parse(
             """
             [[DOCUMENT 1]]
@@ -51,6 +51,7 @@ class DocumentReviewParserTest {
             [[END DOCUMENT]]
             """.trimIndent()
         )
-        assertEquals(DocumentMatchStatus.UNCERTAIN, documents[1].status)
+        assertEquals(DocumentMatchStatus.MATCHED, documents[1].status)
+        assertTrue(documents[1].reason.contains("نسبة"))
     }
 }
