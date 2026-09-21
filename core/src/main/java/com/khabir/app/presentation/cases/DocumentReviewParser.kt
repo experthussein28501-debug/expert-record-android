@@ -93,9 +93,20 @@ object DocumentReviewParser {
                 data.receiptDate?.let { appendLine("تاريخ استلام القضية: $it") }
                 data.preliminaryJudgmentDate?.let { appendLine("تاريخ الحكم التمهيدي: $it") }
             }
+            val mergedParties = linkedMapOf<String, PetitionIntakeParser.ParsedParty>()
             parsed.flatMap { (doc, data) -> data.parties.map { party ->
                 if (isCounterclaim(doc)) party.copy(claimKind = if (doc.type.contains("طلب عارض")) "طلب عارض" else "فرعية") else party
-            } }.distinct().forEach { party ->
+            } }.forEach { party ->
+                val key = listOf(party.role.name, normalize(party.name), party.claimKind).joinToString("|")
+                val existing = mergedParties[key]
+                mergedParties[key] = when {
+                    existing == null -> party
+                    existing.address.isBlank() && party.address.isNotBlank() -> existing.copy(address = party.address)
+                    party.address.length > existing.address.length -> existing.copy(address = party.address)
+                    else -> existing
+                }
+            }
+            mergedParties.values.forEach { party ->
                 appendLine("الخصم: ${party.name} | العنوان: ${party.address} | الصفة: ${party.role.arabicLabel}${if (party.withCapacity) " بصفته" else ""} | الدعوى: ${party.claimKind}")
             }
             appendLine("موضوع الدعوى: $subject")
