@@ -144,13 +144,26 @@ object DocumentReviewParser {
             return if (courtMatches) DocumentMatchStatus.MATCHED to "رقم الدعوى والسنة متطابقان"
             else DocumentMatchStatus.UNCERTAIN to "رقم الدعوى والسنة متطابقان لكن المحكمة ناقصة أو مختلفة؛ تحتاج مراجعة"
         }
-        val primaryNames = primary.primaryPartyNames.map(::normalize).filter(String::isNotBlank).toSet()
-        val otherNames = other.primaryPartyNames.map(::normalize).filter(String::isNotBlank).toSet()
-        val sharedNames = primaryNames.intersect(otherNames)
-        return if (sharedNames.isNotEmpty()) {
-            DocumentMatchStatus.UNCERTAIN to "يوجد خصوم مشتركون لكن رقم الدعوى أو السنة غير مكتمل"
-        } else {
-            DocumentMatchStatus.UNCERTAIN to "البيانات غير كافية لإثبات المطابقة؛ يلزم قرار المستخدم"
+        val primaryParsed = PetitionIntakeParser.parse(primary.rawText)
+        val otherParsed = PetitionIntakeParser.parse(other.rawText)
+        val primaryNames = primaryParsed.parties.map { normalize(it.name) }.filter(String::isNotBlank).toSet()
+        val otherNames = otherParsed.parties.map { normalize(it.name) }.filter(String::isNotBlank).toSet()
+        val primaryAddresses = primaryParsed.parties.map { normalize(it.address) }.filter(String::isNotBlank).toSet()
+        val otherAddresses = otherParsed.parties.map { normalize(it.address) }.filter(String::isNotBlank).toSet()
+
+        fun overlap(left: Set<String>, right: Set<String>): Int {
+            if (left.isEmpty() || right.isEmpty()) return 0
+            val common = left.intersect(right).size
+            return ((common.toDouble() / maxOf(left.size, right.size)) * 100.0).toInt()
+        }
+
+        val nameScore = overlap(primaryNames, otherNames)
+        val addressScore = overlap(primaryAddresses, otherAddresses)
+        val confidence = (nameScore * 0.8 + addressScore * 0.2).toInt().coerceIn(0, 100)
+        return when {
+            confidence >= 70 -> DocumentMatchStatus.MATCHED to "تطابق الخصوم والعناوين بنسبة $confidence% رغم عدم اكتمال رقم الدعوى"
+            nameScore > 0 -> DocumentMatchStatus.UNCERTAIN to "يوجد تشابه في الخصوم بنسبة $confidence%؛ راجع المستندين قبل الدمج"
+            else -> DocumentMatchStatus.UNCERTAIN to "البيانات غير كافية لإثبات المطابقة؛ يلزم قرار المستخدم"
         }
     }
 
