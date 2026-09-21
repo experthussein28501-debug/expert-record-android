@@ -108,7 +108,8 @@ PY
     camera_found=1
     break
   fi
-  adb shell input swipe 540 1600 540 500 300
+  # Stay inside the report ScrollView bounds on the emulator (roughly y=672..1542).
+  adb shell input swipe 540 1450 540 750 350
   sleep 0.6
 done
 test "$camera_found" -eq 1
