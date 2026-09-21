@@ -102,7 +102,7 @@ class IntakeNarrativeTest {
         val combined = PetitionIntakeParser.parse(DocumentReviewParser.combinedText(documents))
         assertTrue(combined.subjectOfCase.orEmpty().contains("15 قيراطًا"))
         assertTrue(combined.subjectOfCase.orEmpty().contains("فرز وتجنيب"))
-        assertTrue(combined.preliminaryMission.orEmpty().startsWith("يقضي حكم الإحالة"))
+        assertTrue(combined.preliminaryMission.orEmpty().startsWith("قضى حكم الإحالة"))
         assertTrue(combined.preliminaryMission.orEmpty().contains("15/07/2025"))
         assertTrue(combined.parties.isEmpty())
     }
