@@ -176,7 +176,7 @@ adb pull /sdcard/khabir-notifications.xml "$review_dir/notifications.xml"
 grep -q 'الإخطارات وسركي الإخطارات' "$review_dir/notifications.xml"
 
 # Finally run the bundled Arabic OCR instrumented test.
-./gradlew --no-daemon -PKHABIR_TEST_BUILD_TYPE=trial :app:connectedCombinedTrialAndroidTest --stacktrace
+./gradlew --no-daemon :app:connectedCombinedDebugAndroidTest --stacktrace
 
 cmp "$trial_apk" "$review_dir/verified-optimized.apk"
 "$(dirname "$AAPT")/apksigner" verify --verbose "$review_dir/verified-optimized.apk" > "$review_dir/signature-verification.txt"
