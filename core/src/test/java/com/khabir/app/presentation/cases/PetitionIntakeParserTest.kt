@@ -370,4 +370,16 @@ class PetitionIntakeParserTest {
         assertEquals("محكمة أسوان — نقابة المحامين بأسوان", lawyer.address)
     }
 
+    @Test
+    fun `keeps q suffix when judicial type is only in court heading`() {
+        val result = PetitionIntakeParser.parse(
+            """
+            محكمة القضاء الإداري بأسوان
+            الدعوى رقم ١٨٠ لسنة ١٠١ ق
+            """.trimIndent()
+        )
+        assertEquals("101ق", result.caseYear)
+        assertEquals("قضاء إداري", result.caseType)
+    }
+
 }
