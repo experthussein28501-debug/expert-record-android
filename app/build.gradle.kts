@@ -73,13 +73,11 @@ android {
             initWith(getByName("debug"))
             applicationIdSuffix = ".trial"
             isDebuggable = true
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // Runtime/device validation should keep the full Kotlin runtime so AndroidJUnitRunner
+            // can start reliably. The distributable hardened APK remains minified below.
+            isMinifyEnabled = false
+            isShrinkResources = false
             matchingFallbacks += listOf("debug")
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
             testProguardFiles("proguard-test-rules.pro")
         }
         create("hardened") {
