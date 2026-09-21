@@ -984,7 +984,7 @@ private fun OfficeImportReviewDialog(
             viewModel.onCustomSectionChanged(it, mergeReportInput(state.customSectionContents[it].orEmpty(), reviewedText, replaceExisting))
         }
         else importedTarget.write(viewModel, reviewedText, replaceExisting)
-        viewModel.onImportedOfficeTextConsumed()
+        viewModel.onImportedOfficeTextApproved()
     }) { Text("اعتماد في القسم") } }, dismissButton = { TextButton(onClick = viewModel::onImportedOfficeTextConsumed) { Text("إلغاء") } })
 }
 
