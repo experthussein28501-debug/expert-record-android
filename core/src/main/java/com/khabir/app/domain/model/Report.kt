@@ -92,7 +92,7 @@ data class ReportCoverFields(
                 department = profile.department,
                 plaintiffsSummary = if (estateOrGuardianship) fullPartySummary(plaintiffs) else coverPartySummary(plaintiffs),
                 defendantsSummary = if (estateOrGuardianship) fullPartySummary(defendants) else coverPartySummary(defendants),
-                partiesSummary = case.parties.joinToString("، ") { "${it.reportDisplayName} (${it.role.arabicLabel})" },
+                partiesSummary = case.parties.filter { it.role != PartyRole.LAWYER }.joinToString("، ") { "${it.reportDisplayName} (${it.role.arabicLabel})" },
                 caseType = case.caseType,
                 manualHeader = ""
             )

@@ -7,6 +7,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
@@ -30,6 +32,18 @@ fun WorkMinutesHubScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     var showRegisteredCases by remember { mutableStateOf(false) }
+    var pendingDeleteRecordId by remember { mutableStateOf<Long?>(null) }
+
+    pendingDeleteRecordId?.let { recordId ->
+        val record = state.records.firstOrNull { it.id == recordId }
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("تأكيد إزالة محاضر الأعمال") },
+            text = { Text(if (record == null) "هل تريد إزالة هذه المجموعة؟" else "هل تريد إزالة محاضر الدعوى ${record.caseNo.ifBlank { "غير المسجلة" }}؟") },
+            confirmButton = { Button(onClick = { viewModel.onDeleteRecord(recordId); pendingDeleteRecordId = null }) { Text("إزالة") } },
+            dismissButton = { TextButton(onClick = { pendingDeleteRecordId = null }) { Text("إلغاء") } }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -111,7 +125,8 @@ fun WorkMinutesHubScreen(
                             if (record.court.isNotBlank()) Text(record.court, style = MaterialTheme.typography.bodyMedium)
                             Text("${record.entries.size} محضر", style = MaterialTheme.typography.bodySmall)
                         }
-                        Text("متابعة", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+                        IconButton(onClick = { onOpenSavedRecord(record.id) }) { Icon(Icons.Filled.Edit, "تعديل محاضر الأعمال") }
+                        IconButton(onClick = { pendingDeleteRecordId = record.id }) { Icon(Icons.Filled.Delete, "إزالة محاضر الأعمال") }
                     }
                 }
             }

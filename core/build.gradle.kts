@@ -1,3 +1,6 @@
+import java.util.zip.GZIPInputStream
+import java.security.MessageDigest
+
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
@@ -19,7 +22,6 @@ android {
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"" + providers.gradleProperty("KHABIR_GOOGLE_WEB_CLIENT_ID").orNull.orEmpty().replace("\"", "\\\"") + "\"")
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
-    kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true; buildConfig = true }
     testOptions.unitTests.isIncludeAndroidResources = true
 }
@@ -48,7 +50,7 @@ dependencies {
     api("com.google.firebase:firebase-common:21.0.0")
 
     // The internal camera is the default. Google Lens is an explicit optional action.
-    val cameraXVersion = "1.3.4"
+    val cameraXVersion = "1.4.2"
     api("androidx.camera:camera-core:$cameraXVersion")
     api("androidx.camera:camera-camera2:$cameraXVersion")
     api("androidx.camera:camera-lifecycle:$cameraXVersion")
@@ -57,12 +59,12 @@ dependencies {
     // Gemini uses a protected HTTPS gateway configured at build time. The API key
     // remains on the protected gateway and is never packaged inside this app.
 
-    api("androidx.room:room-runtime:2.6.1")
-    api("androidx.room:room-ktx:2.6.1")
-    ksp("androidx.room:room-compiler:2.6.1")
+    api("androidx.room:room-runtime:2.8.4")
+    api("androidx.room:room-ktx:2.8.4")
+    ksp("androidx.room:room-compiler:2.8.4")
 
-    api("com.google.dagger:hilt-android:2.51.1")
-    ksp("com.google.dagger:hilt-android-compiler:2.51.1")
+    api("com.google.dagger:hilt-android:2.58")
+    ksp("com.google.dagger:hilt-android-compiler:2.58")
     api("androidx.hilt:hilt-navigation-compose:1.2.0")
     api("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     api("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
@@ -93,3 +95,21 @@ tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
         }
     }
 }
+
+val prepareArabicModel by tasks.registering {
+    val compressed = rootProject.layout.projectDirectory.file("ci-assets/ara.traineddata.gz")
+    val generated = layout.buildDirectory.dir("generated/ocrAssets")
+    inputs.file(compressed)
+    outputs.dir(generated)
+    doLast {
+        val model = generated.get().file("tessdata/ara.traineddata").asFile
+        model.parentFile.mkdirs()
+        GZIPInputStream(compressed.asFile.inputStream()).use { input -> model.outputStream().use { input.copyTo(it) } }
+        val hash = MessageDigest.getInstance("SHA-256").digest(model.readBytes()).joinToString("") { "%02x".format(it) }
+        check(hash == "e3206d3dc87fd50c24a0fb9f01838615911d25168f4e64415244b67d2bb3e729") { "Arabic OCR model checksum mismatch" }
+    }
+}
+android.sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/ocrAssets"))
+tasks.named("preBuild").configure { dependsOn(prepareArabicModel) }
+
+kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }

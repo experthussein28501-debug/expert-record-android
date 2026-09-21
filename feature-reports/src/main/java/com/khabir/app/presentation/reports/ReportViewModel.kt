@@ -63,10 +63,15 @@ data class ReportUiState(
     val attachmentsNote: String = "",
     val depositDate: LocalDate? = null,
     val updatedAt: Long = 0L,
+    val caseUpdates: List<com.khabir.app.domain.model.CaseFieldUpdate> = emptyList(),
+    val pageRetryMessage: String = "",
+    val canRetryPages: Boolean = false,
+    val isLeaving: Boolean = false,
     val isLoading: Boolean = true,
     val isSaving: Boolean = false,
     val isExporting: Boolean = false,
     val isOcrProcessing: Boolean = false,
+    val pendingReportPages: List<File> = emptyList(),
     val autoSaveStatus: String = "",
     val errorMessage: String? = null,
     val exportedFileUri: Uri? = null,
@@ -89,8 +94,10 @@ data class ReportUiState(
 @HiltViewModel
 @OptIn(FlowPreview::class)
 class ReportViewModel @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
     private val getOrCreateReport: GetOrCreateReportUseCase,
     private val saveReport: SaveReportUseCase,
+    private val caseRepository: com.khabir.app.domain.repository.CaseRepository,
     private val exportReportToWord: ExportReportToWordUseCase,
     private val exportReportToPdf: ExportReportToPdfUseCase,
     private val officeInterop: OfficeInteropService,
@@ -103,14 +110,46 @@ class ReportViewModel @Inject constructor(
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ReportUiState())
     val uiState: StateFlow<ReportUiState> = _uiState.asStateFlow()
+    private var retryPageRead: (() -> Unit)? = null
+    private var retryFiles: List<File> = emptyList()
+    fun retryPages() { _uiState.update { it.copy(canRetryPages = false) }; retryPageRead?.invoke() }
+    fun cancelPageRetry() {
+        retryFiles.forEach { it.delete() }; retryFiles = emptyList(); retryPageRead = null
+        _uiState.update { it.copy(canRetryPages = false, errorMessage = null) }
+    }
     private val autoSaveRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    private val draftSaver = com.khabir.app.presentation.common.DraftSaveCoordinator(
+        snapshot = { _uiState.value.toReport() },
+        persist = { saveReport(it) },
+        acceptId = { id -> _uiState.update { it.copy(reportId = id) } }
+    )
+
+    fun saveAndClose(onSaved: () -> Unit) {
+        val state = _uiState.value
+        if (state.isLeaving || state.isLoading || state.isSaving || state.isExporting) return
+        _uiState.update { it.copy(isLeaving = true, errorMessage = null) }
+        viewModelScope.launch {
+            try {
+                draftSaver.flush()
+                onSaved()
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLeaving = false, errorMessage = "تعذر الحفظ؛ لم يتم إغلاق الصفحة. حاول مرة أخرى.") }
+            }
+        }
+    }
+
 
     init {
         val reportId = savedStateHandle.get<Long>("reportId") ?: 0L
         val rawCaseId = savedStateHandle.get<Long>("caseId") ?: 0L
         val caseId = rawCaseId.takeIf { it > 0L }
         viewModelScope.launch {
-            val report = getOrCreateReport(reportId, caseId)
+            val loaded = getOrCreateReport(reportId, caseId)
+            val linkedCase = loaded.caseId?.let { caseRepository.getById(it) }
+            val metadata = ReportCustomSectionCodec.decode(loaded.customSectionContentsSpec)
+            val report = if (linkedCase != null && !metadata.containsKey(com.khabir.app.domain.model.ReportCaseSnapshot.PLAINTIFFS))
+                loaded.copy(customSectionContentsSpec = ReportCustomSectionCodec.encode(metadata + com.khabir.app.domain.model.ReportCaseSnapshot.parties(linkedCase))) else loaded
             personalAiKeyStore.migrateLegacyReportTemplate(report.templateId)
             _uiState.update {
                 it.fromReport(report).copy(
@@ -123,7 +162,7 @@ class ReportViewModel @Inject constructor(
             autoSaveRequests.debounce(1200).collect {
                 val state = _uiState.value
                 if (state.isLoading || state.isExporting) return@collect
-                runCatching { saveReport(state.toReport()) }
+                runCatching { draftSaver.flush() }
                     .onSuccess { id -> _uiState.update { it.copy(reportId = id, autoSaveStatus = "تم الحفظ تلقائياً") } }
                     .onFailure { _uiState.update { it.copy(autoSaveStatus = "تعذر الحفظ التلقائي") } }
             }
@@ -132,7 +171,45 @@ class ReportViewModel @Inject constructor(
 
     private fun edit(transform: (ReportUiState) -> ReportUiState) {
         _uiState.update { transform(it).copy(autoSaveStatus = "جارٍ الحفظ...") }
+        draftSaver.changed()
         autoSaveRequests.tryEmit(Unit)
+    }
+
+    private var pendingCasePartySnapshot: Map<String, String> = emptyMap()
+    fun reviewCaseUpdates() {
+        val caseId = _uiState.value.caseId ?: return
+        viewModelScope.launch {
+            runCatching {
+                val case = caseRepository.getById(caseId) ?: error("تعذر العثور على القضية")
+                val state = _uiState.value
+                val current = mapOf("رقم الدعوى" to state.caseNo, "السنة" to state.caseYear, "المحكمة" to state.court,
+                    "الخصوم" to state.partiesSummary, "موضوع الدعوى" to state.subjectOfCase, "المأمورية" to state.assignment,
+                    "المدعون في الغلاف" to state.customSectionContents[com.khabir.app.domain.model.ReportCaseSnapshot.PLAINTIFFS].orEmpty(),
+                    "المدعى عليهم في الغلاف" to state.customSectionContents[com.khabir.app.domain.model.ReportCaseSnapshot.DEFENDANTS].orEmpty())
+                pendingCasePartySnapshot = com.khabir.app.domain.model.ReportCaseSnapshot.parties(case)
+                val proposed = com.khabir.app.domain.model.CaseDocumentFields.report(case) + mapOf(
+                    "المدعون في الغلاف" to pendingCasePartySnapshot[com.khabir.app.domain.model.ReportCaseSnapshot.PLAINTIFFS].orEmpty(),
+                    "المدعى عليهم في الغلاف" to pendingCasePartySnapshot[com.khabir.app.domain.model.ReportCaseSnapshot.DEFENDANTS].orEmpty())
+                val updates = proposed.mapNotNull { (key, value) ->
+                    if (current[key] == value) null else com.khabir.app.domain.model.CaseFieldUpdate(key, current[key].orEmpty(), value)
+                }
+                _uiState.update { it.copy(caseUpdates = updates, autoSaveStatus = if (updates.isEmpty()) "بيانات القضية مطابقة للمحفوظ" else it.autoSaveStatus) }
+            }.onFailure { e -> _uiState.update { it.copy(errorMessage = e.message ?: "تعذر مراجعة القضية") } }
+        }
+    }
+    fun dismissCaseUpdates() = _uiState.update { it.copy(caseUpdates = emptyList()) }
+    fun applyCaseUpdates(selected: Set<String>) {
+        edit { state ->
+            val changes = state.caseUpdates.filter { it.key in selected }.associate { it.key to it.proposed }
+            state.copy(caseNo = changes["رقم الدعوى"] ?: state.caseNo, caseYear = changes["السنة"] ?: state.caseYear,
+                court = changes["المحكمة"] ?: state.court, partiesSummary = changes["الخصوم"] ?: state.partiesSummary,
+                subjectOfCase = changes["موضوع الدعوى"] ?: state.subjectOfCase, assignment = changes["المأمورية"] ?: state.assignment,
+                customSectionContents = state.customSectionContents + buildMap {
+                    changes["المدعون في الغلاف"]?.let { put(com.khabir.app.domain.model.ReportCaseSnapshot.PLAINTIFFS, it) }
+                    changes["المدعى عليهم في الغلاف"]?.let { put(com.khabir.app.domain.model.ReportCaseSnapshot.DEFENDANTS, it) }
+                },
+                caseUpdates = emptyList())
+        }
     }
 
     fun onCaseNoChanged(v: String) = edit { it.copy(caseNo = v) }
@@ -206,16 +283,27 @@ class ReportViewModel @Inject constructor(
     fun onReportPhotoCaptured(bitmap: Bitmap) {
         viewModelScope.launch {
             _uiState.update { it.copy(isOcrProcessing = true, errorMessage = null) }
-            when (val result = arabicOcr.recognize(bitmap)) {
-                is ArabicPetitionOcrService.Result.Success -> _uiState.update {
+            try {
+                when (val result = arabicOcr.recognize(bitmap)) {
+                    is ArabicPetitionOcrService.Result.Success -> _uiState.update {
+                        it.copy(
+                            isOcrProcessing = false,
+                            importedOfficeText = result.text,
+                            importedOfficeSource = "صورة OCR"
+                        )
+                    }
+                    is ArabicPetitionOcrService.Result.Failure -> _uiState.update {
+                        it.copy(isOcrProcessing = false, errorMessage = result.message)
+                    }
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                _uiState.update {
                     it.copy(
                         isOcrProcessing = false,
-                        importedOfficeText = result.text,
-                        importedOfficeSource = "صورة OCR"
+                        errorMessage = "تعذر معالجة صورة التقرير: " + (error.message ?: "خطأ غير متوقع")
                     )
-                }
-                is ArabicPetitionOcrService.Result.Failure -> _uiState.update {
-                    it.copy(isOcrProcessing = false, errorMessage = result.message)
                 }
             }
         }
@@ -224,24 +312,89 @@ class ReportViewModel @Inject constructor(
     fun onReportPhotoCapturedWithGemini(bitmap: Bitmap) {
         viewModelScope.launch {
             _uiState.update { it.copy(isOcrProcessing = true, errorMessage = null) }
-            when (val result = geminiVision.analyze(bitmap, LegalDocumentPurpose.REPORT)) {
-                is GeminiDocumentVisionService.Result.Success -> _uiState.update {
-                    it.copy(isOcrProcessing = false, importedOfficeText = result.text, importedOfficeSource = "Gemini Vision")
+            try {
+                when (val result = geminiVision.analyze(bitmap, LegalDocumentPurpose.REPORT)) {
+                    is GeminiDocumentVisionService.Result.Success -> _uiState.update {
+                        it.copy(isOcrProcessing = false, importedOfficeText = result.text, importedOfficeSource = "Gemini Vision")
+                    }
+                    is GeminiDocumentVisionService.Result.Unavailable -> useLocalOcrFallback(bitmap, result.message)
+                    is GeminiDocumentVisionService.Result.Failure -> useLocalOcrFallback(bitmap, result.message)
                 }
-                is GeminiDocumentVisionService.Result.Unavailable -> useLocalOcrFallback(bitmap, result.message)
-                is GeminiDocumentVisionService.Result.Failure -> useLocalOcrFallback(bitmap, result.message)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                _uiState.update {
+                    it.copy(
+                        isOcrProcessing = false,
+                        errorMessage = "تعذر تحليل صورة التقرير بالـAI: " + (error.message ?: "خطأ غير متوقع")
+                    )
+                }
             }
+        }
+    }
+
+    private val documentResults = mutableMapOf<String, String>()
+
+    fun prepareReportDocuments(pages: List<File>) {
+        if (_uiState.value.isOcrProcessing) return
+        documentResults.clear()
+        _uiState.update { it.copy(pendingReportPages = pages.take(10), errorMessage = null) }
+    }
+
+    fun cancelReportDocuments() {
+        if (_uiState.value.isOcrProcessing) return
+        _uiState.value.pendingReportPages.forEach { it.delete() }
+        documentResults.clear()
+        _uiState.update { it.copy(pendingReportPages = emptyList(), errorMessage = null) }
+        com.khabir.app.data.monetization.WorkAdEvents.finished()
+    }
+
+    fun analyzeRequestedDocuments(documents: List<ReportDocumentRequest>) {
+        if (_uiState.value.isOcrProcessing) return
+        val expected = _uiState.value.pendingReportPages
+        if (documents.flatMap { it.pages } != expected || expected.isEmpty()) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isOcrProcessing = true, errorMessage = null) }
+            try {
+                val texts = documents.mapIndexed { index, document ->
+                    val cacheKey = document.pages.joinToString("|") { it.path } + "\n" + document.instruction
+                    val resultText = documentResults[cacheKey] ?: run {
+                        val bitmaps = mutableListOf<Bitmap>()
+                        try {
+                            for (file in document.pages) {
+                                val bitmap = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                    com.khabir.app.presentation.common.decodeCameraBitmap(context, Uri.fromFile(file), 1400)
+                                } ?: error("تعذر فتح صورة من المستند ${index + 1}")
+                                bitmaps += bitmap
+                            }
+                            when (val result = geminiVision.analyzeReportDocument(bitmaps, document.instruction)) {
+                                is GeminiDocumentVisionService.Result.Success -> result.text.also { documentResults[cacheKey] = it }
+                                is GeminiDocumentVisionService.Result.Failure -> error("المستند ${index + 1}: ${result.message}")
+                                is GeminiDocumentVisionService.Result.Unavailable -> error(result.message)
+                            }
+                        } finally { bitmaps.forEach { it.recycle() } }
+                    }
+                    "المستند ${index + 1}\n$resultText"
+                }
+                expected.forEach { it.delete() }; documentResults.clear()
+                _uiState.update { it.copy(pendingReportPages = emptyList(), importedOfficeText = texts.joinToString("\n\n"), importedOfficeSource = "نتائج المستندات") }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (error: Exception) { _uiState.update { it.copy(errorMessage = error.message ?: "تعذر تحليل المستندات") } }
+            finally { _uiState.update { it.copy(isOcrProcessing = false) } }
         }
     }
 
     fun onDocumentPagesCaptured(pageFiles: List<File>, useAi: Boolean) {
         viewModelScope.launch {
             _uiState.update { it.copy(isOcrProcessing = true, errorMessage = null) }
+            retryFiles = pageFiles
+            retryPageRead = { onDocumentPagesCaptured(pageFiles, useAi) }
             val result = multiPageReader.read(pageFiles, LegalDocumentPurpose.REPORT, useAi)
+            _uiState.update { it.copy(canRetryPages = result.text.isBlank(), pageRetryMessage = result.warnings.joinToString("\n")) }
             _uiState.update {
                 if (result.text.isBlank()) it.copy(
                     isOcrProcessing = false,
-                    errorMessage = result.warnings.firstOrNull() ?: "لم يتم استخراج نص من الصفحات"
+                    errorMessage = result.warnings.joinToString("\n").takeIf(String::isNotBlank) ?: "لم يتم استخراج نص من الصفحات"
                 ) else it.copy(
                     isOcrProcessing = false,
                     importedOfficeText = result.text,
@@ -255,11 +408,14 @@ class ReportViewModel @Inject constructor(
     fun onPetitionSubjectPagesCaptured(pageFiles: List<File>, useAi: Boolean) {
         viewModelScope.launch {
             _uiState.update { it.copy(isOcrProcessing = true, errorMessage = null) }
+            retryFiles = pageFiles
+            retryPageRead = { onPetitionSubjectPagesCaptured(pageFiles, useAi) }
             val result = multiPageReader.read(pageFiles, LegalDocumentPurpose.PETITION_SUBJECT, useAi)
+            _uiState.update { it.copy(canRetryPages = result.text.isBlank(), pageRetryMessage = result.warnings.joinToString("\n")) }
             _uiState.update {
                 if (result.text.isBlank()) it.copy(
                     isOcrProcessing = false,
-                    errorMessage = result.warnings.firstOrNull() ?: "لم يتم استخراج موضوع الدعوى من الصفحات"
+                    errorMessage = result.warnings.joinToString("\n").takeIf(String::isNotBlank) ?: "لم يتم استخراج موضوع الدعوى من الصفحات"
                 ) else it.copy(
                     isOcrProcessing = false,
                     importedOfficeText = CaseSubjectFormatter.format(result.text),
@@ -396,8 +552,8 @@ class ReportViewModel @Inject constructor(
     fun onSave() {
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true, errorMessage = null) }
-            runCatching { saveReport(_uiState.value.toReport()) }
-                .onSuccess { id -> _uiState.update { it.copy(reportId = id, isSaving = false, autoSaveStatus = "تم الحفظ") } }
+            runCatching { draftSaver.flush() }
+                .onSuccess { id -> _uiState.update { it.copy(reportId = id, isSaving = false, autoSaveStatus = "تم الحفظ") }; com.khabir.app.data.monetization.WorkAdEvents.finished() }
                 .onFailure { e -> _uiState.update { it.copy(isSaving = false, errorMessage = e.message ?: "تعذر حفظ التقرير") } }
         }
     }
@@ -462,7 +618,8 @@ class ReportViewModel @Inject constructor(
                                 autoSaveStatus = "تم تحويل قالب Word إلى هيكل تقرير قابل للتعديل"
                             )
                         }
-                        autoSaveRequests.tryEmit(Unit)
+                        draftSaver.changed()
+        autoSaveRequests.tryEmit(Unit)
                     }
                 }
                 .onFailure { e ->
@@ -545,7 +702,7 @@ class ReportViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true, isExporting = true, errorMessage = null) }
             val report = _uiState.value.toReport()
-            val id = runCatching { saveReport(report) }.getOrElse { e ->
+            val id = runCatching { draftSaver.flush() }.getOrElse { e ->
                 finishExportFailure(e, "تعذر حفظ التقرير")
                 return@launch
             }
@@ -641,7 +798,10 @@ class ReportViewModel @Inject constructor(
     }
 
     fun onCancelExcelImport() = _uiState.update { it.copy(pendingExcelImport = emptyMap(), importedOfficeSource = null) }
-    fun onImportedOfficeTextConsumed() = _uiState.update { it.copy(importedOfficeText = null, importedOfficeSource = null) }
+    fun onImportedOfficeTextConsumed() {
+        _uiState.update { it.copy(importedOfficeText = null, importedOfficeSource = null) }
+        com.khabir.app.data.monetization.WorkAdEvents.finished()
+    }
     fun onExportWord() = exportWord()
     fun onExportPdf() = exportPdf()
 
@@ -649,7 +809,7 @@ class ReportViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true, isExporting = true, errorMessage = null) }
             val report = _uiState.value.toReport()
-            val id = runCatching { saveReport(report) }.getOrElse { e ->
+            val id = runCatching { draftSaver.flush() }.getOrElse { e ->
                 finishExportFailure(e, "تعذر حفظ التقرير")
                 return@launch
             }
@@ -670,7 +830,7 @@ class ReportViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true, isExporting = true, errorMessage = null) }
             val report = _uiState.value.toReport()
-            val id = runCatching { saveReport(report) }.getOrElse { e ->
+            val id = runCatching { draftSaver.flush() }.getOrElse { e ->
                 finishExportFailure(e, "تعذر حفظ التقرير قبل إنشاء Word")
                 return@launch
             }
@@ -690,7 +850,7 @@ class ReportViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true, isExporting = true, errorMessage = null) }
             val report = _uiState.value.toReport()
-            val id = runCatching { saveReport(report) }.getOrElse { e ->
+            val id = runCatching { draftSaver.flush() }.getOrElse { e ->
                 finishExportFailure(e, "تعذر حفظ التقرير قبل إنشاء PDF")
                 return@launch
             }

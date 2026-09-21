@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package com.khabir.app.presentation.notifications
 
 import android.Manifest
@@ -18,6 +20,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Search
@@ -36,6 +39,8 @@ import com.khabir.app.domain.model.PartyRole
 import com.khabir.app.domain.usecase.notification.ExportNotificationBatchToWordUseCase
 import com.khabir.app.presentation.cases.PetitionIntakeParser
 import com.khabir.app.presentation.common.InAppCameraCapture
+import com.khabir.app.presentation.common.ExplicitDialogProperties
+import com.khabir.app.presentation.common.ExplicitDialogTitle
 import com.khabir.app.presentation.components.KhabirCard
 import com.khabir.app.presentation.components.KhabirTextField
 import java.io.File
@@ -86,7 +91,9 @@ fun NotificationBatchScreen(onBack: () -> Unit, viewModel: NotificationBatchView
                     onToggle = viewModel::onTogglePastBatch,
                     onSelectAll = viewModel::onSelectAllPastBatches,
                     onClear = viewModel::onClearPastBatchSelection,
-                    onExport = viewModel::onExportSelected
+                    onExport = viewModel::onExportSelected,
+                    onDelete = viewModel::onDeletePastBatch,
+                    onEdit = viewModel::onEditPastBatch
                 )
                 NotificationScreenUiState.Mode.BuildingNew -> NewBatchSection(state, viewModel)
             }
@@ -100,9 +107,21 @@ private fun BatchListSection(
     onToggle: (Long) -> Unit,
     onSelectAll: () -> Unit,
     onClear: () -> Unit,
-    onExport: (ExportNotificationBatchToWordUseCase.OutputType) -> Unit
+    onExport: (ExportNotificationBatchToWordUseCase.OutputType) -> Unit,
+    onDelete: (Long) -> Unit,
+    onEdit: (Long) -> Unit
 ) {
     val batches = state.pastBatches
+    var pendingDeleteBatchId by remember { mutableStateOf<Long?>(null) }
+    pendingDeleteBatchId?.let { batchId ->
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("تأكيد إزالة الإخطارات") },
+            text = { Text("هل تريد إزالة دفعة الإخطارات المحفوظة؟") },
+            confirmButton = { Button(onClick = { onDelete(batchId); pendingDeleteBatchId = null }) { Text("إزالة") } },
+            dismissButton = { TextButton(onClick = { pendingDeleteBatchId = null }) { Text("إلغاء") } }
+        )
+    }
     if (batches.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("لا توجد دفعات إخطارات بعد") }
         return
@@ -129,6 +148,12 @@ private fun BatchListSection(
                             Text("${batch.recipients.size} مُخطَر", style = MaterialTheme.typography.bodySmall)
                         }
                         if (batch.isReprint) AssistChip(onClick = {}, label = { Text("مُعاد") })
+                        IconButton(onClick = { onEdit(batch.id) }) {
+                            Icon(Icons.Filled.Edit, contentDescription = "تعديل دفعة الإخطارات")
+                        }
+                        IconButton(onClick = { pendingDeleteBatchId = batch.id }) {
+                            Icon(Icons.Filled.Delete, contentDescription = "إزالة دفعة الإخطارات")
+                        }
                     }
                 }
             }
@@ -172,6 +197,7 @@ private fun NewBatchSection(state: NotificationScreenUiState, viewModel: Notific
             reviewedParties = PetitionIntakeParser.parse(recognized).parties
         }
     }
+    com.khabir.app.data.monetization.BlockWorkAds(showInAppCamera || state.isOcrProcessing || state.ocrReviewText != null || state.isCreating)
     val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
             if (pendingLensCamera) showLensCamera = true else showInAppCamera = true
@@ -510,7 +536,7 @@ private fun NotificationVoiceChoiceDialog(
     onAiChosen: () -> Unit,
     onKeyboardChosen: () -> Unit
 ) {
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("اختر طريقة الإدخال الصوتي") }, text = {
+    AlertDialog(onDismissRequest = { }, properties = ExplicitDialogProperties, title = { ExplicitDialogTitle("اختر طريقة الإدخال الصوتي", onDismiss) }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             TextButton(onClick = onGoogleChosen, modifier = Modifier.fillMaxWidth()) { Text("صوت Google — جملة واحدة") }
             TextButton(onClick = onContinuousChosen, modifier = Modifier.fillMaxWidth()) { Text("استماع مستمر حتى «تم»") }
@@ -573,14 +599,14 @@ private fun OcrReviewDialog(
                                 modifier = Modifier.fillMaxWidth()
                             )
                             KhabirTextField(
-                                value = party.address,
+                                value = if (party.role == PartyRole.LAWYER) com.khabir.app.domain.model.LawyerNotification.city(party.address) else party.address,
                                 onValueChange = { value ->
                                     onReviewedPartiesChange(reviewedParties.toMutableList().also { list -> list[index] = party.copy(address = value) })
                                 },
-                                label = { Text("العنوان") },
+                                label = { Text(if (party.role == PartyRole.LAWYER) "مدينة المحامي" else "العنوان") },
                                 modifier = Modifier.fillMaxWidth()
                             )
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 PartyRole.entries.forEach { role ->
                                     FilterChip(
                                         selected = party.role == role,
@@ -680,7 +706,7 @@ private fun ManualRecipientCard(
                 )
             }
             Spacer(Modifier.height(8.dp))
-            KhabirTextField(state.manualAddress, viewModel::onManualAddressChanged, label = { Text("العنوان") }, modifier = Modifier.fillMaxWidth(), trailingIcon = { IconButton(onClick = { onVoice(NotificationVoiceTarget.ADDRESS) }) { Icon(Icons.Filled.Mic, "إملاء العنوان") } })
+            KhabirTextField(state.manualAddress, viewModel::onManualAddressChanged, label = { Text(if (state.manualRole == PartyRole.LAWYER) "مدينة المحامي" else "العنوان") }, modifier = Modifier.fillMaxWidth(), trailingIcon = { IconButton(onClick = { onVoice(NotificationVoiceTarget.ADDRESS) }) { Icon(Icons.Filled.Mic, "إملاء العنوان") } })
             Spacer(Modifier.height(8.dp))
             FilledTonalButton(onClick = viewModel::onAddManualRecipient, modifier = Modifier.fillMaxWidth()) { Text("حفظ الطرف وإضافة طرف آخر") }
             if (state.manualRecipients.isNotEmpty()) {

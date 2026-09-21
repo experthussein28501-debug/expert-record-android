@@ -8,9 +8,12 @@ import android.net.Uri
 import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -22,6 +25,7 @@ import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,6 +41,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.khabir.app.domain.model.WorkMinutesEntry
 import com.khabir.app.domain.model.WorkMinutesPhrases
 import com.khabir.app.presentation.common.InAppCameraCapture
+import com.khabir.app.presentation.common.ExplicitDialogProperties
+import com.khabir.app.presentation.common.ExplicitDialogTitle
 import com.khabir.app.presentation.components.KhabirCard
 import com.khabir.app.presentation.components.KhabirPrimaryButton
 import com.khabir.app.presentation.components.KhabirTextField
@@ -49,10 +55,27 @@ import java.time.format.DateTimeFormatter
 
 private const val WORD_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun WorkMinutesScreen(onBack: () -> Unit, viewModel: WorkMinutesViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
+    androidx.activity.compose.BackHandler { viewModel.saveAndClose(onBack) }
+    if (state.isLeaving || state.isSaving || state.isExporting) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = {}) {
+            androidx.compose.material3.Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)) {
+                Row(Modifier.padding(24.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(28.dp))
+                    Text("جارٍ الحفظ والتجهيز…", Modifier.padding(start = 12.dp))
+                }
+            }
+        }
+    }
+    if (state.caseUpdates.isNotEmpty()) com.khabir.app.presentation.components.CaseUpdatesDialog(
+        state.caseUpdates, viewModel::dismissCaseUpdates, viewModel::applyCaseUpdates)
+    if (state.canRetryPages) AlertDialog(onDismissRequest = {}, title = { Text("الصفحات لم تكتمل") },
+        text = { Text(state.pageRetryMessage.ifBlank { "لم يتم اعتماد نص ناقص. يمكنك إعادة القراءة أو إلغاء المجموعة وإعادة التصوير." }) },
+        confirmButton = { TextButton(onClick = viewModel::retryPages) { Text("إعادة المحاولة") } },
+        dismissButton = { TextButton(onClick = viewModel::cancelPageRetry) { Text("إلغاء المجموعة") } })
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
@@ -163,7 +186,7 @@ fun WorkMinutesScreen(onBack: () -> Unit, viewModel: WorkMinutesViewModel = hilt
                         Text(subtitle, style = MaterialTheme.typography.labelMedium)
                     }
                 },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") } }
+                actions = { if (!state.isIndependent) TextButton(enabled = !state.isLoading, onClick = viewModel::reviewCaseUpdates) { Text("تحديثات القضية") } }, navigationIcon = { IconButton(onClick = { viewModel.saveAndClose(onBack) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") } }
             )
         },
         floatingActionButton = {
@@ -218,26 +241,72 @@ fun WorkMinutesScreen(onBack: () -> Unit, viewModel: WorkMinutesViewModel = hilt
                 }
             }
 
-            state.entries.sortedBy { it.number }.forEach { entry ->
-                WorkMinutesEntryCard(
-                    entry = entry,
-                    isExpanded = state.expandedEntryNumber == entry.number,
-                    expandedHeight = screenHeightDp * 0.8f,
-                    onExpand = { viewModel.onEntryExpand(entry.number) },
-                    onOpenEditor = { editingEntryNumber = entry.number },
-                    onChange = { transform -> viewModel.onEntryChanged(entry.number, transform) },
-                    onRemove = { viewModel.onRemoveEntry(entry.number) },
-                    onGoogleVoice = { startVoice(entry.number, false) },
-                    onAiVoice = { startVoice(entry.number, true) },
-                    onCamera = { startCamera(entry.number) },
-                    onImportImages = {
-                        importEntryNumber = entry.number
-                        importImagesLauncher.launch(arrayOf("image/*"))
-                    }
+            val orderedEntries = state.entries.sortedBy { it.number }
+            if (orderedEntries.isNotEmpty()) {
+                val pagerState = rememberPagerState(
+                    initialPage = state.expandedEntryNumber?.let { number ->
+                        orderedEntries.indexOfFirst { it.number == number }.coerceAtLeast(0)
+                    } ?: 0,
+                    pageCount = { orderedEntries.size }
                 )
+                var lastKnownCount by remember { mutableIntStateOf(orderedEntries.size) }
+
+                LaunchedEffect(orderedEntries.size) {
+                    if (orderedEntries.size > lastKnownCount) {
+                        pagerState.animateScrollToPage(orderedEntries.lastIndex)
+                    } else if (pagerState.currentPage > orderedEntries.lastIndex) {
+                        pagerState.scrollToPage(orderedEntries.lastIndex.coerceAtLeast(0))
+                    }
+                    lastKnownCount = orderedEntries.size
+                }
+
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("محضر ${pagerState.currentPage + 1} من ${orderedEntries.size}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Text("اسحب يمينًا أو يسارًا", style = MaterialTheme.typography.labelSmall)
+                }
+
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxWidth().height(screenHeightDp * 0.78f),
+                    pageSpacing = 12.dp
+                ) { page ->
+                    val entry = orderedEntries[page]
+                    Box(modifier = Modifier.fillMaxSize().padding(horizontal = 2.dp).verticalScroll(rememberScrollState())) {
+                        WorkMinutesEntryCard(
+                            entry = entry,
+                            isExpanded = true,
+                            expandedHeight = screenHeightDp * 0.72f,
+                            onExpand = { viewModel.onEntryExpand(entry.number) },
+                            onOpenEditor = { editingEntryNumber = entry.number },
+                            onChange = { transform -> viewModel.onEntryChanged(entry.number, transform) },
+                            onRemove = { viewModel.onRemoveEntry(entry.number) },
+                            onGoogleVoice = { startVoice(entry.number, false) },
+                            onAiVoice = { startVoice(entry.number, true) },
+                            onCamera = { startCamera(entry.number) },
+                            onImportImages = {
+                                importEntryNumber = entry.number
+                                importImagesLauncher.launch(arrayOf("image/*"))
+                            }
+                        )
+                    }
+                }
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) } },
+                        enabled = pagerState.currentPage > 0,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("السابق") }
+                    Button(
+                        onClick = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) } },
+                        enabled = pagerState.currentPage < orderedEntries.lastIndex,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("التالي") }
+                }
             }
 
             Spacer(Modifier.height(8.dp))
+            KhabirPrimaryButton(text = "حفظ المحاضر", onClick = viewModel::onSave, enabled = !state.isLoading && !state.isSaving)
             KhabirPrimaryButton(
                 text = if (state.isExporting) "جارٍ إنشاء Word..." else "تصدير محاضر الأعمال إلى Word",
                 onClick = viewModel::onExport,
@@ -396,6 +465,8 @@ private fun WorkMinutesEntryCard(
 ) {
     var showOpeningDatePicker by remember { mutableStateOf(false) }
     var showFollowUpDatePicker by remember { mutableStateOf(false) }
+    var listMenuExpanded by remember(entry.number) { mutableStateOf(false) }
+    var activeListStyle by remember(entry.number) { mutableStateOf<WorkMinutesListStyle?>(null) }
     val dateFormat = remember { DateTimeFormatter.ofPattern("d/M/yyyy") }
 
     if (showOpeningDatePicker) {
@@ -461,14 +532,43 @@ private fun WorkMinutesEntryCard(
                     )
                 }
             }
+            if (entry.number >= 2) {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("ترقيم البنود", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+                    Box {
+                        FilledTonalButton(onClick = { listMenuExpanded = true }) {
+                            Icon(Icons.Filled.FormatListNumbered, contentDescription = null)
+                            Spacer(Modifier.width(4.dp))
+                            Text(activeListStyle?.label ?: "اختيار قائمة")
+                        }
+                        DropdownMenu(expanded = listMenuExpanded, onDismissRequest = { listMenuExpanded = false }) {
+                            WorkMinutesListStyle.entries.forEach { style ->
+                                DropdownMenuItem(
+                                    text = { Text(style.label) },
+                                    onClick = {
+                                        activeListStyle = style.takeUnless { it == WorkMinutesListStyle.PLAIN }
+                                        listMenuExpanded = false
+                                        if (style != WorkMinutesListStyle.PLAIN) {
+                                            onChange { e -> e.copy(bodyText = ensureListStarted(e.bodyText, style)) }
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
             KhabirTextField(
                 value = entry.bodyText,
-                onValueChange = { onChange { e -> e.copy(bodyText = it) } },
-                modifier = Modifier.onFocusChanged { if (it.isFocused) { onExpand(); onOpenEditor() } }.let { if (isExpanded) it.weight(1f) else it },
+                onValueChange = { value ->
+                    val adjusted = activeListStyle?.let { style -> continueListOnEnter(entry.bodyText, value, style) } ?: value
+                    onChange { e -> e.copy(bodyText = adjusted) }
+                },
+                modifier = Modifier.onFocusChanged { if (it.isFocused) onExpand() }.let { if (isExpanded) it.weight(1f) else it },
                 label = { Text("نص المحضر") },
                 placeholder = { Text("لإثبات ...") },
-                minLines = 3,
-                maxLines = if (isExpanded) Int.MAX_VALUE else 6
+                minLines = 8,
+                maxLines = if (isExpanded) Int.MAX_VALUE else 10
             )
             Text("إدخال خاص بهذا المحضر فقط", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -533,6 +633,61 @@ private fun WorkMinutesEntryCard(
             }
         }
     }
+}
+
+private enum class WorkMinutesListStyle(val label: String) {
+    WESTERN("1، 2، 3"),
+    ARABIC_INDIC("١، ٢، ٣"),
+    ARABIC_LETTERS("أ، ب، ج"),
+    BULLET("• نقطة"),
+    DASH("– شرطة"),
+    X_MARK("X"),
+    PLAIN("نص عادي")
+}
+
+private fun ensureListStarted(text: String, style: WorkMinutesListStyle): String {
+    val trimmed = text.trimEnd()
+    if (trimmed.isBlank()) return listMarker(style, 1)
+    val lastLine = trimmed.lineSequence().lastOrNull().orEmpty()
+    return if (looksLikeListLine(lastLine, style)) text else trimmed + "\n" + listMarker(style, 1)
+}
+
+private fun continueListOnEnter(oldValue: String, newValue: String, style: WorkMinutesListStyle): String {
+    if (newValue.length != oldValue.length + 1 || !newValue.endsWith("\n")) return newValue
+    val completed = oldValue.lineSequence().count { looksLikeListLine(it, style) }.coerceAtLeast(1)
+    return newValue + listMarker(style, completed + 1)
+}
+
+private fun looksLikeListLine(line: String, style: WorkMinutesListStyle): Boolean {
+    val value = line.trimStart()
+    return when (style) {
+        WorkMinutesListStyle.WESTERN -> Regex("""\d+[.)-]?\s+.*""").matches(value)
+        WorkMinutesListStyle.ARABIC_INDIC -> Regex("""[٠-٩]+[.)-]?\s+.*""").matches(value)
+        WorkMinutesListStyle.ARABIC_LETTERS -> Regex("""[أبجدهوزحطيكلمنسعفصقرشتثخذضظغ][.)-]?\s+.*""").matches(value)
+        WorkMinutesListStyle.BULLET -> value.startsWith("• ")
+        WorkMinutesListStyle.DASH -> value.startsWith("– ")
+        WorkMinutesListStyle.X_MARK -> value.startsWith("X ")
+        WorkMinutesListStyle.PLAIN -> false
+    }
+}
+
+private fun listMarker(style: WorkMinutesListStyle, index: Int): String = when (style) {
+    WorkMinutesListStyle.WESTERN -> "$index. "
+    WorkMinutesListStyle.ARABIC_INDIC -> arabicIndic(index) + ". "
+    WorkMinutesListStyle.ARABIC_LETTERS -> arabicListLetter(index) + ". "
+    WorkMinutesListStyle.BULLET -> "• "
+    WorkMinutesListStyle.DASH -> "– "
+    WorkMinutesListStyle.X_MARK -> "X "
+    WorkMinutesListStyle.PLAIN -> ""
+}
+
+private fun arabicIndic(index: Int): String = index.toString().map { ch ->
+    "٠١٢٣٤٥٦٧٨٩"[ch.digitToInt()]
+}.joinToString("")
+
+private fun arabicListLetter(index: Int): String {
+    val letters = listOf("أ", "ب", "ج", "د", "هـ", "و", "ز", "ح", "ط", "ي", "ك", "ل", "م", "ن", "س", "ع", "ف", "ص", "ق", "ر", "ش", "ت", "ث", "خ", "ذ", "ض", "ظ", "غ")
+    return letters[(index - 1).mod(letters.size)]
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

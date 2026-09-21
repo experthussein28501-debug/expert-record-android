@@ -14,7 +14,7 @@ import javax.inject.Singleton
 /** تخزين مستقل تمامًا عن قاعدة بيانات القضايا. */
 @Singleton
 class AgendaStore @Inject constructor(@ApplicationContext context: Context) {
-    private val prefs: SharedPreferences = context.getSharedPreferences("khabir_agenda_days_v1", Context.MODE_PRIVATE)
+    private val prefs = com.khabir.app.data.security.AgendaVault(context)
     private val _records = MutableStateFlow(loadAll())
     val records: StateFlow<Map<Long, AgendaDayNote>> = _records
 
@@ -28,19 +28,19 @@ class AgendaStore @Inject constructor(@ApplicationContext context: Context) {
             record.imagePaths.isEmpty() &&
             record.manualAppointments.isEmpty()
         ) {
-            prefs.edit().remove(key).apply()
+            prefs.remove(key)
         } else {
-            prefs.edit().putString(key, AgendaDayCodec.encode(record)).apply()
+            prefs.put(key, AgendaDayCodec.encode(record))
         }
         _records.value = loadAll()
     }
 
     fun delete(date: LocalDate) {
-        prefs.edit().remove(date.toEpochDay().toString()).apply()
+        prefs.remove(date.toEpochDay().toString())
         _records.value = loadAll()
     }
 
-    private fun loadAll(): Map<Long, AgendaDayNote> = prefs.all.mapNotNull { (key, value) ->
+    private fun loadAll(): Map<Long, AgendaDayNote> = prefs.all().mapNotNull { (key, value) ->
         val epoch = key.toLongOrNull() ?: return@mapNotNull null
         val spec = value as? String ?: return@mapNotNull null
         AgendaDayCodec.decode(LocalDate.ofEpochDay(epoch), spec)?.let { epoch to it }

@@ -83,7 +83,7 @@ class EncryptedBackupService @Inject constructor(
                 ?: return@withContext BackupOperationResult.Failure("تعذر فتح ملف النسخة الاحتياطية")
             input.use { raw ->
                 BackupCipher.decryptedInput(BufferedInputStream(raw), password).use { decrypted ->
-                    zip.outputStream().buffered().use { output -> decrypted.copyTo(output) }
+                    zip.outputStream().buffered().use { output -> copyBounded(decrypted, output, 512L * 1024 * 1024) }
                 }
             }
             extractPayload(zip, staging)
@@ -128,6 +128,8 @@ class EncryptedBackupService @Inject constructor(
             zip.putDirectory("files/report_sketches", File(context.filesDir, "report_sketches"))
             zip.putDirectory("files/report_sketch_drafts", File(context.filesDir, "report_sketch_drafts"))
             zip.putText("settings/portable.txt", portableSettings())
+            zip.putText("settings/agenda.json", com.khabir.app.data.security.AgendaVault(context).exportPortable())
+            zip.putDirectory("files/agenda-media", File(context.filesDir, "agenda-media"))
         }
     }
 
@@ -142,22 +144,27 @@ class EncryptedBackupService @Inject constructor(
 
     private fun extractPayload(zipFile: File, staging: File) {
         ZipInputStream(BufferedInputStream(zipFile.inputStream())).use { zip ->
+            var extractedBytes = 0L
+            var entries = 0
+            val seen = mutableSetOf<String>()
             while (true) {
                 val entry = zip.nextEntry ?: break
+                require(++entries <= 10_000) { "عدد ملفات النسخة أكبر من الحد المسموح" }
                 val safeName = entry.name.replace('\\', '/')
-                val allowed = safeName == "manifest.txt" || safeName == "settings/portable.txt" ||
+                val allowed = safeName == "manifest.txt" || safeName == "settings/portable.txt" || safeName == "settings/agenda.json" || safeName.startsWith("files/agenda-media/") ||
                     safeName == "database/${AppDatabase.DB_NAME}" ||
                     safeName.startsWith("files/report_sketches/") || safeName.startsWith("files/report_sketch_drafts/")
                 if (!allowed || safeName.contains("../")) {
-                    zip.closeEntry(); continue
+                    throw IllegalArgumentException("ملف أو مسار غير مسموح داخل النسخة")
                 }
+                require(seen.add(safeName)) { "ملف مكرر داخل النسخة" }
                 val target = File(staging, safeName)
                 val canonicalRoot = staging.canonicalFile
                 val canonicalTarget = target.canonicalFile
                 require(canonicalTarget.path.startsWith(canonicalRoot.path + File.separator)) { "مسار غير صالح داخل النسخة" }
                 if (entry.isDirectory) target.mkdirs() else {
                     target.parentFile?.mkdirs()
-                    target.outputStream().buffered().use { output -> zip.copyTo(output) }
+                    target.outputStream().buffered().use { output -> extractedBytes += copyBounded(zip, output, minOf(256L * 1024 * 1024, 1024L * 1024 * 1024 - extractedBytes)) }
                 }
                 zip.closeEntry()
             }
@@ -222,14 +229,15 @@ object PendingBackupRestore {
             File(targetDb.absolutePath + "-shm").delete()
             val temporary = File(targetDb.parentFile, targetDb.name + ".restore")
             sourceDb.copyTo(temporary, overwrite = true)
-            if (targetDb.exists() && !targetDb.delete()) throw IllegalStateException("تعذر استبدال قاعدة البيانات الحالية")
-            if (!temporary.renameTo(targetDb)) {
-                temporary.copyTo(targetDb, overwrite = true)
-                temporary.delete()
-            }
+            java.nio.file.Files.move(temporary.toPath(), targetDb.toPath(), java.nio.file.StandardCopyOption.ATOMIC_MOVE, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
             replaceDirectory(File(staging, "files/report_sketches"), File(context.filesDir, "report_sketches"))
             replaceDirectory(File(staging, "files/report_sketch_drafts"), File(context.filesDir, "report_sketch_drafts"))
             restorePortableSettings(context, File(staging, "settings/portable.txt"))
+            val agenda = File(staging, "settings/agenda.json")
+            if (agenda.isFile) {
+                replaceDirectory(File(staging, "files/agenda-media"), File(context.filesDir, "agenda-media"))
+                com.khabir.app.data.security.AgendaVault(context).restorePortable(agenda.readText())
+            }
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
                 .putString(STATUS, "تم تطبيق النسخة الاحتياطية بنجاح")
                 .apply()

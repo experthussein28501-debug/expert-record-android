@@ -14,6 +14,7 @@ class ReportRepositoryImpl @Inject constructor(private val dao: ReportDao) : Rep
     override fun observeAll(): Flow<List<Report>> = dao.observeAll().map { list -> list.map { it.toDomain() } }
     override suspend fun getById(reportId: Long): Report? = dao.getById(reportId)?.toDomain()
     override suspend fun getForCase(caseId: Long): Report? = dao.getForCase(caseId)?.toDomain()
+    override suspend fun delete(reportId: Long) = dao.deleteById(reportId)
 
     override suspend fun save(report: Report): Long {
         val now = System.currentTimeMillis()

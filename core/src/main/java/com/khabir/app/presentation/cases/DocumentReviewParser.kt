@@ -102,7 +102,6 @@ object DocumentReviewParser {
             appendLine("الطلبات الختامية: " + petitions.mapNotNull { it.second.finalRequests }.joinToString("\n"))
             appendLine("مأمورية الحكم التمهيدي: $mission")
             appendLine("ملاحظات: " + parsed.mapNotNull { it.second.notes }.joinToString("\n"))
-            parsed.mapNotNull { it.second.lawyerContact }.distinct().forEach { appendLine("مخاطبة المحامي: $it") }
         }
     }
 

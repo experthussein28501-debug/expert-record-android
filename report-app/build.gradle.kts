@@ -16,16 +16,17 @@ android {
         versionName = "0.8.2-reports"
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
-    kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
     sourceSets["main"].assets.srcDir("../app/src/main/assets")
 }
 dependencies {
-    implementation("com.google.dagger:hilt-android:2.51.1")
+    implementation("com.google.dagger:hilt-android:2.58")
     implementation(project(":core"))
     implementation(project(":feature-reports"))
-    ksp("com.google.dagger:hilt-android-compiler:2.51.1")
+    ksp("com.google.dagger:hilt-android-compiler:2.58")
 }
 tasks.withType<JavaCompile>().configureEach {
     doFirst { delete(fileTree(layout.buildDirectory.dir("generated/ksp")) { include("**/java/byRounds/**") }) }
 }
+
+kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
