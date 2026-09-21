@@ -33,8 +33,11 @@ class NotificationBatchRepositoryImpl @Inject constructor(private val dao: Notif
     override suspend fun delete(batchId: Long) = dao.deleteBatch(batchId)
 
     override suspend fun save(batch: NotificationBatch): Long {
+        val existing = batch.id.takeIf { it > 0L }?.let { dao.getBatch(it) }
+        if (existing != null) dao.deleteRecipients(existing.id)
         val batchId = dao.insertBatch(
             NotificationBatchEntity(
+                id = existing?.id ?: batch.id,
                 appointmentDateEpochDay = batch.appointmentDate.toEpochDay(),
                 appointmentTime = batch.appointmentTime,
                 appointmentLocation = batch.appointmentLocation,
@@ -45,7 +48,7 @@ class NotificationBatchRepositoryImpl @Inject constructor(private val dao: Notif
                 departmentSnapshot = batch.department,
                 expertJobTitleSnapshot = batch.expertJobTitle,
                 attendancePhraseSnapshot = batch.attendancePhrase,
-                createdAtEpochMillis = System.currentTimeMillis(),
+                createdAtEpochMillis = existing?.createdAtEpochMillis ?: batch.createdAt.takeIf { it > 0L } ?: System.currentTimeMillis(),
                 isReprint = batch.isReprint,
                 sourceBatchId = batch.sourceBatchId
             )
