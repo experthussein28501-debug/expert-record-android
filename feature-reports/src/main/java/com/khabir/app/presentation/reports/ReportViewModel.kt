@@ -283,16 +283,27 @@ class ReportViewModel @Inject constructor(
     fun onReportPhotoCaptured(bitmap: Bitmap) {
         viewModelScope.launch {
             _uiState.update { it.copy(isOcrProcessing = true, errorMessage = null) }
-            when (val result = arabicOcr.recognize(bitmap)) {
-                is ArabicPetitionOcrService.Result.Success -> _uiState.update {
+            try {
+                when (val result = arabicOcr.recognize(bitmap)) {
+                    is ArabicPetitionOcrService.Result.Success -> _uiState.update {
+                        it.copy(
+                            isOcrProcessing = false,
+                            importedOfficeText = result.text,
+                            importedOfficeSource = "صورة OCR"
+                        )
+                    }
+                    is ArabicPetitionOcrService.Result.Failure -> _uiState.update {
+                        it.copy(isOcrProcessing = false, errorMessage = result.message)
+                    }
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                _uiState.update {
                     it.copy(
                         isOcrProcessing = false,
-                        importedOfficeText = result.text,
-                        importedOfficeSource = "صورة OCR"
+                        errorMessage = "تعذر معالجة صورة التقرير: " + (error.message ?: "خطأ غير متوقع")
                     )
-                }
-                is ArabicPetitionOcrService.Result.Failure -> _uiState.update {
-                    it.copy(isOcrProcessing = false, errorMessage = result.message)
                 }
             }
         }
@@ -301,12 +312,23 @@ class ReportViewModel @Inject constructor(
     fun onReportPhotoCapturedWithGemini(bitmap: Bitmap) {
         viewModelScope.launch {
             _uiState.update { it.copy(isOcrProcessing = true, errorMessage = null) }
-            when (val result = geminiVision.analyze(bitmap, LegalDocumentPurpose.REPORT)) {
-                is GeminiDocumentVisionService.Result.Success -> _uiState.update {
-                    it.copy(isOcrProcessing = false, importedOfficeText = result.text, importedOfficeSource = "Gemini Vision")
+            try {
+                when (val result = geminiVision.analyze(bitmap, LegalDocumentPurpose.REPORT)) {
+                    is GeminiDocumentVisionService.Result.Success -> _uiState.update {
+                        it.copy(isOcrProcessing = false, importedOfficeText = result.text, importedOfficeSource = "Gemini Vision")
+                    }
+                    is GeminiDocumentVisionService.Result.Unavailable -> useLocalOcrFallback(bitmap, result.message)
+                    is GeminiDocumentVisionService.Result.Failure -> useLocalOcrFallback(bitmap, result.message)
                 }
-                is GeminiDocumentVisionService.Result.Unavailable -> useLocalOcrFallback(bitmap, result.message)
-                is GeminiDocumentVisionService.Result.Failure -> useLocalOcrFallback(bitmap, result.message)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                _uiState.update {
+                    it.copy(
+                        isOcrProcessing = false,
+                        errorMessage = "تعذر تحليل صورة التقرير بالـAI: " + (error.message ?: "خطأ غير متوقع")
+                    )
+                }
             }
         }
     }
