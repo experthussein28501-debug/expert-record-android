@@ -426,7 +426,7 @@ class ReportViewModel @Inject constructor(
             retryPageRead = { onPetitionSubjectPagesCaptured(pageFiles, useAi) }
             try {
                 // Use the same intake parser as "إضافة قضية" so parties/case identity do not diverge.
-                val result = multiPageReader.read(pageFiles, LegalDocumentPurpose.PETITION, useAi)
+                val result = multiPageReader.read(pageFiles, LegalDocumentPurpose.PETITION, useAi, deleteAfterRead = false)
                 _uiState.update { it.copy(canRetryPages = result.text.isBlank(), pageRetryMessage = result.warnings.joinToString("\n")) }
                 if (result.text.isBlank()) {
                     _uiState.update { it.copy(
@@ -445,14 +445,16 @@ class ReportViewModel @Inject constructor(
                 val formatted = CaseSubjectFormatter.format(subjectSource, _uiState.value.finalRequestsPlacement)
                 if (formatted.isBlank()) {
                     pendingImportedCaseIdentity = null
-                    clearPageRetryAfterSuccess()
                     _uiState.update { it.copy(
                         isOcrProcessing = false,
-                        errorMessage = "تمت قراءة الصفحات لكن تعذر فصل موضوع الدعوى والطلبات الختامية بأمان. راجع الصور أو أعد التحليل بالـAI؛ لن يُضاف نص العريضة كاملًا إلى الموضوع."
+                        canRetryPages = true,
+                        pageRetryMessage = "تمت قراءة الصور، لكن تعذر فصل موضوع الدعوى والطلبات الختامية بأمان. أعد التحليل بالصور الأصلية أو ألغِ المجموعة وأعد التصوير.",
+                        errorMessage = "لن يُضاف نص العريضة كاملًا إلى الموضوع لأن الفصل لم ينجح."
                     ) }
                     return@launch
                 }
                 pendingImportedCaseIdentity = PendingImportedCaseIdentity(parsed, plaintiffs, defendants)
+                pageFiles.forEach { it.delete() }
                 clearPageRetryAfterSuccess()
                 _uiState.update { it.copy(
                     isOcrProcessing = false,
@@ -473,7 +475,7 @@ class ReportViewModel @Inject constructor(
             retryFiles = pageFiles
             retryPageRead = { onPreliminaryJudgmentPagesCaptured(pageFiles, useAi) }
             try {
-                val result = multiPageReader.read(pageFiles, LegalDocumentPurpose.PETITION, useAi)
+                val result = multiPageReader.read(pageFiles, LegalDocumentPurpose.PETITION, useAi, deleteAfterRead = false)
                 _uiState.update { it.copy(canRetryPages = result.text.isBlank(), pageRetryMessage = result.warnings.joinToString("\n")) }
                 if (result.text.isBlank()) {
                     _uiState.update { it.copy(isOcrProcessing = false, errorMessage = "لم يتم استخراج بيانات الحكم التمهيدي") }
@@ -487,14 +489,16 @@ class ReportViewModel @Inject constructor(
                 }.orEmpty()
                 if (assignment.isBlank()) {
                     pendingImportedCaseIdentity = null
-                    clearPageRetryAfterSuccess()
                     _uiState.update { it.copy(
                         isOcrProcessing = false,
-                        errorMessage = "تمت قراءة الحكم لكن لم يمكن تحديد مأمورية الخبير بأمان. لن يُنسخ نص الحكم كاملًا إلى خانة المأمورية."
+                        canRetryPages = true,
+                        pageRetryMessage = "تمت قراءة صور الحكم، لكن لم يمكن تحديد مأمورية الخبير بأمان. أعد التحليل بالصور الأصلية أو ألغِ المجموعة وأعد التصوير.",
+                        errorMessage = "لن يُنسخ نص الحكم كاملًا إلى خانة المأمورية."
                     ) }
                     return@launch
                 }
                 pendingImportedCaseIdentity = PendingImportedCaseIdentity(parsed, plaintiffs, defendants)
+                pageFiles.forEach { it.delete() }
                 clearPageRetryAfterSuccess()
                 _uiState.update { it.copy(
                     isOcrProcessing = false,
@@ -515,12 +519,20 @@ class ReportViewModel @Inject constructor(
             retryFiles = pageFiles
             retryPageRead = { onResearchDocumentPagesCaptured(pageFiles, useAi) }
             try {
-                val result = multiPageReader.read(pageFiles, LegalDocumentPurpose.REPORT, useAi)
+                val result = multiPageReader.read(pageFiles, LegalDocumentPurpose.REPORT, useAi, deleteAfterRead = false)
                 _uiState.update { it.copy(canRetryPages = result.text.isBlank(), pageRetryMessage = result.warnings.joinToString("\n")) }
                 val formatted = if (useAi && !result.usedLocalFallback) result.text else formatResearchDocumentLocally(result.text)
-                if (formatted.isNotBlank()) clearPageRetryAfterSuccess()
+                if (formatted.isNotBlank()) {
+                    pageFiles.forEach { it.delete() }
+                    clearPageRetryAfterSuccess()
+                }
                 _uiState.update {
-                    if (formatted.isBlank()) it.copy(isOcrProcessing = false, errorMessage = "لم يتم استخراج بيانات المستند")
+                    if (formatted.isBlank()) it.copy(
+                        isOcrProcessing = false,
+                        canRetryPages = true,
+                        pageRetryMessage = "تعذر تنظيم بيانات المستند. الصور الأصلية ما زالت محفوظة لإعادة التحليل.",
+                        errorMessage = "لم يتم استخراج بيانات المستند"
+                    )
                     else it.copy(
                         isOcrProcessing = false,
                         importedOfficeText = formatted,
