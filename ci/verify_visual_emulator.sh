@@ -94,14 +94,37 @@ if [ -n "$entry_label" ]; then
 fi
 
 dump_ui "home"
-assert_texts_and_bounds "$review_dir/home.xml" "القضايا" "الإخطارات" "التقارير" "محاضر الأعمال" "الأجندة"
+assert_texts_and_bounds "$review_dir/home.xml" "القضايا" "التقارير" "محاضر الأعمال"
+
+scroll_home_to_top() {
+  for _ in 1 2 3 4; do
+    adb shell input swipe 540 350 540 1550 250 >/dev/null 2>&1 || true
+    sleep 0.3
+  done
+}
+
+find_home_label() {
+  local label="$1"
+  local name="$2"
+  scroll_home_to_top
+  for attempt in 1 2 3 4 5 6; do
+    dump_ui "home-find-$name-$attempt"
+    if grep -q "$label" "$review_dir/home-find-$name-$attempt.xml"; then
+      tap_text "$review_dir/home-find-$name-$attempt.xml" "$label"
+      return 0
+    fi
+    adb shell input swipe 540 1550 540 450 300
+    sleep 0.8
+  done
+  echo "Home module not found after scrolling: $label" >&2
+  return 1
+}
 
 open_and_capture() {
   local home_label="$1"
   local name="$2"
   shift 2
-  dump_ui "home-before-$name"
-  read -r x y < <(tap_text "$review_dir/home-before-$name.xml" "$home_label")
+  read -r x y < <(find_home_label "$home_label" "$name")
   adb shell input tap "$x" "$y"
   sleep 2
   dump_ui "$name"
@@ -117,8 +140,12 @@ open_and_capture "محاضر الأعمال" "work-minutes" "محاضر الأع
 open_and_capture "الأجندة" "agenda" "الأجندة"
 
 # Re-check home after all back navigation.
+scroll_home_to_top
 dump_ui "home-final"
-assert_texts_and_bounds "$review_dir/home-final.xml" "القضايا" "الإخطارات" "التقارير" "محاضر الأعمال" "الأجندة"
+assert_texts_and_bounds "$review_dir/home-final.xml" "القضايا" "التقارير" "محاضر الأعمال"
+read -r ax ay < <(find_home_label "الأجندة" "agenda-final-check")
+test "$ax" -ge 0
+test "$ay" -ge 0
 
 # Detect blank or suspiciously tiny screenshots.
 python3 - "$review_dir" <<'PY'
