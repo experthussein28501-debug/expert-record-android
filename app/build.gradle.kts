@@ -80,6 +80,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            testProguardFiles("proguard-test-rules.pro")
         }
         create("hardened") {
             initWith(getByName("debug"))
