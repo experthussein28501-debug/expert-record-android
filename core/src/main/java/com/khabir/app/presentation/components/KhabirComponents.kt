@@ -49,7 +49,7 @@ fun KhabirTextField(
 ) {
     OutlinedTextField(
         value = value,
-        onValueChange = onValueChange,
+        onValueChange = { com.khabir.app.data.monetization.WorkAdEvents.interacted(); onValueChange(it) },
         modifier = modifier.fillMaxWidth(),
         label = label,
         placeholder = placeholder,

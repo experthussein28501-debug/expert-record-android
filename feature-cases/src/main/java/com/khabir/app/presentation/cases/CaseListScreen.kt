@@ -13,6 +13,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Mail
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
@@ -48,6 +50,7 @@ fun CaseListScreen(
     var showFromDatePicker by remember { mutableStateOf(false) }
     var showToDatePicker by remember { mutableStateOf(false) }
     var statementTypeMenuExpanded by remember { mutableStateOf(false) }
+    var pendingDeleteCaseId by remember { mutableStateOf<Long?>(null) }
     val importExcel = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) viewModel.onImportExcel(uri)
     }
@@ -229,6 +232,30 @@ fun CaseListScreen(
         )
     }
 
+
+    pendingDeleteCaseId?.let { caseId ->
+        val currentCase = state.cases.firstOrNull { it.id == caseId }
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("تأكيد إزالة القضية") },
+            text = {
+                Text(
+                    if (currentCase == null) "هل تريد إزالة هذه القضية؟"
+                    else "هل تريد إزالة دعوى ${currentCase.caseNo} لسنة ${currentCase.caseYear}؟"
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    viewModel.onDeleteCase(caseId)
+                    pendingDeleteCaseId = null
+                }) { Text("إزالة") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteCaseId = null }) { Text("إلغاء") }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -300,7 +327,15 @@ fun CaseListScreen(
                 ) {
                     items(state.cases, key = { it.id }) { c ->
                         KhabirCard(onClick = { onOpenCase(c.id) }) {
-                            Text("دعوى ${c.caseNo} لسنة ${c.caseYear}", style = MaterialTheme.typography.titleMedium)
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Text("دعوى ${c.caseNo} لسنة ${c.caseYear}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                                IconButton(onClick = { onOpenCase(c.id) }) {
+                                    Icon(Icons.Filled.Edit, contentDescription = "تعديل القضية")
+                                }
+                                IconButton(onClick = { pendingDeleteCaseId = c.id }) {
+                                    Icon(Icons.Filled.Delete, contentDescription = "إزالة القضية")
+                                }
+                            }
                             Text(c.court)
                             Text(c.caseType, style = MaterialTheme.typography.bodySmall)
                             if (c.parties.isNotEmpty()) {

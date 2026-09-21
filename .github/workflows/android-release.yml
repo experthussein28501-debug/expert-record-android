@@ -57,9 +57,25 @@ jobs:
           ORG_GRADLE_PROJECT_KHABIR_FIREBASE_APP_ID: ${{ secrets.KHABIR_FIREBASE_APP_ID }}
           ORG_GRADLE_PROJECT_KHABIR_FIREBASE_PROJECT_ID: ${{ secrets.KHABIR_FIREBASE_PROJECT_ID }}
           ORG_GRADLE_PROJECT_KHABIR_GOOGLE_WEB_CLIENT_ID: ${{ secrets.KHABIR_GOOGLE_WEB_CLIENT_ID }}
-          ORG_GRADLE_PROJECT_KHABIR_ACTIVATION_ENDPOINT: ${{ secrets.KHABIR_ACTIVATION_ENDPOINT }}
+          ORG_GRADLE_PROJECT_KHABIR_MONETIZATION_BASE_URL: ${{ secrets.KHABIR_MONETIZATION_BASE_URL }}
+          ORG_GRADLE_PROJECT_KHABIR_PRIVACY_POLICY_URL: ${{ secrets.KHABIR_PRIVACY_POLICY_URL }}
+          ORG_GRADLE_PROJECT_KHABIR_ACCOUNT_DELETION_URL: ${{ secrets.KHABIR_ACCOUNT_DELETION_URL }}
+          ORG_GRADLE_PROJECT_KHABIR_ADMOB_APP_ID: ${{ secrets.KHABIR_ADMOB_APP_ID }}
+          ORG_GRADLE_PROJECT_KHABIR_ADMOB_BANNER_ID: ${{ secrets.KHABIR_ADMOB_BANNER_ID }}
+          ORG_GRADLE_PROJECT_KHABIR_ADMOB_INTERSTITIAL_ID: ${{ secrets.KHABIR_ADMOB_INTERSTITIAL_ID }}
+          ORG_GRADLE_PROJECT_KHABIR_ADMOB_REWARDED_ID: ${{ secrets.KHABIR_ADMOB_REWARDED_ID }}
         run: |
           ./gradlew --no-daemon :app:assembleCombinedRelease :app:bundleCombinedRelease
+
+      - name: Verify release binary and certificate
+        run: |
+          set -euo pipefail
+          APK="$(find app/build/outputs/apk/combined/release -name '*.apk' | head -n 1)"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest print "$APK" > release-manifest.xml
+          python3 scripts/verify_apk_security.py "$APK" release-manifest.xml app/build/outputs/mapping/combinedRelease/mapping.txt
+          python3 scripts/verify_play_assets.py "$APK"
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 "$APK"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$APK" > signing-fingerprint.txt
 
       - name: Upload release outputs
         uses: actions/upload-artifact@v4
@@ -68,5 +84,8 @@ jobs:
           path: |
             app/build/outputs/apk/combined/release/*.apk
             app/build/outputs/bundle/combinedRelease/*.aab
+            signing-fingerprint.txt
+            release-manifest.xml
+            app/build/outputs/mapping/combinedRelease/mapping.txt
           if-no-files-found: error
           retention-days: 30

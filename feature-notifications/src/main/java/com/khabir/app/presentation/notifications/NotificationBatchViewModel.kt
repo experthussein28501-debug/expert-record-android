@@ -18,6 +18,7 @@ import com.khabir.app.domain.usecase.notification.ExportNotificationBatchToWordU
 import com.khabir.app.domain.usecase.notification.ListNotificationBatchesUseCase
 import com.khabir.app.domain.usecase.notification.RecipientSelection
 import com.khabir.app.domain.usecase.notification.ReuseBatchAsNewUseCase
+import com.khabir.app.domain.repository.NotificationBatchRepository
 import com.khabir.app.presentation.cases.PetitionIntakeParser
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -62,6 +63,7 @@ data class NotificationScreenUiState(
     val exportingType: ExportNotificationBatchToWordUseCase.OutputType? = null,
     val errorMessage: String? = null,
     val lastCreatedBatchId: Long? = null,
+    val editingBatchId: Long? = null,
     val exportedFileUri: Uri? = null,
     val isOcrProcessing: Boolean = false,
     val ocrReviewText: String? = null,
@@ -111,7 +113,8 @@ class NotificationBatchViewModel @Inject constructor(
     private val exportBatch: ExportNotificationBatchToWordUseCase,
     private val arabicOcr: ArabicPetitionOcrService,
     private val geminiVision: GeminiDocumentVisionService,
-    private val multiPageReader: MultiPageDocumentReader
+    private val multiPageReader: MultiPageDocumentReader,
+    private val batchRepository: NotificationBatchRepository
 ) : ViewModel() {
 
     companion object {
@@ -121,6 +124,7 @@ class NotificationBatchViewModel @Inject constructor(
          */
         fun manualRecipientValidationError(state: NotificationScreenUiState): String? {
             val missingCaseInfo = state.manualCaseNo.isBlank() || state.manualCaseYear.isBlank() || state.manualCourt.isBlank()
+            if (state.manualRole == PartyRole.LAWYER && com.khabir.app.domain.model.LawyerNotification.address(state.manualAddress).isBlank()) return "اكتب مدينة المحامي لتحديد المحكمة ونقابة المحامين"
             val missingName = state.manualFirstName.isBlank() && state.manualRestName.isBlank()
             return if (missingCaseInfo || missingName) "أكمل رقم وسنة الدعوى والمحكمة واسم الطرف" else null
         }
@@ -172,6 +176,7 @@ class NotificationBatchViewModel @Inject constructor(
             selectedParties = emptyList(),
             manualRecipients = emptyList(),
             lastCreatedBatchId = null,
+            editingBatchId = null,
             errorMessage = null
         )
     }
@@ -183,8 +188,44 @@ class NotificationBatchViewModel @Inject constructor(
             selectedRegisteredCaseId = null,
             selectedParties = emptyList(),
             manualRecipients = emptyList(),
+            editingBatchId = null,
             errorMessage = null
         )
+    }
+
+    fun onEditPastBatch(batchId: Long) {
+        val batch = _uiState.value.pastBatches.firstOrNull { it.id == batchId } ?: return
+        val ordinary = batch.recipients.filterNot { it.isAuthorityNotice }
+        val first = ordinary.firstOrNull()
+        _uiState.update {
+            it.copy(
+                mode = NotificationScreenUiState.Mode.BuildingNew,
+                caseSource = NotificationScreenUiState.CaseSource.NEW_CASE,
+                editingBatchId = batch.id,
+                manualCaseNo = first?.caseNo.orEmpty(),
+                manualCaseYear = first?.caseYear.orEmpty(),
+                manualCourt = first?.court.orEmpty(),
+                manualRecipients = ordinary.map { r ->
+                    RecipientSelection.Manual(
+                        caseNo = r.caseNo,
+                        caseYear = r.caseYear,
+                        court = r.court,
+                        firstName = r.partyFirstName,
+                        restName = r.partyRestName,
+                        role = r.partyRole,
+                        address = r.partyAddress,
+                        withCapacity = r.withCapacity
+                    )
+                },
+                appointmentDate = batch.appointmentDate,
+                appointmentTime = batch.appointmentTime,
+                appointmentLocation = batch.appointmentLocation,
+                requestedDocuments = batch.requestedDocuments,
+                selectedRegisteredCaseId = null,
+                selectedParties = emptyList(),
+                errorMessage = "تعديل نفس دفعة الإخطارات — الحفظ سيحدّث السجل الحالي"
+            )
+        }
     }
 
     fun onCaseSourceChanged(source: NotificationScreenUiState.CaseSource) = _uiState.update { state ->
@@ -258,6 +299,13 @@ class NotificationBatchViewModel @Inject constructor(
         it.copy(selectedPastBatchIds = emptySet(), errorMessage = null)
     }
 
+    fun onDeletePastBatch(batchId: Long) {
+        viewModelScope.launch {
+            runCatching { batchRepository.delete(batchId) }
+                .onFailure { error -> _uiState.update { it.copy(errorMessage = error.message ?: "تعذر إزالة الإخطار") } }
+        }
+    }
+
     fun onAppointmentDateChanged(v: LocalDate) = _uiState.update { it.copy(appointmentDate = v) }
     fun onAppointmentTimeChanged(v: String) = _uiState.update { it.copy(appointmentTime = v) }
     fun onAppointmentLocationChanged(v: String) = _uiState.update { it.copy(appointmentLocation = v) }
@@ -267,7 +315,7 @@ class NotificationBatchViewModel @Inject constructor(
     fun onManualCourtChanged(v: String) = _uiState.update { it.copy(manualCourt = v) }
     fun onManualFirstNameChanged(v: String) = _uiState.update { it.copy(manualFirstName = v) }
     fun onManualRestNameChanged(v: String) = _uiState.update { it.copy(manualRestName = v) }
-    fun onManualRoleChanged(v: PartyRole) = _uiState.update { it.copy(manualRole = v) }
+    fun onManualRoleChanged(v: PartyRole) = _uiState.update { it.copy(manualRole = v, manualAddress = if (it.manualRole != v && (it.manualRole == PartyRole.LAWYER || v == PartyRole.LAWYER)) "" else it.manualAddress) }
     fun onManualWithCapacityChanged(v: Boolean) = _uiState.update { it.copy(manualWithCapacity = v) }
     fun onManualAddressChanged(v: String) = _uiState.update { it.copy(manualAddress = v) }
 
@@ -396,7 +444,7 @@ class NotificationBatchViewModel @Inject constructor(
             state.manualFirstName.trim(),
             state.manualRestName.trim(),
             state.manualRole,
-            state.manualAddress.trim(),
+            if (state.manualRole == PartyRole.LAWYER) com.khabir.app.domain.model.LawyerNotification.address(state.manualAddress) else state.manualAddress.trim(),
             state.manualWithCapacity
         )
         _uiState.update {
@@ -453,8 +501,16 @@ class NotificationBatchViewModel @Inject constructor(
             _uiState.update { it.copy(isCreating = true, errorMessage = null) }
             val activeKeys = state.authorityCandidates.map { it.key }.toSet()
             val approved = state.approvedAuthorityNotices.filterKeys { it in activeKeys }.values.toList()
-            when (val result = createBatch(state.appointmentDate, state.appointmentTime, state.appointmentLocation, state.requestedDocuments, selections, authorityNotices = approved)) {
-                is CreateNotificationBatchUseCase.Result.Success -> _uiState.update {
+            when (val result = createBatch(
+                state.appointmentDate,
+                state.appointmentTime,
+                state.appointmentLocation,
+                state.requestedDocuments,
+                selections,
+                authorityNotices = approved,
+                existingBatchId = state.editingBatchId
+            )) {
+                is CreateNotificationBatchUseCase.Result.Success -> { _uiState.update {
                     it.copy(
                         isCreating = false,
                         lastCreatedBatchId = result.batchId,
@@ -463,9 +519,13 @@ class NotificationBatchViewModel @Inject constructor(
                         selectedRegisteredCaseId = null,
                         selectedParties = emptyList(),
                         manualRecipients = emptyList(),
-                        requestedDocuments = ""
+                        requestedDocuments = "",
+                        editingBatchId = null
                     )
                 }
+                    com.khabir.app.data.monetization.WorkAdEvents.finished()
+                }
+                CreateNotificationBatchUseCase.Result.MissingLawyerCity -> _uiState.update { it.copy(isCreating = false, errorMessage = "حدد مدينة المحامي في بياناته قبل إنشاء الإخطار") }
                 CreateNotificationBatchUseCase.Result.EmptySelection -> _uiState.update { it.copy(isCreating = false, errorMessage = "اختر طرفًا واحدًا على الأقل") }
                 CreateNotificationBatchUseCase.Result.MissingExpertProfile -> _uiState.update { it.copy(isCreating = false, errorMessage = "أكمل بيانات الخبير أولًا") }
             }

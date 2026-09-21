@@ -23,5 +23,7 @@ interface ReportDao {
 
     @Query("SELECT * FROM reports ORDER BY updatedAtEpochMillis DESC")
     fun observeAll(): Flow<List<ReportEntity>>
-}
 
+    @Query("DELETE FROM reports WHERE id = :reportId")
+    suspend fun deleteById(reportId: Long)
+}

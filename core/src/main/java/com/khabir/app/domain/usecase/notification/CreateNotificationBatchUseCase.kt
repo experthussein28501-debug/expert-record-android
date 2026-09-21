@@ -32,6 +32,7 @@ class CreateNotificationBatchUseCase @Inject constructor(
         data class Success(val batchId: Long) : Result()
         data object EmptySelection : Result()
         data object MissingExpertProfile : Result()
+        data object MissingLawyerCity : Result()
     }
 
     suspend operator fun invoke(
@@ -41,9 +42,17 @@ class CreateNotificationBatchUseCase @Inject constructor(
         requestedDocuments: String,
         selections: List<RecipientSelection>,
         reusedFrom: Long? = null,
-        authorityNotices: List<AuthorityNoticeDraft> = emptyList()
+        authorityNotices: List<AuthorityNoticeDraft> = emptyList(),
+        existingBatchId: Long? = null
     ): Result {
         if (selections.isEmpty()) return Result.EmptySelection
+        if (selections.any { selection ->
+            val (role, address) = when (selection) {
+                is RecipientSelection.FromCase -> selection.party.role to selection.party.address
+                is RecipientSelection.Manual -> selection.role to selection.address
+            }
+            role == PartyRole.LAWYER && com.khabir.app.domain.model.LawyerNotification.address(address).isBlank()
+        }) return Result.MissingLawyerCity
         val profile = expertProfileRepository.get() ?: return Result.MissingExpertProfile
 
         val manualSelections = selections.filterIsInstance<RecipientSelection.Manual>()
@@ -72,7 +81,7 @@ class CreateNotificationBatchUseCase @Inject constructor(
                         partyFirstName = selection.party.firstName,
                         partyRestName = selection.party.restName,
                         partyRole = selection.party.role,
-                        partyAddress = selection.party.address,
+                        partyAddress = if (selection.party.role == PartyRole.LAWYER) com.khabir.app.domain.model.LawyerNotification.address(selection.party.address) else selection.party.address,
                         plaintiffsSummary = plaintiffs,
                         defendantsSummary = defendants,
                         subjectOfCase = selection.case.subjectOfCase,
@@ -92,7 +101,7 @@ class CreateNotificationBatchUseCase @Inject constructor(
                         partyFirstName = selection.firstName.trim(),
                         partyRestName = selection.restName.trim(),
                         partyRole = selection.role,
-                        partyAddress = selection.address.trim(),
+                        partyAddress = if (selection.role == PartyRole.LAWYER) com.khabir.app.domain.model.LawyerNotification.address(selection.address) else selection.address.trim(),
                         plaintiffsSummary = summaries.plaintiffs,
                         defendantsSummary = summaries.defendants,
                         withCapacity = selection.withCapacity
@@ -103,6 +112,7 @@ class CreateNotificationBatchUseCase @Inject constructor(
         return Result.Success(
             batchRepository.save(
                 NotificationBatch(
+                    id = existingBatchId ?: 0L,
                     appointmentDate = appointmentDate,
                     appointmentTime = appointmentTime,
                     appointmentLocation = appointmentLocation,

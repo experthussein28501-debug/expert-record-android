@@ -6,6 +6,7 @@ enum class PartyRole(
 ) {
     PLAINTIFF("مدعي", PartySide.PLAINTIFF),
     DEFENDANT("مدعى عليه", PartySide.DEFENDANT),
+    LAWYER("محامي", PartySide.OTHER),
     OTHER("غيره", PartySide.OTHER);
 
     val isPlaintiff: Boolean get() = side == PartySide.PLAINTIFF
@@ -15,6 +16,7 @@ enum class PartyRole(
         fun fromArabicLabel(label: String): PartyRole {
             val normalized = label.trim()
             return when {
+                normalized.contains("محامي") || normalized.contains("محامى") -> LAWYER
                 normalized.startsWith("مدعي") || normalized.startsWith("مدعى") && !normalized.contains("عليه") -> PLAINTIFF
                 normalized.contains("مدعى عليه") || normalized.contains("مدعي عليه") -> DEFENDANT
                 else -> OTHER
@@ -26,6 +28,7 @@ enum class PartyRole(
             val normalized = value.trim()
             val capacity = normalized.contains("بصفته")
             val role = when {
+                normalized.contains("محامي") || normalized.contains("محامى") -> LAWYER
                 normalized.contains("مدعى عليه") || normalized.contains("مدعي عليه") -> DEFENDANT
                 normalized.contains("مدعي") || (normalized.contains("مدعى") && !normalized.contains("عليه")) -> PLAINTIFF
                 else -> OTHER

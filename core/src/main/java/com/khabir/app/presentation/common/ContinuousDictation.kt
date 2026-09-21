@@ -14,9 +14,16 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -30,7 +37,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -203,8 +212,14 @@ fun ContinuousDictationDialog(
     onDone: (String) -> Unit
 ) {
     val context = LocalContext.current
+    val view = LocalView.current
     val microphonePermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) controller.start()
+    }
+    DisposableEffect(controller.isListening || controller.isFinishing) {
+        val previousKeepScreenOn = view.keepScreenOn
+        if (controller.isListening || controller.isFinishing) view.keepScreenOn = true
+        onDispose { view.keepScreenOn = previousKeepScreenOn }
     }
     LaunchedEffect(Unit) {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
@@ -214,8 +229,16 @@ fun ContinuousDictationDialog(
         }
     }
     AlertDialog(
-        onDismissRequest = { controller.stop(); onDismiss() },
-        title = { Text(if (controller.isFinishing) "جارٍ إنهاء الإملاء…" else if (controller.isListening) "بيسمع... اتكلم بارتياح" else "تم الإيقاف") },
+        onDismissRequest = { /* لا إغلاق بالضغط خارج النافذة أثناء التسجيل */ },
+        properties = DialogProperties(dismissOnClickOutside = false, dismissOnBackPress = false),
+        title = {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(if (controller.isFinishing) "جارٍ إنهاء الإملاء…" else if (controller.isListening) "بيسمع... اتكلم بارتياح" else "تم الإيقاف")
+                IconButton(onClick = { controller.stop(); onDismiss() }) {
+                    Icon(Icons.Filled.Close, contentDescription = "إغلاق الإملاء")
+                }
+            }
+        },
         text = {
             Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
                 Text("يجدد التطبيق جلسات الإملاء حتى تضغط «تم». قد توجد وقفة قصيرة بين الجلسات بحسب خدمة الصوت على الجهاز.", style = MaterialTheme.typography.bodySmall)

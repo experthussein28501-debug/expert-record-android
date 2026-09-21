@@ -57,6 +57,7 @@ data class CaseFormUiState(
     val pendingPagePaths: List<String> = emptyList(),
     val documentReview: List<ReviewedDocument> = emptyList(),
     val selectedDocumentIds: Set<Int> = emptySet(),
+    val partyConflicts: List<Pair<PartyDraft, PartyDraft>> = emptyList(),
     val aiFailureMessage: String? = null
 )
 
@@ -117,7 +118,7 @@ class CaseFormViewModel @Inject constructor(
     fun savePartyEntry() = _uiState.update { state ->
         val entry = state.partyEntry
         if (entry.firstName.isBlank() && entry.restName.isBlank()) return@update state
-        val saved = entry.copy(localId = nextId++)
+        val saved = entry.copy(localId = nextId++, address = if (entry.role == PartyRole.LAWYER) com.khabir.app.domain.model.LawyerNotification.address(entry.address) else entry.address)
         state.copy(
             parties = state.parties + saved,
             partyEntry = entry.forNextParty()
@@ -250,7 +251,7 @@ class CaseFormViewModel @Inject constructor(
             _uiState.update {
                 if (result.text.isBlank()) it.copy(
                     isOcrProcessing = false,
-                    aiFailureMessage = result.aiError ?: result.warnings.firstOrNull() ?: "لم يتم استخراج نص من الصور",
+                    aiFailureMessage = result.aiError ?: result.warnings.joinToString("\n").takeIf(String::isNotBlank) ?: "لم يتم استخراج نص من الصور",
                     ocrMessage = null
                 ) else it.copy(
                     isOcrProcessing = false,
@@ -280,7 +281,7 @@ class CaseFormViewModel @Inject constructor(
             _uiState.update {
                 if (result.text.isBlank()) it.copy(
                     isOcrProcessing = false,
-                    ocrMessage = result.warnings.firstOrNull() ?: "لم يتم استخراج نص من الصور"
+                    ocrMessage = result.warnings.joinToString("\n").takeIf(String::isNotBlank) ?: "لم يتم استخراج نص من الصور"
                 ) else it.copy(
                     isOcrProcessing = false,
                     voiceReviewText = result.text,
@@ -338,8 +339,11 @@ class CaseFormViewModel @Inject constructor(
     fun dismissDocumentReview() = _uiState.update { it.copy(documentReview = emptyList()) }
 
     fun clearPendingDocuments() {
+        if (_uiState.value.isOcrProcessing) return
+        val hadDocuments = _uiState.value.pendingPagePaths.isNotEmpty()
         _uiState.value.pendingPagePaths.forEach { File(it).delete() }
         _uiState.update { it.copy(pendingPagePaths = emptyList(), documentReview = emptyList(), aiFailureMessage = null) }
+        if (hadDocuments) com.khabir.app.data.monetization.WorkAdEvents.finished()
     }
 
     private suspend fun useLocalOcrFallback(bitmap: Bitmap, reason: String) {
@@ -391,7 +395,9 @@ class CaseFormViewModel @Inject constructor(
         if (parsed.preliminaryMission != null) changed += "مأمورية الحكم التمهيدي"
         if (newParties.isNotEmpty()) changed += "${newParties.size} خصم"
 
+        val merged = PartyDraftMerger.merge(current.parties, newParties)
         _uiState.value = current.copy(
+            partyConflicts = current.partyConflicts + merged.conflicts,
             incomingNo = parsed.incomingNo ?: current.incomingNo,
             incomingDate = parsed.incomingDate ?: current.incomingDate,
             caseNo = parsed.caseNo ?: current.caseNo,
@@ -403,8 +409,8 @@ class CaseFormViewModel @Inject constructor(
             preliminaryMission = parsed.preliminaryMission ?: current.preliminaryMission,
             receiptDate = parsed.receiptDate ?: current.receiptDate,
             preliminaryJudgmentDate = parsed.preliminaryJudgmentDate ?: current.preliminaryJudgmentDate,
-            parties = if (newParties.isEmpty()) current.parties else mergeUniqueParties(current.parties, newParties),
-            adminNotes = listOfNotNull(parsed.notes, parsed.lawyerContact?.let { "مخاطبة المحامي: $it" }).joinToString("\n").takeIf(String::isNotBlank)?.let { note ->
+            parties = merged.parties,
+            adminNotes = listOfNotNull(parsed.notes).joinToString("\n").takeIf(String::isNotBlank)?.let { note ->
                 if (current.adminNotes.isBlank()) note else current.adminNotes + "\n" + note
             } ?: current.adminNotes,
             voiceReviewText = null,
@@ -423,6 +429,7 @@ class CaseFormViewModel @Inject constructor(
 
     fun onSave(onSaved: (Long) -> Unit = {}) {
         val s = _uiState.value
+        if (s.partyConflicts.isNotEmpty()) return
         val c = Case(
             id = s.caseId,
             incomingNo = s.incomingNo.trim(),
@@ -440,7 +447,7 @@ class CaseFormViewModel @Inject constructor(
                     firstName = p.firstName.trim(),
                     restName = p.restName.trim(),
                     role = p.role,
-                    address = p.address.trim(),
+                    address = if (p.role == PartyRole.LAWYER) com.khabir.app.domain.model.LawyerNotification.address(p.address) else p.address.trim(),
                     orderIndex = i,
                     withCapacity = p.withCapacity,
                     claimKind = p.claimKind
@@ -463,6 +470,7 @@ class CaseFormViewModel @Inject constructor(
                     } else {
                         clearPendingDocuments()
                         onSaved(r.caseId)
+                        com.khabir.app.data.monetization.WorkAdEvents.finished()
                     }
                 }
                 is SaveCaseUseCase.Result.Invalid -> _uiState.update { it.copy(isSaving = false, validationErrors = r.errors) }
@@ -470,13 +478,15 @@ class CaseFormViewModel @Inject constructor(
         }
     }
 
-    private fun mergeUniqueParties(current: List<PartyDraft>, extracted: List<PartyDraft>): List<PartyDraft> {
-        val seen = current.mapTo(mutableSetOf()) { it.duplicateKey() }
-        return current + extracted.filter { seen.add(it.duplicateKey()) }
+    fun resolvePartyConflict(choice: Int) = _uiState.update { state ->
+        val conflict = state.partyConflicts.firstOrNull() ?: return@update state
+        val parties = when (choice) {
+            1 -> state.parties.map { if (it.localId == conflict.first.localId) it.copy(address = conflict.second.address) else it }
+            2 -> state.parties + conflict.second
+            else -> state.parties
+        }
+        state.copy(parties = parties, partyConflicts = state.partyConflicts.drop(1))
     }
-
-    private fun PartyDraft.duplicateKey(): String = listOf(firstName, restName, role.name, address, claimKind)
-        .joinToString("|") { value -> value.trim().lowercase().replace(Regex("\\s+"), " ") }
 
     override fun onCleared() {
         _uiState.value.pendingPagePaths.forEach { File(it).delete() }

@@ -42,6 +42,11 @@ data class WorkMinutesUiState(
     val entries: List<WorkMinutesEntry> = emptyList(),
     val copiesCount: Int = 1,
     val expandedEntryNumber: Int? = null,
+    val caseUpdates: List<com.khabir.app.domain.model.CaseFieldUpdate> = emptyList(),
+    val pageRetryMessage: String = "",
+    val canRetryPages: Boolean = false,
+    val isLeaving: Boolean = false,
+    val isSaving: Boolean = false,
     val isLoading: Boolean = true,
     val isExporting: Boolean = false,
     val isCaptureProcessing: Boolean = false,
@@ -74,7 +79,35 @@ class WorkMinutesViewModel @Inject constructor(
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(WorkMinutesUiState())
     val uiState: StateFlow<WorkMinutesUiState> = _uiState.asStateFlow()
+    private var retryPageRead: (() -> Unit)? = null
+    private var retryFiles: List<File> = emptyList()
+    fun retryPages() { _uiState.update { it.copy(canRetryPages = false) }; retryPageRead?.invoke() }
+    fun cancelPageRetry() {
+        retryFiles.forEach { it.delete() }; retryFiles = emptyList(); retryPageRead = null
+        _uiState.update { it.copy(canRetryPages = false, errorMessage = null) }
+    }
     private val autoSaveRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    private val draftSaver = com.khabir.app.presentation.common.DraftSaveCoordinator(
+        snapshot = { _uiState.value.toRecord() },
+        persist = { saveWorkMinutes(it) },
+        acceptId = { id -> _uiState.update { it.copy(recordId = id) } }
+    )
+
+    fun saveAndClose(onSaved: () -> Unit) {
+        val state = _uiState.value
+        if (state.isLeaving || state.isLoading || state.isSaving || state.isExporting) return
+        _uiState.update { it.copy(isLeaving = true, errorMessage = null) }
+        viewModelScope.launch {
+            try {
+                draftSaver.flush()
+                onSaved()
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLeaving = false, errorMessage = "تعذر الحفظ؛ لم يتم إغلاق الصفحة. حاول مرة أخرى.") }
+            }
+        }
+    }
+
 
     private var caseReceiptDate: LocalDate? = null
     private var defaultExpertName: String = ""
@@ -107,7 +140,7 @@ class WorkMinutesViewModel @Inject constructor(
             autoSaveRequests.debounce(1000).collect {
                 val state = _uiState.value
                 if (state.isLoading) return@collect
-                runCatching { saveWorkMinutes(state.toRecord()) }
+                runCatching { draftSaver.flush() }
                     .onSuccess { id -> _uiState.update { it.copy(recordId = id, autoSaveStatus = "تم الحفظ تلقائياً") } }
                     .onFailure { _uiState.update { it.copy(autoSaveStatus = "تعذر الحفظ التلقائي") } }
             }
@@ -116,7 +149,34 @@ class WorkMinutesViewModel @Inject constructor(
 
     private fun edit(transform: (WorkMinutesUiState) -> WorkMinutesUiState) {
         _uiState.update { transform(it).copy(autoSaveStatus = "جارٍ الحفظ...") }
+        draftSaver.changed()
         autoSaveRequests.tryEmit(Unit)
+    }
+
+    fun reviewCaseUpdates() {
+        val caseId = _uiState.value.caseId ?: return
+        viewModelScope.launch {
+            runCatching {
+                val case = caseRepository.getById(caseId) ?: error("تعذر العثور على القضية")
+                val state = _uiState.value
+                val current = mapOf("رقم الدعوى" to state.caseNo, "السنة" to state.caseYear, "المحكمة" to state.court,
+                    "المدعون" to state.plaintiffsSummary, "المدعى عليهم" to state.defendantsSummary)
+                val updates = com.khabir.app.domain.model.CaseDocumentFields.minutes(case).mapNotNull { (key, value) ->
+                    if (current[key] == value) null else com.khabir.app.domain.model.CaseFieldUpdate(key, current[key].orEmpty(), value)
+                }
+                _uiState.update { it.copy(caseUpdates = updates, autoSaveStatus = if (updates.isEmpty()) "بيانات القضية مطابقة للمحفوظ" else it.autoSaveStatus) }
+            }.onFailure { e -> _uiState.update { it.copy(errorMessage = e.message ?: "تعذر مراجعة القضية") } }
+        }
+    }
+    fun dismissCaseUpdates() = _uiState.update { it.copy(caseUpdates = emptyList()) }
+    fun applyCaseUpdates(selected: Set<String>) {
+        edit { state ->
+            val changes = state.caseUpdates.filter { it.key in selected }.associate { it.key to it.proposed }
+            state.copy(caseNo = changes["رقم الدعوى"] ?: state.caseNo, caseYear = changes["السنة"] ?: state.caseYear,
+                court = changes["المحكمة"] ?: state.court, plaintiffsSummary = changes["المدعون"] ?: state.plaintiffsSummary,
+                defendantsSummary = changes["المدعى عليهم"] ?: state.defendantsSummary,
+                caseUpdates = emptyList())
+        }
     }
 
     fun onCaseNoChanged(value: String) = edit { it.copy(caseNo = value) }
@@ -193,17 +253,31 @@ class WorkMinutesViewModel @Inject constructor(
                     captureReviewSource = ""
                 )
             }
-            val result = multiPageReader.read(pageFiles.take(10), LegalDocumentPurpose.REPORT, useAi)
-            _uiState.update { state ->
-                if (result.text.isBlank()) state.copy(
-                    isCaptureProcessing = false,
-                    errorMessage = result.warnings.firstOrNull() ?: "لم يتم استخراج نص من صور محضر الأعمال"
-                ) else state.copy(
-                    isCaptureProcessing = false,
-                    captureReviewText = result.text,
-                    captureReviewSource = if (useAi) "AI Vision — ${result.pagesRead} صفحة" else "OCR — ${result.pagesRead} صفحة",
-                    errorMessage = if (result.usedLocalFallback) "استخدم التطبيق OCR المحلي لبعض الصور؛ راجع النص قبل الاعتماد." else null
-                )
+            retryFiles = pageFiles.take(10)
+            retryPageRead = { onDocumentPagesCaptured(entryNumber, pageFiles, useAi) }
+            try {
+                val result = multiPageReader.read(pageFiles.take(10), LegalDocumentPurpose.REPORT, useAi)
+                _uiState.update { it.copy(canRetryPages = result.text.isBlank(), pageRetryMessage = result.warnings.joinToString("\n")) }
+                _uiState.update { state ->
+                    if (result.text.isBlank()) state.copy(
+                        isCaptureProcessing = false,
+                        errorMessage = result.warnings.joinToString("\n").takeIf(String::isNotBlank) ?: "لم يتم استخراج نص من صور محضر الأعمال"
+                    ) else state.copy(
+                        isCaptureProcessing = false,
+                        captureReviewText = result.text,
+                        captureReviewSource = if (useAi) "AI Vision — ${result.pagesRead} صفحة" else "OCR — ${result.pagesRead} صفحة",
+                        errorMessage = if (result.usedLocalFallback) "استخدم التطبيق OCR المحلي لبعض الصور؛ راجع النص قبل الاعتماد." else null
+                    )
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                _uiState.update {
+                    it.copy(
+                        isCaptureProcessing = false,
+                        errorMessage = "تعذر معالجة صور محضر الأعمال: " + (error.message ?: "خطأ غير متوقع")
+                    )
+                }
             }
         }
     }
@@ -226,7 +300,10 @@ class WorkMinutesViewModel @Inject constructor(
     private suspend fun resolveCover(state: WorkMinutesUiState, profile: com.khabir.app.domain.model.ExpertProfile): ReportCoverFields? {
         val linkedCase = state.caseId?.let { caseRepository.getById(it) }
         return when {
-            linkedCase != null -> ReportCoverFields.from(linkedCase, profile)
+            linkedCase != null -> ReportCoverFields.from(linkedCase, profile).copy(
+                caseNo = state.caseNo, caseYear = state.caseYear, court = state.court,
+                plaintiffsSummary = state.plaintiffsSummary, defendantsSummary = state.defendantsSummary
+            )
             state.caseNo.isNotBlank() && state.caseYear.isNotBlank() -> ReportCoverFields(
                 court = state.court,
                 caseNo = state.caseNo,
@@ -245,6 +322,16 @@ class WorkMinutesViewModel @Inject constructor(
         }
     }
 
+    fun onSave() {
+        if (_uiState.value.isLoading || _uiState.value.isSaving) return
+        _uiState.update { it.copy(isSaving = true, errorMessage = null) }
+        viewModelScope.launch {
+            runCatching { draftSaver.flush() }
+                .onSuccess { _uiState.update { it.copy(isSaving = false, autoSaveStatus = "تم الحفظ") } }
+                .onFailure { e -> _uiState.update { it.copy(isSaving = false, errorMessage = e.message ?: "تعذر الحفظ") } }
+        }
+    }
+
     fun onExport() {
         val state = _uiState.value
         if (state.entries.isEmpty()) {
@@ -252,7 +339,9 @@ class WorkMinutesViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            _uiState.update { it.copy(isExporting = true) }
+            _uiState.update { it.copy(isExporting = true, errorMessage = null) }
+            try {
+            draftSaver.flush()
             val profile = expertProfileRepository.get()
             if (profile == null) {
                 _uiState.update { it.copy(isExporting = false, errorMessage = "أكمل بيانات الخبير أولًا") }
@@ -280,7 +369,11 @@ class WorkMinutesViewModel @Inject constructor(
                 defendants = cover.defendantsSummary,
                 entries = entriesWithExpert
             )
-            _uiState.update { it.copy(isExporting = false, exportedFileUri = uri) }
+            _uiState.update { it.copy(isExporting = false, exportedFileUri = uri, autoSaveStatus = "تم الحفظ") }
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isExporting = false, errorMessage = e.message ?: "تعذر حفظ وتصدير المحاضر") }
+            }
         }
     }
 
@@ -307,7 +400,7 @@ class WorkMinutesViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isExporting = true, errorMessage = null) }
             val state = _uiState.value
-            val id = runCatching { saveWorkMinutes(state.toRecord()) }.getOrElse { e ->
+            val id = runCatching { draftSaver.flush() }.getOrElse { e ->
                 _uiState.update { it.copy(isExporting = false, errorMessage = e.message ?: "تعذر حفظ محاضر الأعمال") }
                 return@launch
             }

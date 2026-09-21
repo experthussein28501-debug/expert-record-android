@@ -46,10 +46,7 @@ fun ExpertProfileScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(
-                "تُكتب مرة واحدة وتُستورد تلقائيًا في الإخطارات والتقارير والمستخرجات",
-                style = MaterialTheme.typography.bodyMedium
-            )
+            com.khabir.app.presentation.components.InlineHelp("مساعدة", "تُكتب مرة واحدة وتُستورد تلقائيًا في الإخطارات والتقارير والمستخرجات")
             KhabirTextField(s.ministryOrSector, viewModel::onMinistryChanged, label = { Text("الوزارة / القطاع") })
             KhabirTextField(s.department, viewModel::onDepartmentChanged, label = { Text("الإدارة / المكتب") })
             KhabirTextField(s.expertName, viewModel::onNameChanged, label = { Text("اسم الخبير") })
@@ -91,13 +88,12 @@ fun ExpertProfileScreen(
                 AiProvider.ANTHROPIC -> "تحليل الصور ومساعد التقرير؛ التفريغ الصوتي المباشر غير متاح"
                 AiProvider.GROQ -> "تحليل الصور، الصوت، ومساعد التقرير"
             }
-            Text(
+            com.khabir.app.presentation.components.InlineHelp("مفتاح الذكاء الاصطناعي",
                 if (s.hasPersonalAiKey) {
                     "مفتاح ${s.aiProvider.label} محفوظ ومشفر؛ اكتب مفتاحًا جديدًا لاستبداله. القدرات: $providerCapabilities."
                 } else {
                     "أضف مفتاح ${s.aiProvider.label}. القدرات: $providerCapabilities. يظل OCR المحلي متاحًا بدون مفتاح."
-                },
-                style = MaterialTheme.typography.bodySmall
+                }
             )
             val aiKeyMessage = s.aiKeyMessage
             if (aiKeyMessage != null) {
@@ -113,10 +109,7 @@ fun ExpertProfileScreen(
 
             HorizontalDivider(Modifier.padding(top = 8.dp))
             KhabirSectionHeader("تعليمات إضافية للذكاء الاصطناعي — اختيارية")
-            Text(
-                "القواعد الأساسية لقراءة المستندات والتقرير موجودة داخل التطبيق. اكتب هنا فقط توجيهاتك الخاصة، مثل أسلوب صياغة التقرير أو مستندات تريد التركيز عليها.",
-                style = MaterialTheme.typography.bodySmall
-            )
+            com.khabir.app.presentation.components.InlineHelp("مساعدة", "القواعد الأساسية لقراءة المستندات والتقرير موجودة داخل التطبيق. اكتب هنا فقط توجيهاتك الخاصة، مثل أسلوب صياغة التقرير أو مستندات تريد التركيز عليها.")
             KhabirTextField(
                 value = s.aiInstructions,
                 onValueChange = viewModel::onAiInstructionsChanged,
@@ -139,10 +132,7 @@ fun ExpertProfileScreen(
             }
 
             HorizontalDivider(Modifier.padding(top = 8.dp))
-            Text(
-                "النسخ الاحتياطي المشفر موجود في شاشة مستقلة من الصفحة الرئيسية حتى تظل بيانات الخبير مركزة ولا تتكرر نفس الوظيفة في مكانين.",
-                style = MaterialTheme.typography.bodySmall
-            )
+            com.khabir.app.presentation.components.InlineHelp("مساعدة", "النسخ الاحتياطي المشفر موجود في شاشة مستقلة من الصفحة الرئيسية حتى تظل بيانات الخبير مركزة ولا تتكرر نفس الوظيفة في مكانين.")
             KhabirSecondaryButton(text = "إظهار شاشة تسجيل الدخول مرة أخرى", onClick = onShowLoginAgain)
         }
     }

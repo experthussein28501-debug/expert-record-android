@@ -13,9 +13,12 @@ import android.print.PrintManager
 import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -27,6 +30,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -43,6 +47,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.khabir.app.presentation.common.InAppCameraCapture
+import com.khabir.app.presentation.common.ExplicitDialogProperties
+import com.khabir.app.presentation.common.ExplicitDialogTitle
 import com.khabir.app.presentation.components.KhabirCard
 import com.khabir.app.presentation.components.KhabirPrimaryButton
 import com.khabir.app.presentation.components.KhabirTextField
@@ -55,10 +61,27 @@ import kotlinx.coroutines.launch
 private enum class FileAction { OPEN, SAVE_AS, SHARE, PRINT }
 private enum class VoiceChoice { GOOGLE, AI, KEYBOARD }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
+    androidx.activity.compose.BackHandler { viewModel.saveAndClose(onBack) }
+    if (state.isLeaving || state.isSaving || state.isExporting) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = {}) {
+            androidx.compose.material3.Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)) {
+                Row(Modifier.padding(24.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(28.dp))
+                    Text("جارٍ الحفظ والتجهيز…", Modifier.padding(start = 12.dp))
+                }
+            }
+        }
+    }
+    if (state.caseUpdates.isNotEmpty()) com.khabir.app.presentation.components.CaseUpdatesDialog(
+        state.caseUpdates, viewModel::dismissCaseUpdates, viewModel::applyCaseUpdates)
+    if (state.canRetryPages) AlertDialog(onDismissRequest = {}, title = { Text("الصفحات لم تكتمل") },
+        text = { Text(state.pageRetryMessage.ifBlank { "لم يتم اعتماد نص ناقص. يمكنك إعادة القراءة أو إلغاء المجموعة وإعادة التصوير." }) },
+        confirmButton = { TextButton(onClick = viewModel::retryPages) { Text("إعادة المحاولة") } },
+        dismissButton = { TextButton(onClick = viewModel::cancelPageRetry) { Text("إلغاء المجموعة") } })
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     val snackbar = remember { SnackbarHostState() }
@@ -89,6 +112,9 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
     var rulesEditor by remember { mutableStateOf<String?>(null) }
     var styleLearningPreview by remember { mutableStateOf<String?>(null) }
     var expandedSectionId by remember { mutableStateOf<String?>(null) }
+    var editingSectionHeaderId by remember { mutableStateOf<String?>(null) }
+    var showReportTools by remember { mutableStateOf(false) }
+    com.khabir.app.data.monetization.BlockWorkAds(showInAppCamera || state.isOcrProcessing || state.pendingReportPages.isNotEmpty() || state.importedOfficeText != null || state.isSaving || state.isLoading || showAiRecording || showContinuousDictation)
     val screenHeightDp = LocalConfiguration.current.screenHeightDp.dp
 
     val saveAsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { destination ->
@@ -212,6 +238,8 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
             FileAction.PRINT -> if (mime == ReportViewModel.PDF_MIME) {
                 val pm = context.getSystemService(Context.PRINT_SERVICE) as PrintManager
                 pm.print("تقرير ${state.caseNo}/${state.caseYear}", PdfUriPrintAdapter(context, uri, "report.pdf"), PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).build())
+            } else {
+                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW).apply { setDataAndType(uri, mime); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }) }
             }
         }
         pendingAction = FileAction.OPEN
@@ -220,7 +248,7 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
-        topBar = { TopAppBar(title = { Column { Text("تقرير الخبرة", fontWeight = FontWeight.Bold); Text(if (state.isIndependent) "تقرير مستقل" else "مرتبط بقضية مسجلة", style = MaterialTheme.typography.labelMedium) } }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") } }) },
+        topBar = { TopAppBar(title = { Column { Text("تقرير الخبرة", fontWeight = FontWeight.Bold); Text(if (state.isIndependent) "تقرير مستقل" else "مرتبط بقضية مسجلة", style = MaterialTheme.typography.labelMedium) } }, actions = { if (!state.isIndependent) TextButton(enabled = !state.isLoading, onClick = viewModel::reviewCaseUpdates) { Text("تحديثات القضية") } }, navigationIcon = { IconButton(onClick = { viewModel.saveAndClose(onBack) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") } }) },
         bottomBar = {
             BottomAppBar {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -239,13 +267,14 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                             HorizontalDivider()
                             DropdownMenuItem(text = { Text("فتح نسخة Word") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.OPEN; viewModel.onExportWord() })
                             DropdownMenuItem(text = { Text("حفظ باسم Word") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.SAVE_AS; viewModel.onExportWord() })
-                            DropdownMenuItem(text = { Text("فتح نسخة PDF") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.OPEN; viewModel.onExportPdf() })
-                            DropdownMenuItem(text = { Text("حفظ باسم PDF") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.SAVE_AS; viewModel.onExportPdf() })
+                            DropdownMenuItem(text = { Text("فتح PDF بتنسيق التطبيق") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.OPEN; viewModel.onExportPdf() })
+                            DropdownMenuItem(text = { Text("حفظ PDF بتنسيق التطبيق") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.SAVE_AS; viewModel.onExportPdf() })
                             DropdownMenuItem(text = { Text("حفظ بيانات التقرير Excel") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.SAVE_AS; viewModel.onExportExcel() })
                             HorizontalDivider()
-                            DropdownMenuItem(text = { Text("طباعة مباشرة") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.PRINT; viewModel.onExportPdf() })
+                            if (state.savedWordTemplateUri.isNotBlank()) DropdownMenuItem(text = { Text("فتح القالب الشخصي للطباعة في Word") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.PRINT; viewModel.onUseSavedWordTemplate() })
+                            DropdownMenuItem(text = { Text("طباعة بتنسيق التطبيق") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.PRINT; viewModel.onExportPdf() })
                             DropdownMenuItem(text = { Text("مشاركة Word") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.SHARE; viewModel.onExportWord() })
-                            DropdownMenuItem(text = { Text("مشاركة PDF") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.SHARE; viewModel.onExportPdf() })
+                            DropdownMenuItem(text = { Text("مشاركة PDF بتنسيق التطبيق") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.SHARE; viewModel.onExportPdf() })
                             DropdownMenuItem(text = { Text("مشاركة Excel") }, onClick = { fileMenuExpanded = false; pendingAction = FileAction.SHARE; viewModel.onExportExcel() })
                         }
                     }
@@ -262,7 +291,7 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text("محرر التقرير", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text("واجهة مكتبية مألوفة بخانات مرتبة، مع حفظ تلقائي وصوت وكاميرا بجوار كل قسم.", style = MaterialTheme.typography.bodySmall)
+                    com.khabir.app.presentation.components.InlineHelp("مساعدة", "واجهة مكتبية مألوفة بخانات مرتبة، مع حفظ تلقائي وصوت وكاميرا بجوار كل قسم.")
                     Text("بيانات الدعوى المسجلة تنتقل للغلاف ورأس التقرير تلقائيًا.", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 }
             }
@@ -271,7 +300,7 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Link, null); Spacer(Modifier.width(8.dp)); Text("بيانات الدعوى للتقرير", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold) }
                     if (state.isIndependent) {
-                        Text("هذا التقرير غير مرتبط بقضية مسجلة. أدخل بيانات الغلاف ورأس التقرير هنا.", style = MaterialTheme.typography.bodySmall)
+                        com.khabir.app.presentation.components.InlineHelp("مساعدة", "هذا التقرير غير مرتبط بقضية مسجلة. أدخل بيانات الغلاف ورأس التقرير هنا.")
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             KhabirTextField(state.caseNo, viewModel::onCaseNoChanged, label = { Text("رقم الدعوى") }, modifier = Modifier.weight(1f), singleLine = true)
                             KhabirTextField(state.caseYear, viewModel::onCaseYearChanged, label = { Text("السنة") }, modifier = Modifier.weight(1f), singleLine = true)
@@ -283,10 +312,7 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                             label = { Text("رأس التقرير") },
                             minLines = 2
                         )
-                        Text(
-                            "مثال: تقرير في الدعوى رقم ... — اتركه فارغًا إذا لم ترغب في رأس صفحة",
-                            style = MaterialTheme.typography.bodySmall
-                        )
+                        com.khabir.app.presentation.components.InlineHelp("مساعدة", "مثال: تقرير في الدعوى رقم ... — اتركه فارغًا إذا لم ترغب في رأس صفحة")
                         ReportSectionField(
                             "الخصوم والصفات",
                             state.partiesSummary,
@@ -303,10 +329,14 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                 }
             }
             Spacer(Modifier.height(12.dp))
+            OutlinedButton(onClick = { showReportTools = !showReportTools }, modifier = Modifier.fillMaxWidth()) {
+                Text(if (showReportTools) "إخفاء أدوات التقرير" else "أدوات التقرير")
+            }
+            if (showReportTools) {
             KhabirCard(contentPadding = PaddingValues(12.dp)) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("إدخال واستيراد", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                    Text("الصوت والصورة وملفات Office تُراجع قبل اعتمادها، ولا يتم استبدال محتوى التقرير تلقائيًا.", style = MaterialTheme.typography.bodySmall)
+                    com.khabir.app.presentation.components.InlineHelp("مساعدة", "الصوت والصورة وملفات Office تُراجع قبل اعتمادها، ولا يتم استبدال محتوى التقرير تلقائيًا.")
                     Text(
                         if (state.isOcrProcessing) "جارٍ قراءة صفحات المستند..." else "كل زر تصوير في التقرير يتيح تصوير مستند متعدد الصفحات ثم مراجعته دفعة واحدة.",
                         style = MaterialTheme.typography.labelMedium,
@@ -332,10 +362,7 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
             KhabirCard(contentPadding = PaddingValues(12.dp)) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("مساعد التقرير بالذكاء الاصطناعي", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                    Text(
-                        "اكتب المطلوب مثل: رتّب بحث المستندات أو صغ هذه الفقرة. لن يُضاف شيء للتقرير إلا بعد مراجعتك واعتمادك.",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    com.khabir.app.presentation.components.InlineHelp("مساعدة", "اكتب المطلوب مثل: رتّب بحث المستندات أو صغ هذه الفقرة. لن يُضاف شيء للتقرير إلا بعد مراجعتك واعتمادك.")
                     KhabirTextField(
                         value = assistantRequest,
                         onValueChange = { assistantRequest = it },
@@ -367,7 +394,7 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                         }
                     }
                     HorizontalDivider()
-                    Text("قواعد الصياغة فقط: لا تحفظ أسماء أو وقائع قضايا. تُرسل القواعد مع طلب AI بعد مراجعتك.", style = MaterialTheme.typography.labelSmall)
+                    com.khabir.app.presentation.components.InlineHelp("مساعدة", "قواعد الصياغة فقط: لا تحفظ أسماء أو وقائع قضايا. تُرسل القواعد مع طلب AI بعد مراجعتك.")
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         OutlinedButton(
                             onClick = { rulesEditor = viewModel.learnedRules().ifBlank { "استخدم عناوين واضحة وفقرات قصيرة. حافظ على الأسماء والأرقام كما وردت. لا تضف وقائع غير موجودة." } },
@@ -387,19 +414,16 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                 }
             }
             Spacer(Modifier.height(12.dp))
-            val savedSketch = remember(state.siteSketchPath) {
-                state.siteSketchPath.takeIf(String::isNotBlank)?.let { path -> runCatching { BitmapFactory.decodeFile(path) }.getOrNull() }
-            }
             KhabirCard(contentPadding = PaddingValues(12.dp)) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("قالب التقرير: ${state.template.name}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Text("العناوين والترتيب والبنود المختارة تُحفظ مع هذا التقرير وتظهر بنفسها في Word وPDF.", style = MaterialTheme.typography.bodySmall)
+                            com.khabir.app.presentation.components.InlineHelp("مساعدة", "العناوين والترتيب والبنود المختارة تُحفظ مع هذا التقرير وتظهر بنفسها في Word وPDF.")
                             if (state.template.referenceReport.isNotBlank()) {
                                 Text("النموذج المرجعي: ${state.template.referenceReport}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                             }
-                            Text("قاعدة ثابتة: نتائج AI وOCR والاستيراد لا تُطبق مباشرة؛ تظهر أولًا في شاشة مراجعة فوقية قبل الاعتماد.", style = MaterialTheme.typography.bodySmall)
+                            com.khabir.app.presentation.components.InlineHelp("مساعدة", "قاعدة ثابتة: نتائج AI وOCR والاستيراد لا تُطبق مباشرة؛ تظهر أولًا في شاشة مراجعة فوقية قبل الاعتماد.")
                         }
                         OutlinedButton(onClick = { showTemplateEditor = true }) { Text("تعديل القالب") }
                     }
@@ -412,34 +436,78 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                     }
                 }
             }
-            state.template.orderedSections().filter { it.enabled }.forEach { section ->
+            }
+            val savedSketch = remember(state.siteSketchPath) {
+                state.siteSketchPath.takeIf(String::isNotBlank)?.let { path -> runCatching { BitmapFactory.decodeFile(path) }.getOrNull() }
+            }
+            val enabledSections = state.template.orderedSections().filter { it.enabled }
+            if (enabledSections.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
-                ReportTemplateSection(
-                    section, state, viewModel, ::startReportCamera, ::startArabicDictation,
-                    isExpanded = expandedSectionId == section.id,
-                    onExpand = { expandedSectionId = section.id },
-                    expandedHeight = screenHeightDp * 0.8f
-                )
-                if (section.id == "inspection" || section.title.contains("معاين")) {
-                    Spacer(Modifier.height(8.dp))
-                    KhabirCard(contentPadding = PaddingValues(12.dp)) {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("الخريطة والرسم الكروكي — ضمن المعاينة", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                            Text("افتح الخريطة التفاعلية داخل التطبيق، حرّكها وكبّرها، ثم التقط الجزء المطلوب وارسم فوقه. ويمكن حفظ الرسم وحده بعد إخفاء خلفية الخريطة.", style = MaterialTheme.typography.bodySmall)
-                            if (savedSketch != null) androidx.compose.foundation.Image(
-                                bitmap = savedSketch.asImageBitmap(), contentDescription = "معاينة مخطط الموقع",
-                                modifier = Modifier.fillMaxWidth().heightIn(max = 260.dp)
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                                OutlinedButton(onClick = { sketchBaseImage = savedSketch; showSiteSketchEditor = true }, modifier = Modifier.weight(1f)) { Text(if (savedSketch == null) "رسم كروكي" else "تعديل الرسم") }
-                                OutlinedButton(onClick = { sketchImageLauncher.launch("image/*") }, modifier = Modifier.weight(1f)) { Text("استيراد صورة") }
-                            }
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                                FilledTonalButton(onClick = { showMapLocationPicker = true }, modifier = Modifier.weight(1f)) { Text("خريطة تفاعلية داخل التطبيق") }
-                                if (savedSketch != null) TextButton(onClick = viewModel::onSiteSketchRemoved) { Text("حذف") }
+                val sectionPagerState = rememberPagerState(pageCount = { enabledSections.size })
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    val currentSection = enabledSections[sectionPagerState.currentPage]
+                    Text(
+                        "${sectionPagerState.currentPage + 1} / ${enabledSections.size} — ${currentSection.title}",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = { editingSectionHeaderId = currentSection.id }) {
+                        Icon(Icons.Filled.Edit, contentDescription = null)
+                        Spacer(Modifier.width(4.dp))
+                        Text("تعديل")
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+                HorizontalPager(
+                    state = sectionPagerState,
+                    modifier = Modifier.fillMaxWidth().height(screenHeightDp * 0.78f),
+                    pageSpacing = 12.dp
+                ) { page ->
+                    val section = enabledSections[page]
+                    Column(
+                        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ReportTemplateSection(
+                            section, state, viewModel, ::startReportCamera, ::startArabicDictation,
+                            isExpanded = true,
+                            onExpand = { expandedSectionId = section.id },
+                            expandedHeight = screenHeightDp * 0.62f
+                        )
+                        if (section.id == "inspection" || section.title.contains("معاين")) {
+                            KhabirCard(contentPadding = PaddingValues(12.dp)) {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("الخريطة والرسم الكروكي — ضمن المعاينة", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                    com.khabir.app.presentation.components.InlineHelp("مساعدة", "افتح الخريطة التفاعلية داخل التطبيق، حرّكها وكبّرها، ثم التقط الجزء المطلوب وارسم فوقه.")
+                                    if (savedSketch != null) androidx.compose.foundation.Image(
+                                        bitmap = savedSketch.asImageBitmap(), contentDescription = "معاينة مخطط الموقع",
+                                        modifier = Modifier.fillMaxWidth().heightIn(max = 260.dp)
+                                    )
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                        OutlinedButton(onClick = { sketchBaseImage = savedSketch; showSiteSketchEditor = true }, modifier = Modifier.weight(1f)) { Text(if (savedSketch == null) "رسم كروكي" else "تعديل الرسم") }
+                                        OutlinedButton(onClick = { sketchImageLauncher.launch("image/*") }, modifier = Modifier.weight(1f)) { Text("استيراد صورة") }
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                        FilledTonalButton(onClick = { showMapLocationPicker = true }, modifier = Modifier.weight(1f)) { Text("خريطة تفاعلية داخل التطبيق") }
+                                        if (savedSketch != null) TextButton(onClick = viewModel::onSiteSketchRemoved) { Text("حذف الرسم") }
+                                    }
+                                }
                             }
                         }
                     }
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = { scope.launch { sectionPagerState.animateScrollToPage(sectionPagerState.currentPage - 1) } },
+                        enabled = sectionPagerState.currentPage > 0,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("السابق") }
+                    Button(
+                        onClick = { scope.launch { sectionPagerState.animateScrollToPage(sectionPagerState.currentPage + 1) } },
+                        enabled = sectionPagerState.currentPage < enabledSections.lastIndex,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("التالي") }
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -483,6 +551,18 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
 
     rulesEditor?.let { rules ->
         RulesEditorDialog(rules = rules, onRulesChange = { rulesEditor = it }, onDismiss = { rulesEditor = null }, viewModel = viewModel)
+    }
+    editingSectionHeaderId?.let { sectionId ->
+        state.template.sections.firstOrNull { it.id == sectionId }?.let { section ->
+            SectionHeadingEditorDialog(
+                section = section,
+                onTitleChange = { viewModel.onSectionTitleChanged(section.id, it) },
+                onHeadingChange = { index, value -> viewModel.onSectionHeadingChanged(section.id, index, value) },
+                onAddHeading = { viewModel.onSectionHeadingAdded(section.id) },
+                onRemoveHeading = { index -> viewModel.onSectionHeadingRemoved(section.id, index) },
+                onDismiss = { editingSectionHeaderId = null }
+            )
+        }
     }
     if (showTemplateEditor) {
         TemplateEditorDialog(
@@ -585,6 +665,11 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
         )
     }
 
+    if (state.pendingReportPages.isNotEmpty()) ReportDocumentRequestDialog(
+        pages = state.pendingReportPages, busy = state.isOcrProcessing, error = state.errorMessage,
+        onCancel = viewModel::cancelReportDocuments, onAnalyze = viewModel::analyzeRequestedDocuments
+    )
+
     if (showInAppCamera) {
         InAppCameraCapture(
             onDismiss = { showInAppCamera = false },
@@ -598,12 +683,45 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
             },
             onPagesCaptured = { pages, useAi ->
                 showInAppCamera = false
-                if (importedTarget == ReportCaptureField.SUBJECT) viewModel.onPetitionSubjectPagesCaptured(pages, useAi)
-                else viewModel.onDocumentPagesCaptured(pages, useAi)
+                if (useAi) viewModel.prepareReportDocuments(pages)
+                else if (importedTarget == ReportCaptureField.SUBJECT) viewModel.onPetitionSubjectPagesCaptured(pages, false)
+                else viewModel.onDocumentPagesCaptured(pages, false)
             },
             onError = { message -> scope.launch { snackbar.showSnackbar(message) } }
         )
     }
+}
+
+@Composable
+private fun SectionHeadingEditorDialog(
+    section: ReportSectionDefinition,
+    onTitleChange: (String) -> Unit,
+    onHeadingChange: (Int, String) -> Unit,
+    onAddHeading: () -> Unit,
+    onRemoveHeading: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("عنوان البند") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                KhabirTextField(section.title, onTitleChange, label = { Text("العنوان الأساسي") }, singleLine = true)
+                section.headingLines.forEachIndexed { index, line ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        KhabirTextField(line, { onHeadingChange(index, it) }, label = { Text("سطر تحت العنوان") }, modifier = Modifier.weight(1f), singleLine = true)
+                        IconButton(onClick = { onRemoveHeading(index) }) { Icon(Icons.Filled.Delete, contentDescription = "حذف السطر") }
+                    }
+                }
+                TextButton(onClick = onAddHeading) {
+                    Icon(Icons.Filled.Add, contentDescription = null)
+                    Spacer(Modifier.width(4.dp))
+                    Text("إضافة سطر تحت العنوان")
+                }
+            }
+        },
+        confirmButton = { Button(onClick = onDismiss) { Text("تم") } }
+    )
 }
 
 @Composable
@@ -805,7 +923,7 @@ private fun CaptureReviewDialog(
 ) {
     var chosenTarget by remember(initialTarget) { mutableStateOf(initialTarget) }
     var replaceExisting by remember { mutableStateOf(false) }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("مراجعة الإدخال") }, text = {
+    AlertDialog(onDismissRequest = { }, properties = ExplicitDialogProperties, title = { ExplicitDialogTitle("مراجعة الإدخال", onDismiss) }, text = {
         Column(Modifier.heightIn(max = 450.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("اختر القسم ثم راجع أو عدّل النص قبل اعتماده")
             Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(replaceExisting, { replaceExisting = it }); Text("استبدال النص القديم بالكامل (بدل الإضافة)") }
@@ -851,7 +969,7 @@ private fun OfficeImportReviewDialog(
 ) {
     var reviewedText by remember(importedText) { mutableStateOf(importedText) }
     var replaceExisting by remember(importedText) { mutableStateOf(false) }
-    AlertDialog(onDismissRequest = viewModel::onImportedOfficeTextConsumed, title = { Text("مراجعة استيراد ${importedOfficeSource ?: "Word"}") }, text = {
+    AlertDialog(onDismissRequest = { }, properties = ExplicitDialogProperties, title = { ExplicitDialogTitle("مراجعة استيراد ${importedOfficeSource ?: "Word"}", viewModel::onImportedOfficeTextConsumed) }, text = {
         Column(Modifier.heightIn(max = 450.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("اختر القسم الذي سيضاف إليه النص. لن يتم اعتماد النص قبل المراجعة.")
             Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(replaceExisting, { replaceExisting = it }); Text("استبدال النص القديم بالكامل") }
@@ -915,7 +1033,7 @@ private fun ReportTemplateSection(
                                 modifier = Modifier.weight(1f)
                             )
                         }
-                        Text("الاختيار يعيد ترتيب الموضوع الحالي ويُستخدم أيضًا عند استخراج موضوع الدعوى من العريضة.", style = MaterialTheme.typography.labelSmall)
+                        com.khabir.app.presentation.components.InlineHelp("مساعدة", "الاختيار يعيد ترتيب الموضوع الحالي ويُستخدم أيضًا عند استخراج موضوع الدعوى من العريضة.")
                     }
                 }
                 ReportSectionField(
@@ -954,7 +1072,8 @@ private fun ReportTemplateSection(
                     section.title, mapping.first, mapping.second,
                     if (section.id in setOf("witnesses", "inspection", "documents", "research")) 5 else 4,
                     { onCamera(mapping.third, null) }, { onMic(mapping.third, null) },
-                    isExpanded = isExpanded, onExpand = onExpand, expandedHeight = expandedHeight
+                    isExpanded = isExpanded, onExpand = onExpand, expandedHeight = expandedHeight,
+                    enableListTools = section.id in setOf("documents", "research", "conclusion")
                 )
             }
         }
@@ -1011,6 +1130,58 @@ private enum class ReportCaptureField(val label: String) {
     }
 }
 
+private enum class ReportListStyle(val label: String) {
+    WESTERN("1، 2، 3"),
+    ARABIC_INDIC("١، ٢، ٣"),
+    ARABIC_LETTERS("أ، ب، ج"),
+    BULLET("• نقطة"),
+    DASH("– شرطة"),
+    X_MARK("X"),
+    PLAIN("نص عادي")
+}
+
+private fun ensureReportListStarted(text: String, style: ReportListStyle): String {
+    val trimmed = text.trimEnd()
+    if (trimmed.isBlank()) return reportListMarker(style, 1)
+    val lastLine = trimmed.lineSequence().lastOrNull().orEmpty()
+    return if (looksLikeReportListLine(lastLine, style)) text else trimmed + "\n" + reportListMarker(style, 1)
+}
+
+private fun continueReportListOnEnter(oldValue: String, newValue: String, style: ReportListStyle): String {
+    if (newValue.length != oldValue.length + 1 || !newValue.endsWith("\n")) return newValue
+    val completed = oldValue.lineSequence().count { looksLikeReportListLine(it, style) }.coerceAtLeast(1)
+    return newValue + reportListMarker(style, completed + 1)
+}
+
+private fun looksLikeReportListLine(line: String, style: ReportListStyle): Boolean {
+    val v = line.trimStart()
+    return when (style) {
+        ReportListStyle.WESTERN -> Regex("""\d+[.)-]?\s+.*""").matches(v)
+        ReportListStyle.ARABIC_INDIC -> Regex("""[٠-٩]+[.)-]?\s+.*""").matches(v)
+        ReportListStyle.ARABIC_LETTERS -> Regex("""[أبجدهوزحطيكلمنسعفصقرشتثخذضظغ][.)-]?\s+.*""").matches(v)
+        ReportListStyle.BULLET -> v.startsWith("• ")
+        ReportListStyle.DASH -> v.startsWith("– ")
+        ReportListStyle.X_MARK -> v.startsWith("X ")
+        ReportListStyle.PLAIN -> false
+    }
+}
+
+private fun reportListMarker(style: ReportListStyle, index: Int): String = when (style) {
+    ReportListStyle.WESTERN -> "$index. "
+    ReportListStyle.ARABIC_INDIC -> reportArabicIndic(index) + ". "
+    ReportListStyle.ARABIC_LETTERS -> reportArabicLetter(index) + ". "
+    ReportListStyle.BULLET -> "• "
+    ReportListStyle.DASH -> "– "
+    ReportListStyle.X_MARK -> "X "
+    ReportListStyle.PLAIN -> ""
+}
+
+private fun reportArabicIndic(index: Int): String = index.toString().map { ch -> "٠١٢٣٤٥٦٧٨٩"[ch.digitToInt()] }.joinToString("")
+private fun reportArabicLetter(index: Int): String {
+    val letters = listOf("أ", "ب", "ج", "د", "هـ", "و", "ز", "ح", "ط", "ي", "ك", "ل", "م", "ن", "س", "ع", "ف", "ص", "ق", "ر", "ش", "ت", "ث", "خ", "ذ", "ض", "ظ", "غ")
+    return letters[(index - 1).mod(letters.size)]
+}
+
 @Composable
 private fun ReportSectionField(
     label: String,
@@ -1021,8 +1192,11 @@ private fun ReportSectionField(
     onMic: () -> Unit,
     isExpanded: Boolean = false,
     onExpand: () -> Unit = {},
-    expandedHeight: Dp = 480.dp
+    expandedHeight: Dp = 480.dp,
+    enableListTools: Boolean = false
 ) {
+    var listMenuExpanded by remember(label) { mutableStateOf(false) }
+    var activeListStyle by remember(label) { mutableStateOf<ReportListStyle?>(null) }
     KhabirCard(
         contentPadding = PaddingValues(12.dp),
         containerColor = if (isExpanded) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
@@ -1049,9 +1223,36 @@ private fun ReportSectionField(
                 }
             }
             Spacer(Modifier.height(6.dp))
+            if (enableListTools) {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("ترقيم وقوائم", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+                    Box {
+                        FilledTonalButton(onClick = { listMenuExpanded = true }) {
+                            Icon(Icons.Filled.FormatListNumbered, contentDescription = null)
+                            Spacer(Modifier.width(4.dp))
+                            Text(activeListStyle?.label ?: "اختيار قائمة")
+                        }
+                        DropdownMenu(expanded = listMenuExpanded, onDismissRequest = { listMenuExpanded = false }) {
+                            ReportListStyle.entries.forEach { style ->
+                                DropdownMenuItem(
+                                    text = { Text(style.label) },
+                                    onClick = {
+                                        activeListStyle = style.takeUnless { it == ReportListStyle.PLAIN }
+                                        listMenuExpanded = false
+                                        if (style != ReportListStyle.PLAIN) onChange(ensureReportListStarted(value, style))
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+            }
             KhabirTextField(
                 value = value,
-                onValueChange = onChange,
+                onValueChange = { incoming ->
+                    onChange(activeListStyle?.let { continueReportListOnEnter(value, incoming, it) } ?: incoming)
+                },
                 modifier = Modifier
                     .onFocusChanged { if (it.isFocused) onExpand() }
                     .let { if (isExpanded) it.weight(1f) else it },

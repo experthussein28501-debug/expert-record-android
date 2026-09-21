@@ -11,10 +11,23 @@ import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
+import com.khabir.app.presentation.components.InlineHelp
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
+import androidx.compose.ui.draw.clip
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.activity.compose.BackHandler
+import kotlinx.coroutines.launch
+import com.khabir.app.data.ocr.ArabicPetitionOcrService
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -69,6 +82,9 @@ fun AgendaScreen(
     viewModel: AgendaViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
+    val saveError by viewModel.saveError.collectAsState()
+    val saving by viewModel.isSaving.collectAsState()
+    saveError?.let { message -> AlertDialog(onDismissRequest = { viewModel.saveError.value = null }, text = { Text(message) }, confirmButton = { TextButton(onClick = { viewModel.saveError.value = null }) { Text("حسنًا") } }) }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -107,6 +123,8 @@ fun AgendaScreen(
         val summary = state.days[date] ?: AgendaDaySummary(date)
         AgendaDayDialog(
             summary = summary,
+            saving = saving,
+            draft = viewModel.draft,
             onDismiss = viewModel::closeDay,
             onSave = { text, strokes, images, manualAppointments ->
                 viewModel.saveDay(date, text, strokes, images, manualAppointments)
@@ -196,49 +214,98 @@ private fun AgendaDayCell(summary: AgendaDaySummary, onClick: (LocalDate) -> Uni
 }
 
 @Composable
-private fun AgendaDayDialog(
+internal fun AgendaDayDialog(
     summary: AgendaDaySummary,
     onDismiss: () -> Unit,
-    onSave: (String, List<AgendaStroke>, List<String>, List<AgendaManualAppointment>) -> Unit
+    onSave: (String, List<AgendaStroke>, List<String>, List<AgendaManualAppointment>) -> Unit,
+    saving: Boolean = false,
+    draft: AgendaDraft? = null
 ) {
     val context = LocalContext.current
-    var text by remember(summary.date) { mutableStateOf(summary.note?.text.orEmpty()) }
-    val strokes = remember(summary.date) { mutableStateListOf<AgendaStroke>().apply { addAll(summary.note?.strokes.orEmpty()) } }
-    val images = remember(summary.date) { mutableStateListOf<String>().apply { addAll(summary.note?.imagePaths.orEmpty()) } }
-    val manualAppointments = remember(summary.date) {
-        mutableStateListOf<AgendaManualAppointment>().apply { addAll(summary.note?.manualAppointments.orEmpty()) }
-    }
-    var manualTitle by remember(summary.date) { mutableStateOf("") }
-    var manualTime by remember(summary.date) { mutableStateOf("") }
-    var manualLocation by remember(summary.date) { mutableStateOf("") }
-    var manualDetails by remember(summary.date) { mutableStateOf("") }
+    val retained = draft ?: remember(summary.date) { AgendaDraft(summary.note) }
+    var text by retained.text
+    val strokes = retained.strokes
+    val images = retained.images
+    val manualAppointments = retained.appointments
+    var manualTitle by retained.manualTitle
+    var manualTime by retained.manualTime
+    var manualLocation by retained.manualLocation
+    var manualDetails by retained.manualDetails
     var currentStroke by remember(summary.date) { mutableStateOf<List<AgendaPoint>>(emptyList()) }
     var selectedSketchTool by remember(summary.date) { mutableStateOf(AgendaSketchTool.FREEHAND) }
     var selectedSketchColor by remember(summary.date) { mutableStateOf(0xFF1B1B1B.toInt()) }
-    var selectedSketchWidth by remember(summary.date) { mutableStateOf(4f) }
+    var selectedSketchWidth by remember(summary.date) { mutableStateOf(3f) }
+    var editingText by rememberSaveable(summary.date) { mutableStateOf(false) }
+    var showTools by remember { mutableStateOf(false) }
+    var showAppointments by remember { mutableStateOf(false) }
+    var confirmClose by remember { mutableStateOf(false) }
+    var confirmClear by remember { mutableStateOf(false) }
+    var inputError by remember { mutableStateOf<String?>(null) }
+    var pendingImageReads by remember { mutableStateOf(0) }
+    val readingImage = pendingImageReads > 0
+    com.khabir.app.data.monetization.BlockWorkAds(true)
+    val scope = rememberCoroutineScope()
+    val ocr = remember { ArabicPetitionOcrService(context.applicationContext) }
+    fun readImage(path: String) {
+        pendingImageReads++
+        scope.launch {
+            try {
+                val bitmap = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { decodeAgendaImage(path, 2600) }
+                if (bitmap == null) inputError = "تعذر فتح الصورة"
+                else try {
+                    when (val result = ocr.recognize(bitmap)) {
+                        is ArabicPetitionOcrService.Result.Success -> text = listOf(text, result.text).filter(String::isNotBlank).joinToString("\n")
+                        is ArabicPetitionOcrService.Result.Failure -> inputError = result.message
+                    }
+                } finally { bitmap.recycle() }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled
+            } catch (error: Exception) { inputError = "تعذر قراءة الصورة؛ حاول بصورة أوضح"
+            } finally { pendingImageReads-- }
+        }
+    }
+    fun requestClose() {
+        if (readingImage || saving) return
+        if (editingText) editingText = false
+        else if (text != summary.note?.text.orEmpty() || strokes.toList() != summary.note?.strokes.orEmpty() ||
+            images.toList() != summary.note?.imagePaths.orEmpty() || manualAppointments.toList() != summary.note?.manualAppointments.orEmpty()) confirmClose = true
+        else onDismiss()
+    }
 
     val voiceLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val spoken = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
         if (spoken.isNotBlank()) text = listOf(text, spoken).filter(String::isNotBlank).joinToString("\n")
     }
-    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap ->
-        bitmap?.let { saveAgendaBitmap(context, it)?.let(images::add) }
+    val cameraFile = remember(summary.date) {
+        File(context.cacheDir, "camera").apply { mkdirs() }.let { File(it, "agenda-${summary.date}.jpg") }
+    }
+    fun cameraUri() = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", cameraFile)
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        if (success) {
+            val path = copyAgendaImage(context, cameraUri())
+            if (path != null) { images.add(path); if (editingText) readImage(path) }
+            else inputError = "تعذر حفظ صورة الكاميرا"
+        }
     }
     var launchCameraAfterPermission by remember { mutableStateOf(false) }
     val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted && launchCameraAfterPermission) cameraLauncher.launch(null)
+        if (granted && launchCameraAfterPermission) runCatching { cameraLauncher.launch(cameraUri()) }.onFailure { inputError = "تعذر فتح الكاميرا" }
+        if (!granted) inputError = "يلزم السماح بالكاميرا لالتقاط المستند"
         launchCameraAfterPermission = false
     }
     val importImages = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        uris.take(10).mapNotNull { copyAgendaImage(context, it) }.forEach(images::add)
+        uris.take(10).forEach { uri ->
+            val path = copyAgendaImage(context, uri)
+            if (path != null) { images.add(path); if (editingText) readImage(path) }
+            else inputError = "تعذر استيراد إحدى الصور؛ الحد الأقصى للصورة 20 ميجابايت"
+        }
     }
 
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { requestClose() },
         properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false)
     ) {
         Surface(
-            modifier = Modifier.fillMaxWidth(.96f).fillMaxHeight(.90f),
+            modifier = Modifier.fillMaxSize().safeDrawingPadding().imePadding(),
             shape = RoundedCornerShape(20.dp),
             tonalElevation = 8.dp
         ) {
@@ -250,13 +317,58 @@ private fun AgendaDayDialog(
                         Text(formatDate(summary.date), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         summary.holiday?.let { Text(it.name, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold) }
                     }
-                    TextButton(onClick = onDismiss) { Text("إغلاق") }
+                    InlineHelp("ملاحظات اليوم", "اضغط على الورقة لفتح الكتابة بالكيبورد. استخدم القلم في المساحة السفلية، وافتح أدواته من أسفل. زر حفظ اليوم يحفظ النص والقلم والصور معًا.")
                 }
                 HorizontalDivider()
-                Column(
+                BackHandler { requestClose() }
+                if (editingText) {
+                    RuledAgendaEditor(text, { text = it }, Modifier.weight(1f).fillMaxWidth().padding(top = 8.dp))
+                } else Column(
                     Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(top = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+                    ) {
+                        Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text("ملاحظات اليوم", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            RuledAgendaPreview(text, onOpen = { editingText = true; showTools = false })
+                        }
+                    }
+                    Text("الكتابة بالقلم", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    DrawingBoard(
+                        strokes = strokes,
+                        currentStroke = currentStroke,
+                        selectedTool = selectedSketchTool,
+                        selectedColorArgb = selectedSketchColor,
+                        selectedWidth = selectedSketchWidth,
+                        onCurrentStrokeChange = { currentStroke = it },
+                        onErase = { point ->
+                            val index = strokes.indexOfLast { agendaStrokeHit(it, point) }
+                            if (index >= 0) strokes.removeAt(index)
+                        },
+                        onStrokeFinished = { points ->
+                            if (selectedSketchTool != AgendaSketchTool.ERASER && points.isNotEmpty()) {
+                                strokes.add(AgendaStroke(points, selectedSketchTool, selectedSketchColor, selectedSketchWidth))
+                            }
+                            currentStroke = emptyList()
+                        }
+                    )
+                    if (images.isNotEmpty()) {
+                        Text("مرفقات اليوم (${images.size})", fontWeight = FontWeight.Bold)
+                        images.forEachIndexed { index, path ->
+                            val bitmap = remember(path) { decodeAgendaImage(path, 160) }
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                if (bitmap != null) Image(bitmap.asImageBitmap(), contentDescription = null, modifier = Modifier.size(72.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("صورة ${index + 1}", modifier = Modifier.weight(1f))
+                                IconButton(onClick = { images.remove(path) }) { Icon(Icons.Filled.Delete, "حذف") }
+                            }
+                        }
+                    }
+
+                    if (showAppointments) {
                     val importedEvents = summary.events.filter { it.source != AgendaEventSource.MANUAL }
                     if (importedEvents.isNotEmpty()) {
                         Text("المواعيد المستوردة", fontWeight = FontWeight.Bold)
@@ -365,108 +477,27 @@ private fun AgendaDayDialog(
                         }
                     }
 
-                    OutlinedTextField(
-                        value = text,
-                        onValueChange = { text = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 5,
-                        label = { Text("ملاحظات اليوم — لوحة مفاتيح الهاتف") }
-                    )
-
-                    Text("لوحة الكتابة والرسم — إصبع / قلم / S Pen", fontWeight = FontWeight.Bold)
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        FilterChip(selected = selectedSketchTool == AgendaSketchTool.FREEHAND, onClick = { selectedSketchTool = AgendaSketchTool.FREEHAND }, label = { Text("قلم") }, modifier = Modifier.weight(1f))
-                        FilterChip(selected = selectedSketchTool == AgendaSketchTool.LINE, onClick = { selectedSketchTool = AgendaSketchTool.LINE }, label = { Text("خط") }, modifier = Modifier.weight(1f))
-                        FilterChip(selected = selectedSketchTool == AgendaSketchTool.ARROW, onClick = { selectedSketchTool = AgendaSketchTool.ARROW }, label = { Text("سهم") }, modifier = Modifier.weight(1f))
-                        FilterChip(selected = selectedSketchTool == AgendaSketchTool.ERASER, onClick = { selectedSketchTool = AgendaSketchTool.ERASER }, label = { Text("استيكة") }, modifier = Modifier.weight(1f))
                     }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        FilterChip(selected = selectedSketchTool == AgendaSketchTool.RECTANGLE, onClick = { selectedSketchTool = AgendaSketchTool.RECTANGLE }, label = { Text("مربع") }, modifier = Modifier.weight(1f))
-                        FilterChip(selected = selectedSketchTool == AgendaSketchTool.CIRCLE, onClick = { selectedSketchTool = AgendaSketchTool.CIRCLE }, label = { Text("دائرة") }, modifier = Modifier.weight(1f))
-                        FilterChip(selected = selectedSketchTool == AgendaSketchTool.TRIANGLE, onClick = { selectedSketchTool = AgendaSketchTool.TRIANGLE }, label = { Text("مثلث") }, modifier = Modifier.weight(1f))
-                        FilterChip(selected = selectedSketchTool == AgendaSketchTool.SEMICIRCLE, onClick = { selectedSketchTool = AgendaSketchTool.SEMICIRCLE }, label = { Text("نصف دائرة") }, modifier = Modifier.weight(1f))
-                    }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        listOf(
-                            0xFF1B1B1B.toInt() to "أسود",
-                            0xFFC62828.toInt() to "أحمر",
-                            0xFF1565C0.toInt() to "أزرق",
-                            0xFF2E7D32.toInt() to "أخضر"
-                        ).forEach { (argb, label) ->
-                            FilterChip(
-                                selected = selectedSketchColor == argb,
-                                onClick = { selectedSketchColor = argb },
-                                label = { Text(label) },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        listOf(3f to "رفيع", 5f to "متوسط", 8f to "عريض").forEach { (width, label) ->
-                            FilterChip(
-                                selected = selectedSketchWidth == width,
-                                onClick = { selectedSketchWidth = width },
-                                label = { Text(label) },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-                    DrawingBoard(
-                        strokes = strokes,
-                        currentStroke = currentStroke,
-                        selectedTool = selectedSketchTool,
-                        selectedColorArgb = selectedSketchColor,
-                        selectedWidth = selectedSketchWidth,
-                        onCurrentStrokeChange = { currentStroke = it },
-                        onErase = { point ->
-                            val index = strokes.indexOfLast { agendaStrokeHit(it, point) }
-                            if (index >= 0) strokes.removeAt(index)
-                        },
-                        onStrokeFinished = {
-                            if (selectedSketchTool != AgendaSketchTool.ERASER && currentStroke.size > 1) {
-                                strokes.add(AgendaStroke(currentStroke, selectedSketchTool, selectedSketchColor, selectedSketchWidth))
-                            }
-                            currentStroke = emptyList()
-                        }
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { if (strokes.isNotEmpty()) strokes.removeAt(strokes.lastIndex) }) {
-                            Icon(Icons.Filled.Undo, null); Text(" تراجع")
-                        }
-                        OutlinedButton(onClick = { strokes.clear(); currentStroke = emptyList() }) {
-                            Icon(Icons.Filled.Delete, null); Text(" مسح الرسم")
-                        }
-                    }
-
-                    if (images.isNotEmpty()) {
-                        Text("مرفقات اليوم (${images.size})", fontWeight = FontWeight.Bold)
-                        images.forEachIndexed { index, path ->
-                            val bitmap = remember(path) { BitmapFactory.decodeFile(path) }
-                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                if (bitmap != null) Image(bitmap.asImageBitmap(), contentDescription = null, modifier = Modifier.size(72.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text("صورة ${index + 1}", modifier = Modifier.weight(1f))
-                                IconButton(onClick = { images.remove(path) }) { Icon(Icons.Filled.Delete, "حذف") }
-                            }
-                        }
-                    }
-
-                    Text("أدوات الملاحظة", fontWeight = FontWeight.Bold)
+                }
+                inputError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                if (readingImage) LinearProgressIndicator(Modifier.fillMaxWidth())
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                if (editingText) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         OutlinedButton(
                             onClick = {
-                                voiceLauncher.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                runCatching { voiceLauncher.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                                     putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                                     putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ar-EG")
                                     putExtra(RecognizerIntent.EXTRA_PROMPT, "إملاء ملاحظات الأجندة")
-                                })
+                                }) }.onFailure { inputError = "خدمة الإملاء الصوتي غير متاحة على الجهاز" }
                             },
                             modifier = Modifier.weight(1f)
                         ) { Icon(Icons.Filled.Mic, null); Text(" صوت") }
                         OutlinedButton(
                             onClick = {
                                 if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-                                    cameraLauncher.launch(null)
+                                    runCatching { cameraLauncher.launch(cameraUri()) }.onFailure { inputError = "تعذر فتح الكاميرا" }
                                 } else {
                                     launchCameraAfterPermission = true
                                     cameraPermission.launch(Manifest.permission.CAMERA)
@@ -480,17 +511,57 @@ private fun AgendaDayDialog(
                         ) { Icon(Icons.Filled.PhotoLibrary, null); Text(" صور") }
                     }
 
+                    TextButton(onClick = { editingText = false }, modifier = Modifier.fillMaxWidth()) { Text("تم — العودة لليوم") }
+                } else {
+                    if (showTools) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            FilterChip(selected = selectedSketchTool == AgendaSketchTool.FREEHAND, onClick = { selectedSketchTool = AgendaSketchTool.FREEHAND }, label = { Text("قلم") })
+                            FilterChip(selected = selectedSketchTool == AgendaSketchTool.ERASER, onClick = { selectedSketchTool = AgendaSketchTool.ERASER }, label = { Text("ممحاة") })
+                            FilterChip(selected = selectedSketchWidth == 3f, onClick = { selectedSketchWidth = 3f }, label = { Text("رفيع") })
+                            FilterChip(selected = selectedSketchWidth == 8f, onClick = { selectedSketchWidth = 8f }, label = { Text("عريض") })
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                            listOf(0xFF1B1B1B.toInt() to "أسود", 0xFF1565C0.toInt() to "أزرق", 0xFFC62828.toInt() to "أحمر").forEach { (argb, label) ->
+                                FilterChip(selected = selectedSketchColor == argb, onClick = { selectedSketchColor = argb }, label = { Text(label) })
+                            }
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                            TextButton(enabled = strokes.isNotEmpty(), onClick = { strokes.removeAt(strokes.lastIndex) }) { Text("تراجع") }
+                            TextButton(enabled = strokes.isNotEmpty(), onClick = { confirmClear = true }) { Text("مسح الكتابة") }
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                        TextButton(onClick = { showTools = !showTools; showAppointments = false }) { Text(if (showTools) "إخفاء الأدوات" else "أدوات القلم") }
+                        TextButton(onClick = { showAppointments = !showAppointments; showTools = false }) { Text("المواعيد (${summary.events.count { it.source != AgendaEventSource.MANUAL } + manualAppointments.size})") }
+                        TextButton(onClick = { requestClose() }) { Text("إغلاق") }
+                    }
+
                 }
                 Button(
+                    enabled = !readingImage && !saving,
                     onClick = { onSave(text, strokes.toList(), images.toList(), manualAppointments.toList()) },
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("agenda-save")
                 ) {
                     Icon(Icons.Filled.Save, null)
-                    Text(" حفظ اليوم")
+                    Text(if (saving) "جارٍ الحفظ…" else "حفظ اليوم", fontWeight = FontWeight.Bold)
                 }
             }
         }
     }
+    if (confirmClose) AlertDialog(
+        onDismissRequest = { confirmClose = false },
+        title = { Text("حفظ تغييرات اليوم؟") },
+        text = { Text("توجد ملاحظات لم تُحفظ بعد.") },
+        confirmButton = { TextButton(onClick = { onSave(text, strokes.toList(), images.toList(), manualAppointments.toList()) }) { Text("حفظ وإغلاق") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("تجاهل التغييرات") } }
+    )
+    if (confirmClear) AlertDialog(
+        onDismissRequest = { confirmClear = false },
+        title = { Text("مسح الكتابة بالقلم؟") },
+        confirmButton = { TextButton(onClick = { strokes.clear(); currentStroke = emptyList(); confirmClear = false }) { Text("مسح") } },
+        dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("إلغاء") } }
+    )
+
 }
 
 @Composable
@@ -524,7 +595,7 @@ private fun DrawingBoard(
     selectedWidth: Float,
     onCurrentStrokeChange: (List<AgendaPoint>) -> Unit,
     onErase: (AgendaPoint) -> Unit,
-    onStrokeFinished: () -> Unit
+    onStrokeFinished: (List<AgendaPoint>) -> Unit
 ) {
     val latestCurrentStroke by rememberUpdatedState(currentStroke)
     val latestOnCurrentStrokeChange by rememberUpdatedState(onCurrentStrokeChange)
@@ -532,7 +603,7 @@ private fun DrawingBoard(
     val latestOnErase by rememberUpdatedState(onErase)
     val latestTool by rememberUpdatedState(selectedTool)
     Canvas(
-        modifier = Modifier.fillMaxWidth().height(230.dp)
+        modifier = Modifier.fillMaxWidth().height(300.dp).testTag("agenda-writing-board").clip(RoundedCornerShape(12.dp))
             .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
             .pointerInput(Unit) {
                 detectDragGestures(
@@ -544,7 +615,8 @@ private fun DrawingBoard(
                         } else latestOnCurrentStrokeChange(listOf(point))
                     },
                     onDrag = { change, _ ->
-                        val point = AgendaPoint(change.position.x, change.position.y)
+                        change.consume()
+                        val point = AgendaPoint(change.position.x.coerceIn(0f, size.width.toFloat()), change.position.y.coerceIn(0f, size.height.toFloat()))
                         if (latestTool == AgendaSketchTool.ERASER) {
                             latestOnErase(point)
                             latestOnCurrentStrokeChange(emptyList())
@@ -555,11 +627,25 @@ private fun DrawingBoard(
                             )
                         }
                     },
-                    onDragEnd = { latestOnStrokeFinished() },
-                    onDragCancel = { latestOnStrokeFinished() }
+                    onDragEnd = { latestOnStrokeFinished(latestCurrentStroke) },
+                    onDragCancel = { latestOnCurrentStrokeChange(emptyList()) }
                 )
             }
+            .pointerInput(Unit) {
+                detectTapGestures { offset ->
+                    val point = AgendaPoint(offset.x, offset.y)
+                    if (latestTool == AgendaSketchTool.ERASER) latestOnErase(point)
+                    else latestOnStrokeFinished(listOf(point))
+                }
+            }
     ) {
+        drawRect(Color(0xFFFFFDF7))
+        val spacing = 30.dp.toPx()
+        var lineY = spacing
+        while (lineY < size.height) {
+            drawLine(Color(0xFFE1E4E8), Offset(0f, lineY), Offset(size.width, lineY), strokeWidth = 1f)
+            lineY += spacing
+        }
         strokes.forEach { drawAgendaStroke(it) }
         if (currentStroke.isNotEmpty() && selectedTool != AgendaSketchTool.ERASER) {
             drawAgendaStroke(AgendaStroke(currentStroke, selectedTool, selectedColorArgb, selectedWidth))
@@ -648,7 +734,19 @@ private fun copyAgendaImage(context: Context, uri: Uri): String? = runCatching {
     val file = File(dir, "import-${System.currentTimeMillis()}-${uri.hashCode()}.img")
     context.contentResolver.openInputStream(uri).use { input ->
         requireNotNull(input)
-        file.outputStream().use { output -> input.copyTo(output) }
+        try {
+            file.outputStream().use { output ->
+                val buffer = ByteArray(8192)
+                var total = 0L
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    total += count
+                    require(total <= 20L * 1024 * 1024) { "Image too large" }
+                    output.write(buffer, 0, count)
+                }
+            }
+        } catch (error: Exception) { file.delete(); throw error }
     }
     file.absolutePath
 }.getOrNull()
@@ -659,3 +757,14 @@ private fun arabicMonth(month: YearMonth): String {
 }
 
 private fun formatDate(date: LocalDate): String = "${date.dayOfMonth}/${date.monthValue}/${date.year}"
+
+
+private fun decodeAgendaImage(path: String, maxSide: Int): Bitmap? {
+    val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(path, options)
+    if (options.outWidth <= 0 || options.outHeight <= 0) return null
+    options.inSampleSize = 1
+    while (maxOf(options.outWidth, options.outHeight) / options.inSampleSize > maxSide) options.inSampleSize *= 2
+    options.inJustDecodeBounds = false
+    return BitmapFactory.decodeFile(path, options)
+}

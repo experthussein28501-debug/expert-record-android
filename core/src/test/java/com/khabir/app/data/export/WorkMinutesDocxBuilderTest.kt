@@ -47,6 +47,96 @@ class WorkMinutesDocxBuilderTest {
         assertTrue(xml.contains("w:val=\"end\""))
     }
 
+
+    @Test
+    fun `renders question and answer labels outside the writing margin`() {
+        val bytes = WorkMinutesDocxBuilder().build(
+            ministry = "وزارة العدل",
+            sector = "قطاع الخبراء",
+            department = "إدارة خبراء أسوان",
+            incomingNo = "",
+            caseIntro = "فى الدعوى رقم",
+            caseNo = "1",
+            caseYear = "2026",
+            court = "مدني",
+            plaintiffs = "",
+            defendants = "",
+            entries = listOf(
+                WorkMinutesEntry(
+                    number = 3,
+                    bodyText = "س/ ما قولك فيما هو منسوب؟\nج: أقرر بما ورد بالمستندات"
+                )
+            ),
+            logoBytes = null
+        )
+
+        val xml = readEntry(bytes, "word/document.xml")
+        assertTrue(xml.contains("<w:ind w:right=\"0\" w:hanging=\"800\"/>"))
+        assertTrue(xml.contains(">س/ </w:t>"))
+        assertTrue(xml.contains(">ج/ </w:t>"))
+        assertTrue(xml.contains("<w:tab w:val=\"right\" w:pos=\"0\"/>"))
+        assertTrue(xml.contains("<w:tab/>"))
+        assertTrue(xml.contains("ما قولك فيما هو منسوب؟"))
+        assertTrue(xml.contains("أقرر بما ورد بالمستندات"))
+    }
+
+    @Test
+    fun `exports official vertical page margins around work minutes`() {
+        val bytes = WorkMinutesDocxBuilder().build(
+            ministry = "وزارة العدل",
+            sector = "قطاع الخبراء",
+            department = "إدارة خبراء أسوان",
+            incomingNo = "",
+            caseIntro = "فى الدعوى رقم",
+            caseNo = "1",
+            caseYear = "2026",
+            court = "مدني",
+            plaintiffs = "",
+            defendants = "",
+            entries = listOf(WorkMinutesEntry(number = 1, bodyText = "نص المحضر")),
+            logoBytes = null
+        )
+
+        val xml = readEntry(bytes, "word/document.xml")
+        assertTrue(xml.contains("<w:pgMar w:top=\"850\" w:right=\"1550\" w:bottom=\"850\" w:left=\"1550\"/>"))
+        assertTrue(xml.contains("<w:pgBorders w:offsetFrom=\"text\" w:display=\"allPages\">"))
+        assertTrue(xml.contains("<w:left w:val=\"single\""))
+        assertTrue(xml.contains("<w:right w:val=\"single\""))
+        assertTrue(xml.contains("<w:top w:val=\"nil\"/>"))
+        assertTrue(xml.contains("<w:bottom w:val=\"nil\"/>"))
+    }
+
+    @Test
+    fun `keeps numbered work minute lines as separate Word paragraphs`() {
+        val bytes = WorkMinutesDocxBuilder().build(
+            ministry = "وزارة العدل",
+            sector = "قطاع الخبراء",
+            department = "إدارة خبراء أسوان",
+            incomingNo = "",
+            caseIntro = "فى الدعوى رقم",
+            caseNo = "1",
+            caseYear = "2026",
+            court = "مدني",
+            plaintiffs = "",
+            defendants = "",
+            entries = listOf(
+                WorkMinutesEntry(
+                    number = 2,
+                    openingDate = LocalDate.of(2026, 9, 18),
+                    bodyText = "1. مستند أول\n2. مستند ثان\n• ملاحظة"
+                )
+            ),
+            logoBytes = null
+        )
+
+        val xml = readEntry(bytes, "word/document.xml")
+        assertTrue(xml.contains("١. مستند أول"))
+        assertTrue(xml.contains("٢. مستند ثان"))
+        assertTrue(xml.contains("• ملاحظة"))
+        assertTrue(xml.indexOf("١. مستند أول") < xml.indexOf("</w:p>", xml.indexOf("١. مستند أول")))
+        assertTrue(xml.indexOf("</w:p>", xml.indexOf("١. مستند أول")) < xml.indexOf("٢. مستند ثان"))
+    }
+
     private fun readEntry(bytes: ByteArray, path: String): String {
         ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
             var entry = zip.nextEntry

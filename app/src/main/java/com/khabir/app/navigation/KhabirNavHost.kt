@@ -26,6 +26,7 @@ import com.khabir.app.presentation.templates.TemplateAwareWorkMinutesScreen
 import com.khabir.app.presentation.workminutes.WorkMinutesHubScreen
 
 private object Routes {
+    const val BENEFITS = "benefits"
     const val LOGIN = "login"
     const val HOME = "home"
     const val CASE_LIST = "cases"
@@ -56,7 +57,7 @@ fun KhabirNavHost() {
     val archiveOnly = moduleMode == "ARCHIVE"
     val notificationsEnabled = notificationsEnabledFor(moduleMode)
     val reportsEnabled = reportsEnabledFor(moduleMode)
-    val startDestination = remember { if (entryGate.hasPassedGate()) Routes.HOME else Routes.LOGIN }
+    val startDestination = remember { if (entryGate.hasPassedGate(allowPreview = BuildConfig.BUILD_TYPE != "release")) Routes.HOME else Routes.LOGIN }
 
     fun enterApp(markPassed: () -> Unit) {
         markPassed()
@@ -69,9 +70,9 @@ fun KhabirNavHost() {
     NavHost(navController = navController, startDestination = startDestination) {
         composable(Routes.LOGIN) {
             LoginScreen(
-                onSkip = { enterApp(entryGate::markSkipped) },
+                logoRes = com.khabir.app.R.drawable.ic_launcher,
                 onGoogleSuccess = { enterApp(entryGate::markGoogleSignedIn) },
-                onActivationSuccess = { enterApp(entryGate::markActivated) }
+                onPreview = if (BuildConfig.BUILD_TYPE != "release") ({ enterApp(entryGate::markSkipped) }) else null
             )
         }
 
@@ -91,6 +92,7 @@ fun KhabirNavHost() {
                     onOpenReports = { navController.navigate(Routes.REPORTS_HUB) },
                     onOpenRegisters = { navController.navigate(Routes.REGISTERS) },
                     onOpenWorkMinutes = { navController.navigate(Routes.WORK_MINUTES_HUB) },
+                    onOpenBenefits = { navController.navigate(Routes.BENEFITS) },
                     onOpenAgenda = { navController.navigate(Routes.AGENDA) },
                     onOpenExpertProfile = { navController.navigate(Routes.EXPERT_PROFILE) },
                     onOpenBackup = { navController.navigate(Routes.BACKUP) },
@@ -145,6 +147,11 @@ fun KhabirNavHost() {
                 }
             )
         }
+
+        composable(Routes.BENEFITS) { com.khabir.app.monetization.BenefitsScreen(onBack = { navController.popBackStack() }, onAccountDeleted = {
+            entryGate.showGateAgain()
+            navController.navigate(Routes.LOGIN) { popUpTo(Routes.HOME) { inclusive = true } }
+        }) }
 
         composable(Routes.BACKUP) { BackupScreen(onBack = { navController.popBackStack() }) }
         composable(Routes.REGISTERS) { RegisterScreen(onBack = { navController.popBackStack() }) }

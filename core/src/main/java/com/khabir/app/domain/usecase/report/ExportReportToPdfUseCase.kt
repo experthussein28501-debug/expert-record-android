@@ -26,7 +26,7 @@ class ExportReportToPdfUseCase @Inject constructor(
         val profile = expertProfileRepository.get() ?: return Result.MissingExpertProfile
         val linkedCase = report.caseId?.let { caseRepository.getById(it) }
         val cover = when {
-            linkedCase != null -> ReportCoverFields.from(linkedCase, profile)
+            linkedCase != null -> com.khabir.app.domain.model.ReportCaseSnapshot.cover(report, linkedCase, profile)
             report.caseNo.isNotBlank() && report.caseYear.isNotBlank() && report.court.isNotBlank() -> ReportCoverFields.from(report, profile)
             else -> return Result.MissingCaseData
         }

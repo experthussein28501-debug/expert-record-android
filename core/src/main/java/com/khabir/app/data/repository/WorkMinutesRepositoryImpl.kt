@@ -14,6 +14,7 @@ class WorkMinutesRepositoryImpl @Inject constructor(private val dao: WorkMinutes
     override fun observeAll(): Flow<List<WorkMinutesRecord>> = dao.observeAll().map { list -> list.map { it.toDomain() } }
     override suspend fun getById(id: Long): WorkMinutesRecord? = dao.getById(id)?.toDomain()
     override suspend fun getForCase(caseId: Long): WorkMinutesRecord? = dao.getForCase(caseId)?.toDomain()
+    override suspend fun delete(id: Long) = dao.deleteById(id)
 
     override suspend fun save(record: WorkMinutesRecord): Long {
         val now = System.currentTimeMillis()

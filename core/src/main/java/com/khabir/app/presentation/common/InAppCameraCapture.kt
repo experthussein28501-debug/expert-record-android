@@ -71,6 +71,7 @@ fun InAppCameraCapture(
     lensOnly: Boolean = false,
     onError: (String) -> Unit
 ) {
+    com.khabir.app.data.monetization.BlockWorkAds(true)
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val mainExecutor = remember(context) { ContextCompat.getMainExecutor(context) }
@@ -114,7 +115,11 @@ fun InAppCameraCapture(
 
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnClickOutside = false,
+            dismissOnBackPress = false
+        )
     ) {
         Surface(modifier = Modifier.fillMaxSize(), color = Color.Black) {
             Box(Modifier.fillMaxSize()) {
