@@ -40,13 +40,13 @@ object PetitionIntakeParser {
     )
 
     private val knownCaseTypes = listOf(
-        "مدني مستأنف", "استئناف عالي", "مدني كلي", "مدني جزئي",
+        "مدني مستأنف", "استئناف عالي", "قضاء إداري", "قضاء اداري", "مدني كلي", "مدني جزئي",
         "شؤون الأسرة", "شئون الأسرة", "أحوال شخصية", "جنح", "عمال", "تنفيذ", "مال"
     )
 
     private const val ADDRESS_LABEL =
         "(?:عنوانها|عنوانه|العنوان|المقيم(?:ة|ين|ون)?(?:\\s+(?:في|فى|ب|بـ))?|المقيم(?:ة|ين|ون)?\\s+بناحية|" +
-        "ومحله المختار|محله المختار|ومحلها المختار|محلها المختار|ومحلهم المختار|محلهم المختار|موطنه|موطنها|مقره|مقرها|مكتب الأستاذ|مكتب الاستاذ)"
+        "موطنه|موطنها|مقره|مقرها)"
 
     fun parse(raw: String): Result {
         val originalText = normalize(raw)
@@ -117,9 +117,9 @@ object PetitionIntakeParser {
         return Result(
             incomingNo = incomingNo,
             incomingDate = incomingDate,
-            caseNo = caseNo ?: judgmentIdentity?.number,
-            caseYear = caseYear ?: judgmentIdentity?.year,
-            court = if (judgmentIdentity != null) judgmentIdentity.court else (explicitCourt ?: heading.court)?.substringBefore("الدائرة")?.substringBefore("الدائره")?.trim(),
+            caseNo = judgmentIdentity?.number ?: caseNo,
+            caseYear = judgmentIdentity?.year ?: caseYear,
+            court = judgmentIdentity?.court ?: (explicitCourt ?: heading.court)?.substringBefore("الدائرة")?.substringBefore("الدائره")?.trim(),
             caseType = judgmentIdentity?.type ?: explicitType ?: heading.caseType ?: inferredType,
             receiptDate = receiptDate,
             preliminaryJudgmentDate = preliminaryDate,
@@ -305,7 +305,12 @@ object PetitionIntakeParser {
             RegexOption.IGNORE_CASE
         ).find(text) ?: return null
         val mission = text.substring(start.range.first).trim()
-        return mission.takeIf { it.length >= 20 }
+        val end = Regex(
+            "(?:و?تحقيق\\s+كافة\\s+عناصر\\s+الدعوى|بذات\\s+الأمانة\\s+السابقة|بأمانة\\s+تكميلية|وألزمت|والزمت|قدرت\\s+أمانة|وحددت\\s+جلسة|أمانة\\s+[0-9٠-٩])",
+            RegexOption.IGNORE_CASE
+        ).find(mission)
+        val bounded = if (end == null) mission else mission.substring(0, end.range.first).trim()
+        return bounded.takeIf { it.length >= 20 }
     }
 
     private fun captureDate(text: String, vararg labels: String): LocalDate? {
