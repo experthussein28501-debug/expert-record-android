@@ -378,8 +378,17 @@ class PetitionIntakeParserTest {
             الدعوى رقم ١٨٠ لسنة ١٠١ ق
             """.trimIndent()
         )
-        assertEquals("101ق", result.caseYear)
+        assertEquals("١٠١ق", result.caseYear)
         assertEquals("قضاء إداري", result.caseType)
+
+        val highAppeal = PetitionIntakeParser.parse(
+            """
+            محكمة استئناف قنا
+            الدعوى رقم ٣٥٠ لسنة ٢١ ق
+            """.trimIndent()
+        )
+        assertEquals("٢١ق", highAppeal.caseYear)
+        assertEquals("استئناف عالي", highAppeal.caseType)
     }
 
 }
