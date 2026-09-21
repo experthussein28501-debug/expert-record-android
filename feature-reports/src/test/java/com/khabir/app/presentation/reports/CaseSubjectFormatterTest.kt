@@ -17,8 +17,8 @@ class CaseSubjectFormatterTest {
     @Test
     fun `places final requests at start when selected`() {
         val result = CaseSubjectFormatter.format(extracted, FinalRequestsPlacement.START)
-        assertTrue(result.startsWith("أقام المدعي دعواه بموجب صحيفة معلنة للمدعى عليهم قانونًا طلب في ختامها:"))
-        assertTrue(result.indexOf("طلب في ختامها:") < result.indexOf("وحيث قال شارحًا دعواه:"))
+        assertTrue(result.startsWith("أقام المدعي دعواه بموجب صحيفة أودعت قلم المحكمة ومعلنة قانونًا، وطلب في ختامها:"))
+        assertTrue(result.indexOf("وطلب في ختامها:") < result.indexOf("وحيث قال شارحًا دعواه:"))
     }
 
     @Test
@@ -62,7 +62,7 @@ class CaseSubjectFormatterTest {
     @Test
     fun `places final requests at end when selected`() {
         val result = CaseSubjectFormatter.format(extracted, FinalRequestsPlacement.END)
-        assertTrue(result.indexOf("وحيث قال شارحًا دعواه:") < result.indexOf("طلب في ختامها:"))
+        assertTrue(result.indexOf("وحيث قال شارحًا دعواه:") < result.indexOf("وطلب في ختامها:"))
     }
 
     @Test
@@ -73,4 +73,16 @@ class CaseSubjectFormatterTest {
         assertTrue(end.contains("الحكم بصحة ونفاذ العقد"))
         assertTrue(end.indexOf("وحيث قال شارحًا دعواه:") < end.indexOf("طلب في ختامها:"))
     }
+    @Test
+    fun `does not dump a whole unstructured document into subject`() {
+        val raw = "محكمة أسوان\nأنا المحضر بمحكمة أسوان\nنص غير مصنف لا يحتوي موضوعًا أو طلبات"
+        assertEquals("", CaseSubjectFormatter.format(raw))
+    }
+
+    @Test
+    fun `adds agreed closing phrase once`() {
+        val result = CaseSubjectFormatter.format(extracted)
+        assertEquals(1, Regex("مما حدا به إلى إقامة الدعوى الماثلة").findAll(result).count())
+    }
+
 }
