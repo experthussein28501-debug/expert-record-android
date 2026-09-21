@@ -4,7 +4,7 @@ set -euo pipefail
 review_dir="release-output/visual-emulator-0.9.9"
 mkdir -p "$review_dir"
 
-gradle -PKHABIR_TEST_BUILD_TYPE=trial :app:assembleCombinedTrial --stacktrace
+./gradlew --no-daemon -PKHABIR_TEST_BUILD_TYPE=trial :app:assembleCombinedTrial --stacktrace
 apk="app/build/outputs/apk/combined/trial/app-combined-trial.apk"
 test -s "$apk"
 
