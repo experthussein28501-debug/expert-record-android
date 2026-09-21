@@ -36,15 +36,18 @@ tap_text() {
 import re, sys, xml.etree.ElementTree as ET
 path, needle = sys.argv[1], sys.argv[2]
 root = ET.parse(path).getroot()
-for n in root.iter("node"):
-    text = n.attrib.get("text", "")
-    desc = n.attrib.get("content-desc", "")
-    if needle == text or needle in text or needle == desc or needle in desc:
-        m = re.match(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", n.attrib.get("bounds",""))
-        if m:
-            x1,y1,x2,y2 = map(int,m.groups())
-            print((x1+x2)//2, (y1+y2)//2)
-            raise SystemExit(0)
+nodes = list(root.iter("node"))
+for exact in (True, False):
+    for n in nodes:
+        text = n.attrib.get("text", "")
+        desc = n.attrib.get("content-desc", "")
+        matched = (needle == text or needle == desc) if exact else (needle in text or needle in desc)
+        if matched:
+            m = re.match(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", n.attrib.get("bounds",""))
+            if m:
+                x1,y1,x2,y2 = map(int,m.groups())
+                print((x1+x2)//2, (y1+y2)//2)
+                raise SystemExit(0)
 raise SystemExit("Missing tappable text: " + needle)
 PY
 }
