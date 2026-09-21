@@ -47,6 +47,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.khabir.app.presentation.common.InAppCameraCapture
+import com.khabir.app.presentation.common.ExplicitDialogProperties
+import com.khabir.app.presentation.common.ExplicitDialogTitle
 import com.khabir.app.presentation.components.KhabirCard
 import com.khabir.app.presentation.components.KhabirPrimaryButton
 import com.khabir.app.presentation.components.KhabirTextField
@@ -921,7 +923,7 @@ private fun CaptureReviewDialog(
 ) {
     var chosenTarget by remember(initialTarget) { mutableStateOf(initialTarget) }
     var replaceExisting by remember { mutableStateOf(false) }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("مراجعة الإدخال") }, text = {
+    AlertDialog(onDismissRequest = { }, properties = ExplicitDialogProperties, title = { ExplicitDialogTitle("مراجعة الإدخال", onDismiss) }, text = {
         Column(Modifier.heightIn(max = 450.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("اختر القسم ثم راجع أو عدّل النص قبل اعتماده")
             Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(replaceExisting, { replaceExisting = it }); Text("استبدال النص القديم بالكامل (بدل الإضافة)") }
@@ -967,7 +969,7 @@ private fun OfficeImportReviewDialog(
 ) {
     var reviewedText by remember(importedText) { mutableStateOf(importedText) }
     var replaceExisting by remember(importedText) { mutableStateOf(false) }
-    AlertDialog(onDismissRequest = viewModel::onImportedOfficeTextConsumed, title = { Text("مراجعة استيراد ${importedOfficeSource ?: "Word"}") }, text = {
+    AlertDialog(onDismissRequest = { }, properties = ExplicitDialogProperties, title = { ExplicitDialogTitle("مراجعة استيراد ${importedOfficeSource ?: "Word"}", viewModel::onImportedOfficeTextConsumed) }, text = {
         Column(Modifier.heightIn(max = 450.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("اختر القسم الذي سيضاف إليه النص. لن يتم اعتماد النص قبل المراجعة.")
             Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(replaceExisting, { replaceExisting = it }); Text("استبدال النص القديم بالكامل") }
