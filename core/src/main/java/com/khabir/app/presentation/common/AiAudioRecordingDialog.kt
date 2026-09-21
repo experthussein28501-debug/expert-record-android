@@ -6,11 +6,15 @@ import android.media.MediaRecorder
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -30,6 +34,7 @@ fun AiAudioRecordingDialog(
 ) {
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
+    val view = LocalView.current
     val scope = rememberCoroutineScope()
     val segments = remember { mutableStateListOf<File>() }
     var currentFile by remember { mutableStateOf<File?>(null) }
@@ -124,6 +129,12 @@ fun AiAudioRecordingDialog(
         if (granted) startSegment(true) else message = "يلزم السماح بالميكروفون لبدء التسجيل"
     }
 
+    DisposableEffect(recorder != null) {
+        val previousKeepScreenOn = view.keepScreenOn
+        if (recorder != null) view.keepScreenOn = true
+        onDispose { view.keepScreenOn = previousKeepScreenOn }
+    }
+
     DisposableEffect(owner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
@@ -145,16 +156,28 @@ fun AiAudioRecordingDialog(
         }
     }
 
+    fun cancelAndDismiss() {
+        if (busy) return
+        continuousCapture = false
+        if (recorder != null) stopCurrent()
+        deleteSegments()
+        onDismiss()
+    }
+
     AlertDialog(
-        onDismissRequest = {
-            if (!busy) {
-                continuousCapture = false
-                if (recorder != null) stopCurrent()
-                deleteSegments()
-                onDismiss()
+        onDismissRequest = { /* لا تُغلق الشاشة بالضغط خارجها؛ الإغلاق صريح فقط. */ },
+        properties = DialogProperties(
+            dismissOnClickOutside = false,
+            dismissOnBackPress = false
+        ),
+        title = {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("تسجيل صوت AI")
+                IconButton(enabled = !busy, onClick = ::cancelAndDismiss) {
+                    Icon(Icons.Filled.Close, contentDescription = "إغلاق شاشة التسجيل")
+                }
             }
         },
-        title = { Text("تسجيل صوت AI") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(message)
@@ -229,12 +252,7 @@ fun AiAudioRecordingDialog(
         dismissButton = {
             TextButton(
                 enabled = !busy,
-                onClick = {
-                    continuousCapture = false
-                    if (recorder != null) stopCurrent()
-                    deleteSegments()
-                    onDismiss()
-                }
+                onClick = ::cancelAndDismiss
             ) { Text("إلغاء") }
         }
     )
