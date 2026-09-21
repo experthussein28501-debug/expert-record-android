@@ -115,7 +115,11 @@ fun InAppCameraCapture(
 
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnClickOutside = false,
+            dismissOnBackPress = false
+        )
     ) {
         Surface(modifier = Modifier.fillMaxSize(), color = Color.Black) {
             Box(Modifier.fillMaxSize()) {
