@@ -13,5 +13,6 @@ interface NotificationBatchDao {
     @Query("SELECT * FROM notification_batches WHERE id = :batchId LIMIT 1") suspend fun getBatch(batchId: Long): NotificationBatchEntity?
     @Query("SELECT * FROM notification_recipients WHERE batchId = :batchId ORDER BY orderInBatch ASC") fun observeRecipients(batchId: Long): Flow<List<NotificationRecipientEntity>>
     @Query("SELECT * FROM notification_recipients WHERE batchId = :batchId ORDER BY orderInBatch ASC") suspend fun getRecipients(batchId: Long): List<NotificationRecipientEntity>
+    @Query("DELETE FROM notification_batches WHERE id = :batchId") suspend fun deleteBatch(batchId: Long)
 }
 
