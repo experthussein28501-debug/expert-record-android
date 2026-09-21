@@ -555,19 +555,28 @@ class ReportViewModel @Inject constructor(
                 .find(text)?.groupValues?.getOrNull(1)?.trim().orEmpty()
         }
         fun boundary(label: String): String = value(label, "ال" + label)
+        fun summarizeNames(rawNames: String): String {
+            val parts = rawNames
+                .split(Regex("\\s*(?:،|;|؛|\\s+و\\s+)\\s*"))
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+            return if (parts.size <= 1) rawNames.trim() else parts.first() + " وآخرين"
+        }
         if (Regex("عقد\\s+بيع|محرر\\s+بيع", RegexOption.IGNORE_CASE).containsMatchIn(text)) {
             val seller = value("صادر من", "البائع", "الطرف الأول")
             val buyer = value("إلى", "المشتري", "الطرف الثاني")
             val area = Regex("(?:مساحة|بمساحة|مساحته|مساحتها)\\s*[:：-]?\\s*([^\\n،؛]+)", RegexOption.IGNORE_CASE)
                 .find(text)?.groupValues?.getOrNull(1)?.trim().orEmpty()
+            val street = value("شارع", "الشارع")
             val isHouse = Regex("منزل|عقار|مبنى|بيت", RegexOption.IGNORE_CASE).containsMatchIn(text)
             return buildString {
                 append("عقد بيع عرفي")
                 if (date.isNotBlank()) append(" مؤرخ ").append(date)
-                if (seller.isNotBlank()) append(" منسوب صدوره من البائع ").append(seller)
-                if (buyer.isNotBlank()) append(" إلى ").append(buyer)
+                if (seller.isNotBlank()) append(" منسوب صدوره من البائع ").append(summarizeNames(seller))
+                if (buyer.isNotBlank()) append(" إلى ").append(summarizeNames(buyer))
                 append("، عبارة عن ").append(if (isHouse) "منزل" else "أرض زراعية")
                 if (area.isNotBlank()) append(" مساحتها ").append(area)
+                if (isHouse && street.isNotBlank()) append(" بشارع ").append(street)
                 listOf("الحوض" to value("الحوض"), "القطعة" to value("القطعة", "قطعة رقم"),
                     "الناحية" to value("الناحية", "ناحية"), "المركز" to value("المركز", "مركز"),
                     "المحافظة" to value("المحافظة", "محافظة")).filter { it.second.isNotBlank() }
