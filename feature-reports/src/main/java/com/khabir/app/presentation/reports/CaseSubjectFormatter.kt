@@ -107,8 +107,10 @@ internal object CaseSubjectFormatter {
         return dedupeParagraphs(result)
     }
 
-    private fun trimAtBinaaAlaih(text: String): String =
-        text.substringBefore(Regex("(?i)\\bبناء\\s*عليه\\b")).trim()
+    private fun trimAtBinaaAlaih(text: String): String {
+        val marker = Regex("(?i)\\bبناء\\s*عليه\\b").find(text)
+        return if (marker == null) text.trim() else text.substring(0, marker.range.first).trim()
+    }
 
     private fun dedupeParagraphs(text: String): String {
         val seen = linkedSetOf<String>()
