@@ -520,6 +520,9 @@ class NotificationBatchViewModel @Inject constructor(
                         selectedParties = emptyList(),
                         manualRecipients = emptyList(),
                         requestedDocuments = "",
+                        authorityEditor = null,
+                        approvedAuthorityNotices = emptyMap(),
+                        manualPetition = "",
                         editingBatchId = null
                     )
                 }
