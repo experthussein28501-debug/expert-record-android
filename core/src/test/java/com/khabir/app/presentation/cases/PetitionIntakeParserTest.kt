@@ -348,7 +348,7 @@ class PetitionIntakeParserTest {
         )
         assertEquals("21ق", highAppeal.caseYear)
         assertEquals("استئناف عالي", highAppeal.caseType)
-        assertEquals("101ق", administrative.caseYear)
+        assertEquals("١٠١ق", administrative.caseYear)
         assertEquals("قضاء إداري", administrative.caseType)
     }
 
