@@ -7,7 +7,11 @@ enum class FinalRequestsPlacement {
 
 /** Builds the report's "الموضوع" section from the reviewed extraction of a petition. */
 internal object CaseSubjectFormatter {
-    private const val PREFIX = "أقام المدعي دعواه بموجب صحيفة معلنة للمدعى عليهم قانونًا"
+    private const val PREFIX = "أقام المدعي دعواه بموجب صحيفة أودعت قلم المحكمة ومعلنة قانونًا"
+    private const val REQUEST_MARKER = "وطلب في ختامها:"
+    private const val LEGACY_REQUEST_MARKER = "طلب في ختامها:"
+    private const val EXPLANATION_MARKER = "وحيث قال شارحًا دعواه:"
+    private const val CLOSING = "مما حدا به إلى إقامة الدعوى الماثلة"
 
     fun format(
         extracted: String,
@@ -21,11 +25,12 @@ internal object CaseSubjectFormatter {
         val labelledExplanation = sectionBodies(normalized, "شرح الدعوى|وقائع الدعوى|الشرح")
         val rawExplanation = extractRawExplanation(normalized)
         val explanation = cleanExplanation(
-            labelledExplanation.ifBlank { rawExplanation.ifBlank { normalized } },
+            labelledExplanation.ifBlank { rawExplanation },
             requests
         )
+        if (requests.isBlank() && explanation.isBlank()) return ""
 
-        return compose(requests, explanation, normalized, placement)
+        return compose(requests, explanation, placement)
     }
 
     fun reorderFormatted(
@@ -35,45 +40,44 @@ internal object CaseSubjectFormatter {
         val normalized = current.replace("\r\n", "\n").trim()
         if (normalized.isBlank()) return normalized
 
-        val requestsMarker = "طلب في ختامها:"
-        val explanationMarker = "وحيث قال شارحًا دعواه:"
-        val reqIndex = normalized.indexOf(requestsMarker)
-        val expIndex = normalized.indexOf(explanationMarker)
-        if (reqIndex < 0 || expIndex < 0) return normalized
+        val requestMarker = listOf(REQUEST_MARKER, LEGACY_REQUEST_MARKER)
+            .map { it to normalized.indexOf(it) }
+            .filter { it.second >= 0 }
+            .minByOrNull { it.second } ?: return normalized
+        val reqIndex = requestMarker.second
+        val expIndex = normalized.indexOf(EXPLANATION_MARKER)
+        if (expIndex < 0) return normalized
 
         val requests = if (reqIndex < expIndex) {
-            normalized.substring(reqIndex + requestsMarker.length, expIndex).trim()
+            normalized.substring(reqIndex + requestMarker.first.length, expIndex).trim()
         } else {
-            normalized.substring(reqIndex + requestsMarker.length).trim()
+            normalized.substring(reqIndex + requestMarker.first.length).trim()
         }
         val explanation = if (expIndex < reqIndex) {
-            normalized.substring(expIndex + explanationMarker.length, reqIndex).trim()
+            normalized.substring(expIndex + EXPLANATION_MARKER.length, reqIndex).trim()
         } else {
-            normalized.substring(expIndex + explanationMarker.length).trim()
+            normalized.substring(expIndex + EXPLANATION_MARKER.length).trim()
         }
 
-        return compose(dedupeParagraphs(requests), cleanExplanation(explanation, requests), "", placement)
+        return compose(dedupeParagraphs(requests), cleanExplanation(explanation, requests), placement)
     }
 
     private fun compose(
         requests: String,
         explanation: String,
-        fallback: String,
         placement: FinalRequestsPlacement
     ): String = buildString {
         append(PREFIX)
+        val finalExplanation = ensureClosing(explanation)
         when (placement) {
             FinalRequestsPlacement.START -> {
-                if (requests.isNotBlank()) append(" طلب في ختامها:\n").append(requests)
-                if (explanation.isNotBlank()) append("\n\nوحيث قال شارحًا دعواه:\n").append(explanation)
+                if (requests.isNotBlank()) append("، ").append(REQUEST_MARKER).append("\n").append(requests)
+                if (finalExplanation.isNotBlank()) append("\n\n").append(EXPLANATION_MARKER).append("\n").append(finalExplanation)
             }
             FinalRequestsPlacement.END -> {
-                if (explanation.isNotBlank()) append("، وحيث قال شارحًا دعواه:\n").append(explanation)
-                if (requests.isNotBlank()) append("\n\nطلب في ختامها:\n").append(requests)
+                if (finalExplanation.isNotBlank()) append("، ").append(EXPLANATION_MARKER).append("\n").append(finalExplanation)
+                if (requests.isNotBlank()) append("\n\n").append(REQUEST_MARKER).append("\n").append(requests)
             }
-        }
-        if (requests.isBlank() && explanation.isBlank() && fallback.isNotBlank()) {
-            append("، وحيث قال شارحًا دعواه:\n").append(trimAtBinaaAlaih(fallback))
         }
     }
 
@@ -99,13 +103,37 @@ internal object CaseSubjectFormatter {
     private fun cleanExplanation(explanation: String, requests: String): String {
         var result = trimAtBinaaAlaih(explanation)
         if (requests.isNotBlank()) {
-            val req = requests.trim()
+            val normalizedRequest = normalizeForComparison(requests)
             result = result
-                .replace(req, "", ignoreCase = false)
+                .split(Regex("\\n\\s*\\n|(?<=[.!؟؛])\\s+(?=[^\\s])"))
+                .map(String::trim)
+                .filter(String::isNotBlank)
+                .filterNot { paragraph ->
+                    val normalizedParagraph = normalizeForComparison(paragraph)
+                    normalizedParagraph == normalizedRequest ||
+                        (normalizedRequest.length >= 24 && normalizedParagraph.contains(normalizedRequest))
+                }
+                .joinToString("\n\n")
                 .replace(Regex("(?ims)\\s*(?:الطلبات(?: الختامية)?|وطلب في ختامها|طلب في ختامها)\\s*[:：-]?\\s*$"), "")
         }
         return dedupeParagraphs(result)
     }
+
+    private fun ensureClosing(explanation: String): String {
+        val clean = explanation.trim().trimEnd(' ', '،', '.', '؛')
+        if (clean.isBlank()) return ""
+        return if (normalizeForComparison(clean).contains(normalizeForComparison(CLOSING))) {
+            clean + if (clean.endsWith(".")) "" else "."
+        } else {
+            "$clean، $CLOSING."
+        }
+    }
+
+    private fun normalizeForComparison(text: String): String = text
+        .replace(Regex("[\\u064B-\\u065F]"), "")
+        .replace("ـ", "")
+        .replace(Regex("\\s+"), " ")
+        .trim()
 
     private fun trimAtBinaaAlaih(text: String): String {
         val marker = Regex("(?i)بناء\\s*عليه").find(text)
