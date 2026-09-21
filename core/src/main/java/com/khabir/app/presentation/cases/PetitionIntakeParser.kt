@@ -113,14 +113,20 @@ object PetitionIntakeParser {
         val parties = (candidates + LawyerIntakeParser.parse(originalText)).distinctBy {
             listOf(it.role.name, normalizeName(it.name), normalizeName(it.address), it.claimKind)
         }
+        val resolvedCaseType = judgmentIdentity?.type ?: explicitType ?: heading.caseType ?: inferredType
+        val resolvedCaseYear = (judgmentIdentity?.year ?: caseYear)?.let { rawYear ->
+            val cleaned = rawYear.trim()
+            if (resolvedCaseType in setOf("استئناف عالي", "قضاء إداري", "قضاء اداري") && !cleaned.endsWith("ق")) "${cleaned}ق"
+            else cleaned
+        }
 
         return Result(
             incomingNo = incomingNo,
             incomingDate = incomingDate,
             caseNo = judgmentIdentity?.number ?: caseNo,
-            caseYear = judgmentIdentity?.year ?: caseYear,
+            caseYear = resolvedCaseYear,
             court = judgmentIdentity?.court ?: (explicitCourt ?: heading.court)?.substringBefore("الدائرة")?.substringBefore("الدائره")?.trim(),
-            caseType = judgmentIdentity?.type ?: explicitType ?: heading.caseType ?: inferredType,
+            caseType = resolvedCaseType,
             receiptDate = receiptDate,
             preliminaryJudgmentDate = preliminaryDate,
             subjectOfCase = subjectOfCase,
@@ -273,11 +279,15 @@ object PetitionIntakeParser {
     }
 
     private fun captureYear(text: String): String? {
-        val direct = Regex("(?:سنة الدعوى|لسنة|لسنه|سنة|السنة)\\s*[:：/\\-]?\\s*([0-9٠-٩]{2,4})", RegexOption.IGNORE_CASE)
-            .find(text)?.groupValues?.getOrNull(1)
-        if (!direct.isNullOrBlank()) return direct.trim()
-        return Regex("(?:رقم الدعوى|رقم الدعوي|الدعوى رقم|الدعوي رقم|رقم القضية|القضية رقم)\\s*[0-9٠-٩]+\\s*(?:/|لسنة|لسنه)\\s*([0-9٠-٩]{2,4})", RegexOption.IGNORE_CASE)
-            .find(text)?.groupValues?.getOrNull(1)?.trim()
+        fun value(match: MatchResult?): String? {
+            val found = match ?: return null
+            val year = found.groupValues.getOrNull(1)?.trim().orEmpty()
+            if (year.isBlank()) return null
+            val suffix = found.groupValues.getOrNull(2)?.trim().orEmpty()
+            return year + if (suffix.isNotBlank()) "ق" else ""
+        }
+        value(Regex("(?:سنة الدعوى|لسنة|لسنه|سنة|السنة)\\s*[:：/\\-]?\\s*([0-9٠-٩]{2,4})\\s*(ق)?", RegexOption.IGNORE_CASE).find(text))?.let { return it }
+        return value(Regex("(?:رقم الدعوى|رقم الدعوي|الدعوى رقم|الدعوي رقم|رقم القضية|القضية رقم)\\s*[0-9٠-٩]+\\s*(?:/|لسنة|لسنه)\\s*([0-9٠-٩]{2,4})\\s*(ق)?", RegexOption.IGNORE_CASE).find(text))
     }
 
     private fun captureValue(text: String, vararg labels: String): String? {
