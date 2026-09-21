@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Search
@@ -89,7 +90,8 @@ fun NotificationBatchScreen(onBack: () -> Unit, viewModel: NotificationBatchView
                     onSelectAll = viewModel::onSelectAllPastBatches,
                     onClear = viewModel::onClearPastBatchSelection,
                     onExport = viewModel::onExportSelected,
-                    onDelete = viewModel::onDeletePastBatch
+                    onDelete = viewModel::onDeletePastBatch,
+                    onEdit = viewModel::onEditPastBatch
                 )
                 NotificationScreenUiState.Mode.BuildingNew -> NewBatchSection(state, viewModel)
             }
@@ -104,7 +106,8 @@ private fun BatchListSection(
     onSelectAll: () -> Unit,
     onClear: () -> Unit,
     onExport: (ExportNotificationBatchToWordUseCase.OutputType) -> Unit,
-    onDelete: (Long) -> Unit
+    onDelete: (Long) -> Unit,
+    onEdit: (Long) -> Unit
 ) {
     val batches = state.pastBatches
     var pendingDeleteBatchId by remember { mutableStateOf<Long?>(null) }
@@ -143,6 +146,9 @@ private fun BatchListSection(
                             Text("${batch.recipients.size} مُخطَر", style = MaterialTheme.typography.bodySmall)
                         }
                         if (batch.isReprint) AssistChip(onClick = {}, label = { Text("مُعاد") })
+                        IconButton(onClick = { onEdit(batch.id) }) {
+                            Icon(Icons.Filled.Edit, contentDescription = "تعديل دفعة الإخطارات")
+                        }
                         IconButton(onClick = { pendingDeleteBatchId = batch.id }) {
                             Icon(Icons.Filled.Delete, contentDescription = "إزالة دفعة الإخطارات")
                         }
