@@ -42,7 +42,8 @@ class CreateNotificationBatchUseCase @Inject constructor(
         requestedDocuments: String,
         selections: List<RecipientSelection>,
         reusedFrom: Long? = null,
-        authorityNotices: List<AuthorityNoticeDraft> = emptyList()
+        authorityNotices: List<AuthorityNoticeDraft> = emptyList(),
+        existingBatchId: Long? = null
     ): Result {
         if (selections.isEmpty()) return Result.EmptySelection
         if (selections.any { selection ->
@@ -111,6 +112,7 @@ class CreateNotificationBatchUseCase @Inject constructor(
         return Result.Success(
             batchRepository.save(
                 NotificationBatch(
+                    id = existingBatchId ?: 0L,
                     appointmentDate = appointmentDate,
                     appointmentTime = appointmentTime,
                     appointmentLocation = appointmentLocation,
