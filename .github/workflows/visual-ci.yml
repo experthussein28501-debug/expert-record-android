@@ -10,6 +10,8 @@ on:
       - "gradlew"
       - "gradle.properties"
       - ".github/workflows/visual-ci.yml"
+  pull_request:
+    branches: [ "main" ]
   workflow_dispatch:
 
 permissions:
