@@ -109,7 +109,8 @@ find_home_label() {
   scroll_home_to_top
   for attempt in 1 2 3 4 5 6; do
     dump_ui "home-find-$name-$attempt"
-    if grep -q "$label" "$review_dir/home-find-$name-$attempt.xml"; then
+    if grep -Fq "text=\"$label\"" "$review_dir/home-find-$name-$attempt.xml" || \
+       grep -Fq "content-desc=\"$label\"" "$review_dir/home-find-$name-$attempt.xml"; then
       tap_text "$review_dir/home-find-$name-$attempt.xml" "$label"
       return 0
     fi
