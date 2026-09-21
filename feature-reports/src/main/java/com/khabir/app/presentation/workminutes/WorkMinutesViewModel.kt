@@ -255,18 +255,29 @@ class WorkMinutesViewModel @Inject constructor(
             }
             retryFiles = pageFiles.take(10)
             retryPageRead = { onDocumentPagesCaptured(entryNumber, pageFiles, useAi) }
-            val result = multiPageReader.read(pageFiles.take(10), LegalDocumentPurpose.REPORT, useAi)
-            _uiState.update { it.copy(canRetryPages = result.text.isBlank(), pageRetryMessage = result.warnings.joinToString("\n")) }
-            _uiState.update { state ->
-                if (result.text.isBlank()) state.copy(
-                    isCaptureProcessing = false,
-                    errorMessage = result.warnings.joinToString("\n").takeIf(String::isNotBlank) ?: "لم يتم استخراج نص من صور محضر الأعمال"
-                ) else state.copy(
-                    isCaptureProcessing = false,
-                    captureReviewText = result.text,
-                    captureReviewSource = if (useAi) "AI Vision — ${result.pagesRead} صفحة" else "OCR — ${result.pagesRead} صفحة",
-                    errorMessage = if (result.usedLocalFallback) "استخدم التطبيق OCR المحلي لبعض الصور؛ راجع النص قبل الاعتماد." else null
-                )
+            try {
+                val result = multiPageReader.read(pageFiles.take(10), LegalDocumentPurpose.REPORT, useAi)
+                _uiState.update { it.copy(canRetryPages = result.text.isBlank(), pageRetryMessage = result.warnings.joinToString("\n")) }
+                _uiState.update { state ->
+                    if (result.text.isBlank()) state.copy(
+                        isCaptureProcessing = false,
+                        errorMessage = result.warnings.joinToString("\n").takeIf(String::isNotBlank) ?: "لم يتم استخراج نص من صور محضر الأعمال"
+                    ) else state.copy(
+                        isCaptureProcessing = false,
+                        captureReviewText = result.text,
+                        captureReviewSource = if (useAi) "AI Vision — ${result.pagesRead} صفحة" else "OCR — ${result.pagesRead} صفحة",
+                        errorMessage = if (result.usedLocalFallback) "استخدم التطبيق OCR المحلي لبعض الصور؛ راجع النص قبل الاعتماد." else null
+                    )
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                _uiState.update {
+                    it.copy(
+                        isCaptureProcessing = false,
+                        errorMessage = "تعذر معالجة صور محضر الأعمال: " + (error.message ?: "خطأ غير متوقع")
+                    )
+                }
             }
         }
     }
