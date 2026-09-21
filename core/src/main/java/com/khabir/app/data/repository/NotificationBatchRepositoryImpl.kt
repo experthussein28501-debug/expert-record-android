@@ -30,6 +30,8 @@ class NotificationBatchRepositoryImpl @Inject constructor(private val dao: Notif
         return batch.toDomain(dao.getRecipients(batchId).map { it.toDomain() })
     }
 
+    override suspend fun delete(batchId: Long) = dao.deleteBatch(batchId)
+
     override suspend fun save(batch: NotificationBatch): Long {
         val batchId = dao.insertBatch(
             NotificationBatchEntity(
