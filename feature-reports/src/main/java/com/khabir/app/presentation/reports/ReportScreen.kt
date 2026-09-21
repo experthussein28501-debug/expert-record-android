@@ -683,9 +683,12 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
             },
             onPagesCaptured = { pages, useAi ->
                 showInAppCamera = false
-                if (useAi) viewModel.prepareReportDocuments(pages)
-                else if (importedTarget == ReportCaptureField.SUBJECT) viewModel.onPetitionSubjectPagesCaptured(pages, false)
-                else viewModel.onDocumentPagesCaptured(pages, false)
+                when (importedTarget) {
+                    ReportCaptureField.SUBJECT -> viewModel.onPetitionSubjectPagesCaptured(pages, useAi)
+                    ReportCaptureField.ASSIGNMENT -> viewModel.onPreliminaryJudgmentPagesCaptured(pages, useAi)
+                    ReportCaptureField.DOCUMENTS -> viewModel.onResearchDocumentPagesCaptured(pages, useAi)
+                    else -> if (useAi) viewModel.prepareReportDocuments(pages) else viewModel.onDocumentPagesCaptured(pages, false)
+                }
             },
             onError = { message -> scope.launch { snackbar.showSnackbar(message) } }
         )
