@@ -9,5 +9,5 @@ interface ReportRepository {
     suspend fun getById(reportId: Long): Report?
     suspend fun getForCase(caseId: Long): Report?
     suspend fun save(report: Report): Long
-    suspend fun delete(reportId: Long)
+    suspend fun delete(reportId: Long) { }
 }
