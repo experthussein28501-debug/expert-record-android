@@ -63,6 +63,7 @@ data class NotificationScreenUiState(
     val exportingType: ExportNotificationBatchToWordUseCase.OutputType? = null,
     val errorMessage: String? = null,
     val lastCreatedBatchId: Long? = null,
+    val editingBatchId: Long? = null,
     val exportedFileUri: Uri? = null,
     val isOcrProcessing: Boolean = false,
     val ocrReviewText: String? = null,
@@ -175,6 +176,7 @@ class NotificationBatchViewModel @Inject constructor(
             selectedParties = emptyList(),
             manualRecipients = emptyList(),
             lastCreatedBatchId = null,
+            editingBatchId = null,
             errorMessage = null
         )
     }
@@ -186,8 +188,44 @@ class NotificationBatchViewModel @Inject constructor(
             selectedRegisteredCaseId = null,
             selectedParties = emptyList(),
             manualRecipients = emptyList(),
+            editingBatchId = null,
             errorMessage = null
         )
+    }
+
+    fun onEditPastBatch(batchId: Long) {
+        val batch = _uiState.value.pastBatches.firstOrNull { it.id == batchId } ?: return
+        val ordinary = batch.recipients.filterNot { it.isAuthorityNotice }
+        val first = ordinary.firstOrNull()
+        _uiState.update {
+            it.copy(
+                mode = NotificationScreenUiState.Mode.BuildingNew,
+                caseSource = NotificationScreenUiState.CaseSource.NEW_CASE,
+                editingBatchId = batch.id,
+                manualCaseNo = first?.caseNo.orEmpty(),
+                manualCaseYear = first?.caseYear.orEmpty(),
+                manualCourt = first?.court.orEmpty(),
+                manualRecipients = ordinary.map { r ->
+                    RecipientSelection.Manual(
+                        caseNo = r.caseNo,
+                        caseYear = r.caseYear,
+                        court = r.court,
+                        firstName = r.partyFirstName,
+                        restName = r.partyRestName,
+                        role = r.partyRole,
+                        address = r.partyAddress,
+                        withCapacity = r.withCapacity
+                    )
+                },
+                appointmentDate = batch.appointmentDate,
+                appointmentTime = batch.appointmentTime,
+                appointmentLocation = batch.appointmentLocation,
+                requestedDocuments = batch.requestedDocuments,
+                selectedRegisteredCaseId = null,
+                selectedParties = emptyList(),
+                errorMessage = "تعديل نفس دفعة الإخطارات — الحفظ سيحدّث السجل الحالي"
+            )
+        }
     }
 
     fun onCaseSourceChanged(source: NotificationScreenUiState.CaseSource) = _uiState.update { state ->
@@ -463,7 +501,15 @@ class NotificationBatchViewModel @Inject constructor(
             _uiState.update { it.copy(isCreating = true, errorMessage = null) }
             val activeKeys = state.authorityCandidates.map { it.key }.toSet()
             val approved = state.approvedAuthorityNotices.filterKeys { it in activeKeys }.values.toList()
-            when (val result = createBatch(state.appointmentDate, state.appointmentTime, state.appointmentLocation, state.requestedDocuments, selections, authorityNotices = approved)) {
+            when (val result = createBatch(
+                state.appointmentDate,
+                state.appointmentTime,
+                state.appointmentLocation,
+                state.requestedDocuments,
+                selections,
+                authorityNotices = approved,
+                existingBatchId = state.editingBatchId
+            )) {
                 is CreateNotificationBatchUseCase.Result.Success -> { _uiState.update {
                     it.copy(
                         isCreating = false,
@@ -473,7 +519,8 @@ class NotificationBatchViewModel @Inject constructor(
                         selectedRegisteredCaseId = null,
                         selectedParties = emptyList(),
                         manualRecipients = emptyList(),
-                        requestedDocuments = ""
+                        requestedDocuments = "",
+                        editingBatchId = null
                     )
                 }
                     com.khabir.app.data.monetization.WorkAdEvents.finished()
