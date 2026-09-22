@@ -71,4 +71,15 @@ class ReportDocumentRequestTest {
             List(11) { ReportDocumentTask.SUMMARY }
         )
     }
+
+    @Test
+    fun `each report image task keeps its own default review destination`() {
+        assertEquals(ReportReviewDestination.SUBJECT, defaultReviewDestination(ReportDocumentTask.SUBJECT))
+        assertEquals(ReportReviewDestination.ASSIGNMENT, defaultReviewDestination(ReportDocumentTask.ASSIGNMENT))
+        assertEquals(ReportReviewDestination.DOCUMENTS, defaultReviewDestination(ReportDocumentTask.RESEARCH))
+        assertEquals(ReportReviewDestination.DOCUMENTS, defaultReviewDestination(ReportDocumentTask.SUMMARY))
+        assertEquals(ReportReviewDestination.DOCUMENTS, defaultReviewDestination(ReportDocumentTask.CUSTOM))
+        assertEquals(ReportReviewDestination.CONCLUSION, defaultReviewDestination(ReportDocumentTask.CONCLUSION))
+    }
+
 }
