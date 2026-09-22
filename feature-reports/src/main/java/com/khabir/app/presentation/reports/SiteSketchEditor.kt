@@ -15,12 +15,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -43,6 +47,8 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import java.io.File
 import java.security.MessageDigest
 import kotlin.math.PI
@@ -205,145 +211,249 @@ fun SiteSketchEditor(
     val context = LocalContext.current
     val restored = remember(baseImage) { baseImage?.let { SketchDraftRegistry.restore(context, it) } }
     val editableBaseImage = remember(baseImage, restored) { restored?.baseImage ?: baseImage }
-    val strokes = remember(baseImage, restored) { mutableStateListOf<SketchStroke>().apply { addAll(restored?.strokes.orEmpty()) } }
+    val strokes = remember(baseImage, restored) {
+        mutableStateListOf<SketchStroke>().apply { addAll(restored?.strokes.orEmpty()) }
+    }
     var currentPoints by remember { mutableStateOf<List<Offset>>(emptyList()) }
     var selectedTool by remember { mutableStateOf(SketchTool.FREEHAND) }
     var selectedColor by remember { mutableStateOf(Color(0xFF111111)) }
     var selectedWidth by remember { mutableStateOf(0.005f) }
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
-    var showBaseImage by remember(baseImage, restored) { mutableStateOf(restored?.showBaseImage ?: (editableBaseImage != null)) }
+    var showBaseImage by remember(baseImage, restored) {
+        mutableStateOf(restored?.showBaseImage ?: (editableBaseImage != null))
+    }
+    var showTools by remember { mutableStateOf(false) }
     val base = remember(editableBaseImage) { editableBaseImage?.asImageBitmap() }
 
-    AlertDialog(
+    fun toolLabel(tool: SketchTool): String = when (tool) {
+        SketchTool.FREEHAND -> "رسم حر"
+        SketchTool.LINE -> "خط"
+        SketchTool.ARROW -> "سهم"
+        SketchTool.RECTANGLE -> "مربع/مستطيل"
+        SketchTool.CIRCLE -> "دائرة"
+        SketchTool.TRIANGLE -> "مثلث"
+        SketchTool.SEMICIRCLE -> "نصف دائرة"
+        SketchTool.ERASER -> "استيكة"
+    }
+
+    Dialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (restored == null) "رسم كروكي جديد" else "تعديل الرسم الكروكي") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnClickOutside = false
+        )
+    ) {
+        Surface(Modifier.fillMaxSize()) {
+            Column(
+                Modifier.fillMaxSize().padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        if (restored == null) "رسم كروكي جديد" else "تعديل الرسم الكروكي",
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Box {
+                        OutlinedButton(onClick = { showTools = true }) {
+                            Text("أدوات الرسم")
+                        }
+                        DropdownMenu(
+                            expanded = showTools,
+                            onDismissRequest = { showTools = false }
+                        ) {
+                            SketchTool.entries.forEach { tool ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            (if (selectedTool == tool) "✓ " else "") + toolLabel(tool)
+                                        )
+                                    },
+                                    onClick = {
+                                        selectedTool = tool
+                                        showTools = false
+                                    }
+                                )
+                            }
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text("اللون: أسود" + if (selectedColor == Color(0xFF111111)) " ✓" else "") },
+                                onClick = { selectedColor = Color(0xFF111111); showTools = false }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("اللون: أحمر" + if (selectedColor == Color(0xFFC62828)) " ✓" else "") },
+                                onClick = { selectedColor = Color(0xFFC62828); showTools = false }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("اللون: أزرق" + if (selectedColor == Color(0xFF1565C0)) " ✓" else "") },
+                                onClick = { selectedColor = Color(0xFF1565C0); showTools = false }
+                            )
+                            HorizontalDivider()
+                            listOf(
+                                0.003f to "سمك رفيع",
+                                0.005f to "سمك متوسط",
+                                0.009f to "سمك عريض"
+                            ).forEach { (width, label) ->
+                                DropdownMenuItem(
+                                    text = { Text(label + if (selectedWidth == width) " ✓" else "") },
+                                    onClick = { selectedWidth = width; showTools = false }
+                                )
+                            }
+                            if (editableBaseImage != null) {
+                                HorizontalDivider()
+                                DropdownMenuItem(
+                                    text = { Text(if (showBaseImage) "إخفاء خلفية الخريطة/الصورة" else "إظهار خلفية الخريطة/الصورة") },
+                                    onClick = { showBaseImage = !showBaseImage; showTools = false }
+                                )
+                            }
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text("تراجع آخر عنصر") },
+                                enabled = strokes.isNotEmpty(),
+                                onClick = {
+                                    if (strokes.isNotEmpty()) strokes.removeAt(strokes.lastIndex)
+                                    showTools = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("مسح الرسم") },
+                                enabled = strokes.isNotEmpty(),
+                                onClick = {
+                                    strokes.clear()
+                                    currentPoints = emptyList()
+                                    showTools = false
+                                }
+                            )
+                        }
+                    }
+                }
+
                 Text(
-                    if (restored != null) "تم فتح طبقات الرسم السابقة. عدّلها أو أضف خطوطًا وأسهمًا جديدة ثم احفظ."
-                    else "اختر الأداة ثم ارسم فوق الخريطة/الصورة أو على صفحة بيضاء.",
-                    style = MaterialTheme.typography.bodySmall
+                    "الأداة الحالية: ${toolLabel(selectedTool)} — العناصر: ${strokes.size}",
+                    style = MaterialTheme.typography.labelMedium
                 )
 
-                Text("أداة الرسم", style = MaterialTheme.typography.labelLarge)
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FilterChip(selected = selectedTool == SketchTool.FREEHAND, onClick = { selectedTool = SketchTool.FREEHAND }, label = { Text("رسم حر") })
-                        FilterChip(selected = selectedTool == SketchTool.LINE, onClick = { selectedTool = SketchTool.LINE }, label = { Text("خط") })
-                        FilterChip(selected = selectedTool == SketchTool.ARROW, onClick = { selectedTool = SketchTool.ARROW }, label = { Text("سهم") })
-                        FilterChip(selected = selectedTool == SketchTool.ERASER, onClick = { selectedTool = SketchTool.ERASER }, label = { Text("استيكة") })
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FilterChip(selected = selectedTool == SketchTool.RECTANGLE, onClick = { selectedTool = SketchTool.RECTANGLE }, label = { Text("مربع/مستطيل") })
-                        FilterChip(selected = selectedTool == SketchTool.CIRCLE, onClick = { selectedTool = SketchTool.CIRCLE }, label = { Text("دائرة") })
-                        FilterChip(selected = selectedTool == SketchTool.TRIANGLE, onClick = { selectedTool = SketchTool.TRIANGLE }, label = { Text("مثلث") })
-                        FilterChip(selected = selectedTool == SketchTool.SEMICIRCLE, onClick = { selectedTool = SketchTool.SEMICIRCLE }, label = { Text("نصف دائرة") })
-                    }
-                }
-
-                Text("اللون", style = MaterialTheme.typography.labelLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf(Color(0xFF111111) to "أسود", Color(0xFFC62828) to "أحمر", Color(0xFF1565C0) to "أزرق").forEach { (color, label) ->
-                        FilterChip(selected = selectedColor == color, onClick = { selectedColor = color }, label = { Text(label) })
-                    }
-                }
-
-                if (editableBaseImage != null) {
-                    FilterChip(
-                        selected = showBaseImage,
-                        onClick = { showBaseImage = !showBaseImage },
-                        label = { Text(if (showBaseImage) "خلفية الخريطة ظاهرة" else "الخريطة مخفية — الرسم فقط") }
-                    )
-                }
-
-                Text("سمك الخط", style = MaterialTheme.typography.labelLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilterChip(selected = selectedWidth == 0.003f, onClick = { selectedWidth = 0.003f }, label = { Text("رفيع") })
-                    FilterChip(selected = selectedWidth == 0.005f, onClick = { selectedWidth = 0.005f }, label = { Text("متوسط") })
-                    FilterChip(selected = selectedWidth == 0.009f, onClick = { selectedWidth = 0.009f }, label = { Text("عريض") })
-                }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    OutlinedButton(
-                        onClick = { if (strokes.isNotEmpty()) strokes.removeAt(strokes.lastIndex) },
-                        enabled = strokes.isNotEmpty(),
-                        modifier = Modifier.weight(1f)
-                    ) { Text("تراجع آخر عنصر") }
-                    OutlinedButton(
-                        onClick = { strokes.clear(); currentPoints = emptyList() },
-                        enabled = strokes.isNotEmpty(),
-                        modifier = Modifier.weight(1f)
-                    ) { Text("مسح الرسم") }
-                }
-
-                Text("العناصر الحالية: ${strokes.size}", style = MaterialTheme.typography.labelMedium)
-
                 Box(
-                    Modifier.fillMaxWidth().height(360.dp).background(Color.White).clipToBounds().onSizeChanged { canvasSize = it },
+                    Modifier
+                        .fillMaxWidth()
+                        .height(540.dp)
+                        .background(Color.White)
+                        .clipToBounds()
+                        .onSizeChanged { canvasSize = it },
                     contentAlignment = Alignment.Center
                 ) {
                     Canvas(
-                        Modifier.fillMaxWidth().height(360.dp).pointerInput(canvasSize, selectedColor, selectedWidth, selectedTool) {
-                            fun pointAt(position: Offset): Offset = Offset(
-                                (position.x / canvasSize.width.coerceAtLeast(1)).coerceIn(0f, 1f),
-                                (position.y / canvasSize.height.coerceAtLeast(1)).coerceIn(0f, 1f)
-                            )
-                            detectDragGestures(
-                                onDragStart = { position ->
-                                    val point = pointAt(position)
-                                    if (selectedTool == SketchTool.ERASER) {
-                                        eraseSketchAt(strokes, point)
-                                        currentPoints = emptyList()
-                                    } else {
-                                        currentPoints = listOf(point)
-                                    }
-                                },
-                                onDrag = { change, _ ->
-                                    val point = pointAt(change.position)
-                                    if (selectedTool == SketchTool.ERASER) {
-                                        eraseSketchAt(strokes, point)
-                                        currentPoints = emptyList()
-                                    } else {
-                                        currentPoints = when (selectedTool) {
-                                            SketchTool.FREEHAND -> currentPoints + point
-                                            SketchTool.LINE, SketchTool.ARROW, SketchTool.RECTANGLE,
-                                            SketchTool.CIRCLE, SketchTool.TRIANGLE, SketchTool.SEMICIRCLE ->
-                                                listOf(currentPoints.firstOrNull() ?: point, point)
-                                            SketchTool.ERASER -> emptyList()
+                        Modifier
+                            .fillMaxWidth()
+                            .height(540.dp)
+                            .pointerInput(canvasSize, selectedColor, selectedWidth, selectedTool) {
+                                fun pointAt(position: Offset): Offset = Offset(
+                                    (position.x / canvasSize.width.coerceAtLeast(1)).coerceIn(0f, 1f),
+                                    (position.y / canvasSize.height.coerceAtLeast(1)).coerceIn(0f, 1f)
+                                )
+                                detectDragGestures(
+                                    onDragStart = { position ->
+                                        val point = pointAt(position)
+                                        if (selectedTool == SketchTool.ERASER) {
+                                            eraseSketchAt(strokes, point)
+                                            currentPoints = emptyList()
+                                        } else {
+                                            currentPoints = listOf(point)
                                         }
-                                    }
-                                },
-                                onDragEnd = {
-                                    if (selectedTool != SketchTool.ERASER && currentPoints.isNotEmpty()) {
-                                        val points = if (selectedTool == SketchTool.FREEHAND) currentPoints else {
-                                            if (currentPoints.size >= 2) listOf(currentPoints.first(), currentPoints.last()) else emptyList()
+                                    },
+                                    onDrag = { change, _ ->
+                                        val point = pointAt(change.position)
+                                        if (selectedTool == SketchTool.ERASER) {
+                                            eraseSketchAt(strokes, point)
+                                            currentPoints = emptyList()
+                                        } else {
+                                            currentPoints = when (selectedTool) {
+                                                SketchTool.FREEHAND -> currentPoints + point
+                                                SketchTool.LINE,
+                                                SketchTool.ARROW,
+                                                SketchTool.RECTANGLE,
+                                                SketchTool.CIRCLE,
+                                                SketchTool.TRIANGLE,
+                                                SketchTool.SEMICIRCLE ->
+                                                    listOf(currentPoints.firstOrNull() ?: point, point)
+                                                SketchTool.ERASER -> emptyList()
+                                            }
                                         }
-                                        if (points.isNotEmpty()) strokes += SketchStroke(points, selectedColor, selectedWidth, selectedTool)
-                                    }
-                                    currentPoints = emptyList()
-                                },
-                                onDragCancel = { currentPoints = emptyList() }
-                            )
-                        }
+                                    },
+                                    onDragEnd = {
+                                        if (selectedTool != SketchTool.ERASER && currentPoints.isNotEmpty()) {
+                                            val points = if (selectedTool == SketchTool.FREEHAND) currentPoints else {
+                                                if (currentPoints.size >= 2) {
+                                                    listOf(currentPoints.first(), currentPoints.last())
+                                                } else emptyList()
+                                            }
+                                            if (points.isNotEmpty()) {
+                                                strokes += SketchStroke(points, selectedColor, selectedWidth, selectedTool)
+                                            }
+                                        }
+                                        currentPoints = emptyList()
+                                    },
+                                    onDragCancel = { currentPoints = emptyList() }
+                                )
+                            }
                     ) {
-                        if (showBaseImage) base?.let { drawImage(it, dstSize = IntSize(size.width.toInt(), size.height.toInt())) }
+                        if (showBaseImage) {
+                            base?.let {
+                                drawImage(
+                                    it,
+                                    dstSize = IntSize(size.width.toInt(), size.height.toInt())
+                                )
+                            }
+                        }
                         strokes.forEach(::drawSketchStroke)
                         if (currentPoints.isNotEmpty()) {
-                            drawSketchStroke(SketchStroke(currentPoints, selectedColor, selectedWidth, selectedTool))
+                            drawSketchStroke(
+                                SketchStroke(
+                                    currentPoints,
+                                    selectedColor,
+                                    selectedWidth,
+                                    selectedTool
+                                )
+                            )
                         }
                     }
                 }
+
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
+                        Text("إلغاء")
+                    }
+                    Button(
+                        onClick = {
+                            val rendered = renderSketch(
+                                editableBaseImage.takeIf { showBaseImage },
+                                strokes
+                            )
+                            SketchDraftRegistry.save(
+                                context,
+                                rendered,
+                                editableBaseImage,
+                                strokes,
+                                showBaseImage,
+                                restored?.fingerprint
+                            )
+                            onSave(rendered)
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("حفظ المخطط")
+                    }
+                }
             }
-        },
-        confirmButton = {
-            Button(onClick = {
-                val rendered = renderSketch(editableBaseImage.takeIf { showBaseImage }, strokes)
-                SketchDraftRegistry.save(context, rendered, editableBaseImage, strokes, showBaseImage, restored?.fingerprint)
-                onSave(rendered)
-            }) { Text("حفظ المخطط والطبقات") }
-        },
-        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("إلغاء") } }
-    )
+        }
+    }
 }
 
 private fun DrawScope.drawSketchStroke(stroke: SketchStroke) {
