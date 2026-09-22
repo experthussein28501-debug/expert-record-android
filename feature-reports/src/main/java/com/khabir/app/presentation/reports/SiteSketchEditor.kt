@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.weight
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -57,6 +58,8 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 enum class SketchTool { FREEHAND, LINE, ARROW, RECTANGLE, CIRCLE, TRIANGLE, SEMICIRCLE, ERASER }
+
+internal const val SKETCH_CANVAS_HEIGHT_DP = 540
 
 internal data class SketchStroke(
     val points: List<Offset>,
@@ -340,7 +343,7 @@ fun SiteSketchEditor(
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .height(540.dp)
+                        .height(SKETCH_CANVAS_HEIGHT_DP.dp)
                         .background(Color.White)
                         .clipToBounds()
                         .onSizeChanged { canvasSize = it },
@@ -349,7 +352,7 @@ fun SiteSketchEditor(
                     Canvas(
                         Modifier
                             .fillMaxWidth()
-                            .height(540.dp)
+                            .height(SKETCH_CANVAS_HEIGHT_DP.dp)
                             .pointerInput(canvasSize, selectedColor, selectedWidth, selectedTool) {
                                 fun pointAt(position: Offset): Offset = Offset(
                                     (position.x / canvasSize.width.coerceAtLeast(1)).coerceIn(0f, 1f),
