@@ -229,3 +229,90 @@ jobs:
             app/build/outputs/androidTest-results/
             release-output/integration-review-0.9.0/
           retention-days: 7
+
+
+  play_preflight:
+    needs: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Install Android 36 SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | sort -V | tail -n 1)"
+          fi
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Create disposable CI upload key
+        run: |
+          keytool -genkeypair -v             -keystore "$RUNNER_TEMP/play-preflight.jks"             -storepass changeit -keypass changeit             -alias play-preflight -keyalg RSA -keysize 2048 -validity 3650             -dname "CN=CI Play Preflight, OU=CI, O=Khabir, L=Cairo, C=EG"
+
+      - name: Build and lint production Release + AAB
+        env:
+          ORG_GRADLE_PROJECT_KHABIR_UPLOAD_STORE_FILE: ${{ runner.temp }}/play-preflight.jks
+          ORG_GRADLE_PROJECT_KHABIR_UPLOAD_STORE_PASSWORD: changeit
+          ORG_GRADLE_PROJECT_KHABIR_UPLOAD_KEY_ALIAS: play-preflight
+          ORG_GRADLE_PROJECT_KHABIR_UPLOAD_KEY_PASSWORD: changeit
+          ORG_GRADLE_PROJECT_KHABIR_GEMINI_VISION_ENDPOINT: https://example.invalid/gemini
+          ORG_GRADLE_PROJECT_KHABIR_FIREBASE_API_KEY: play-preflight-api-key
+          ORG_GRADLE_PROJECT_KHABIR_FIREBASE_APP_ID: 1:123456789012:android:0123456789abcdef
+          ORG_GRADLE_PROJECT_KHABIR_FIREBASE_PROJECT_ID: khabir-play-preflight
+          ORG_GRADLE_PROJECT_KHABIR_GOOGLE_WEB_CLIENT_ID: 123456789012-playpreflight.apps.googleusercontent.com
+          ORG_GRADLE_PROJECT_KHABIR_MONETIZATION_BASE_URL: https://example.invalid/monetization
+          ORG_GRADLE_PROJECT_KHABIR_PRIVACY_POLICY_URL: https://example.invalid/privacy
+          ORG_GRADLE_PROJECT_KHABIR_ACCOUNT_DELETION_URL: https://example.invalid/delete-account
+          ORG_GRADLE_PROJECT_KHABIR_ADMOB_APP_ID: ca-app-pub-1234567890123456~1234567890
+          ORG_GRADLE_PROJECT_KHABIR_ADMOB_BANNER_ID: ca-app-pub-1234567890123456/1111111111
+          ORG_GRADLE_PROJECT_KHABIR_ADMOB_INTERSTITIAL_ID: ca-app-pub-1234567890123456/2222222222
+          ORG_GRADLE_PROJECT_KHABIR_ADMOB_REWARDED_ID: ca-app-pub-1234567890123456/3333333333
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon             :app:lintCombinedRelease             :app:assembleCombinedRelease             :app:bundleCombinedRelease
+
+      - name: Verify production manifest, APK and AAB
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find app/build/outputs/apk/combined/release -name '*.apk' | head -n 1)"
+          AAB="$(find app/build/outputs/bundle/combinedRelease -name '*.aab' | head -n 1)"
+          test -s "$APK"
+          test -s "$AAB"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest print "$APK" > play-preflight-manifest.xml
+          python3 scripts/verify_apk_security.py "$APK" play-preflight-manifest.xml app/build/outputs/mapping/combinedRelease/mapping.txt
+          python3 scripts/verify_play_assets.py "$APK"
+          python3 scripts/verify_play_release.py play-preflight-manifest.xml "$AAB"
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 "$APK"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify "$APK"
+          jarsigner -verify -strict "$AAB" > play-preflight-aab-signature.txt
+          unzip -t "$AAB" >/dev/null
+
+      - name: Upload Play preflight evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: expert-record-play-preflight
+          path: |
+            play-preflight-manifest.xml
+            play-preflight-aab-signature.txt
+            app/build/reports/lint-results-combinedRelease.html
+            app/build/reports/lint-results-combinedRelease.xml
+          if-no-files-found: ignore
+          retention-days: 7
