@@ -2,6 +2,19 @@ package com.khabir.app.presentation.reports
 
 import java.io.File
 
+enum class ReportReviewDestination {
+    SUBJECT, ASSIGNMENT, DOCUMENTS, CONCLUSION
+}
+
+internal fun defaultReviewDestination(task: ReportDocumentTask): ReportReviewDestination = when (task) {
+    ReportDocumentTask.SUBJECT -> ReportReviewDestination.SUBJECT
+    ReportDocumentTask.ASSIGNMENT -> ReportReviewDestination.ASSIGNMENT
+    ReportDocumentTask.CONCLUSION -> ReportReviewDestination.CONCLUSION
+    ReportDocumentTask.RESEARCH,
+    ReportDocumentTask.SUMMARY,
+    ReportDocumentTask.CUSTOM -> ReportReviewDestination.DOCUMENTS
+}
+
 enum class ReportDocumentTask(val defaultInstruction: String) {
     SUMMARY("لخص هذا المستند مع الحفاظ على الأسماء والأرقام والتواريخ والوقائع المهمة دون إضافة معلومات"),
     SUBJECT("استخرج موضوع الدعوى وصغه كموضوع تقرير واحد متكامل، مع إدماج الطلبات الختامية داخل الموضوع دون إنشاء بند مستقل لها"),
