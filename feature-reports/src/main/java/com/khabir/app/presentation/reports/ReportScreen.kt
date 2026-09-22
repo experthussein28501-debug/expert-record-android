@@ -114,7 +114,7 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
     var expandedSectionId by remember { mutableStateOf<String?>(null) }
     var editingSectionHeaderId by remember { mutableStateOf<String?>(null) }
     var showReportTools by remember { mutableStateOf(false) }
-    com.khabir.app.data.monetization.BlockWorkAds(showInAppCamera || state.isOcrProcessing || state.pendingReportPages.isNotEmpty() || state.importedOfficeText != null || state.isSaving || state.isLoading || showAiRecording || showContinuousDictation)
+    com.khabir.app.data.monetization.BlockWorkAds(showInAppCamera || state.isOcrProcessing || state.pendingReportPages.isNotEmpty() || state.pendingImageReviews.isNotEmpty() || state.importedOfficeText != null || state.isSaving || state.isLoading || showAiRecording || showContinuousDictation)
     val screenHeightDp = LocalConfiguration.current.screenHeightDp.dp
 
     val saveAsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { destination ->
@@ -685,20 +685,16 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
         busy = state.isOcrProcessing,
         error = state.errorMessage,
         onCancel = viewModel::cancelReportDocuments,
-        onAnalyze = { requests ->
-            val singleTask = requests.map { it.task }.distinct().singleOrNull()
-            importedTarget = when (singleTask) {
-                ReportDocumentTask.SUBJECT -> ReportCaptureField.SUBJECT
-                ReportDocumentTask.ASSIGNMENT -> ReportCaptureField.ASSIGNMENT
-                ReportDocumentTask.RESEARCH -> ReportCaptureField.DOCUMENTS
-                ReportDocumentTask.CONCLUSION -> ReportCaptureField.CONCLUSION
-                ReportDocumentTask.SUMMARY,
-                ReportDocumentTask.CUSTOM,
-                null -> importedTarget
-            }
-            viewModel.analyzeRequestedDocuments(requests)
-        }
+        onAnalyze = viewModel::analyzeRequestedDocuments
     )
+
+    state.pendingImageReviews.firstOrNull()?.let { review ->
+        ReportImageResultReviewDialog(
+            review = review,
+            state = state,
+            viewModel = viewModel
+        )
+    }
 
     if (showInAppCamera) {
         InAppCameraCapture(
@@ -982,6 +978,78 @@ private fun ExcelImportReviewDialog(pendingExcelImport: Map<String, String>, vie
         },
         confirmButton = { Button(onClick = viewModel::onApplyExcelImport) { Text("اعتماد البيانات") } },
         dismissButton = { TextButton(onClick = viewModel::onCancelExcelImport) { Text("إلغاء") } }
+    )
+}
+
+@Composable
+private fun ReportImageResultReviewDialog(
+    review: ReportImageReview,
+    state: ReportUiState,
+    viewModel: ReportViewModel
+) {
+    val defaultTarget = remember(review.id) {
+        when (defaultReviewDestination(review.task)) {
+            ReportReviewDestination.SUBJECT -> ReportCaptureField.SUBJECT
+            ReportReviewDestination.ASSIGNMENT -> ReportCaptureField.ASSIGNMENT
+            ReportReviewDestination.DOCUMENTS -> ReportCaptureField.DOCUMENTS
+            ReportReviewDestination.CONCLUSION -> ReportCaptureField.CONCLUSION
+        }
+    }
+    var chosenTarget by remember(review.id) { mutableStateOf(defaultTarget) }
+    var reviewedText by remember(review.id) { mutableStateOf(review.text) }
+    var replaceExisting by remember(review.id) { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = {},
+        properties = ExplicitDialogProperties,
+        title = {
+            ExplicitDialogTitle(
+                "مراجعة ${review.source} — ${review.task.name}",
+                { viewModel.onImageReviewConsumed(review.id) }
+            )
+        },
+        text = {
+            Column(
+                Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("راجع النتيجة ثم اعتمدها في القسم المطلوب. باقي نتائج الصور ستظهر تباعًا بعد هذه المراجعة.")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(replaceExisting, { replaceExisting = it })
+                    Text("استبدال النص القديم بالكامل")
+                }
+                ReportCaptureField.entries
+                    .filter { it != ReportCaptureField.CUSTOM }
+                    .forEach { field ->
+                        FilterChip(
+                            selected = chosenTarget == field,
+                            onClick = { chosenTarget = field },
+                            label = { Text(field.label) }
+                        )
+                    }
+                KhabirTextField(
+                    value = reviewedText,
+                    onValueChange = { reviewedText = it },
+                    minLines = 6,
+                    maxLines = 14,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = reviewedText.isNotBlank(),
+                onClick = {
+                    chosenTarget.write(viewModel, reviewedText, replaceExisting)
+                    viewModel.onImageReviewApproved(review.id)
+                }
+            ) { Text("اعتماد ثم التالي") }
+        },
+        dismissButton = {
+            TextButton(onClick = { viewModel.onImageReviewConsumed(review.id) }) {
+                Text("تجاهل هذه النتيجة")
+            }
+        }
     )
 }
 
