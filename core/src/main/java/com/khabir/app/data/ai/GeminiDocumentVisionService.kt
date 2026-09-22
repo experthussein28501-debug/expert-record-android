@@ -30,6 +30,13 @@ class GeminiDocumentVisionService @Inject constructor(private val personalKeySto
         data class Failure(val message: String) : Result()
     }
 
+    /**
+     * Multi-page analysis is intentionally gated before callers decode a whole image batch.
+     * Without a personal key, multi-page cloud analysis cannot run, so the caller should
+     * switch directly to page-by-page local OCR and avoid keeping ten bitmaps in memory.
+     */
+    fun canAnalyzeMultiplePages(): Boolean = personalKeyStore.read().trim().isNotBlank()
+
     suspend fun transcribeAudio(file: java.io.File): Result = withContext(Dispatchers.IO) {
         val key = personalKeyStore.read().trim()
         val provider = personalKeyStore.readProvider()
