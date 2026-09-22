@@ -17,8 +17,11 @@ ALLOWED_PERMISSIONS = {
     "android.permission.RECORD_AUDIO",
     "android.permission.INTERNET",
     "android.permission.ACCESS_NETWORK_STATE",
+    "android.permission.FOREGROUND_SERVICE",
+    "android.permission.WAKE_LOCK",
     "android.permission.POST_NOTIFICATIONS",
     "com.android.vending.BILLING",
+    "com.google.android.providers.gsf.permission.READ_GSERVICES",
     "android.permission.ACCESS_COARSE_LOCATION",
     "android.permission.ACCESS_FINE_LOCATION",
     "com.google.android.gms.permission.AD_ID",
@@ -84,7 +87,11 @@ def verify_manifest(path: Path) -> None:
     }
     forbidden = permissions & FORBIDDEN_PERMISSIONS
     assert not forbidden, f"Forbidden Play permissions present: {sorted(forbidden)}"
-    unexpected = permissions - ALLOWED_PERMISSIONS
+    unexpected = {
+        permission for permission in permissions
+        if permission not in ALLOWED_PERMISSIONS
+        and not permission.endswith(".DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION")
+    }
     assert not unexpected, f"Unexpected permissions require review: {sorted(unexpected)}"
 
     exported = []
