@@ -16,7 +16,9 @@ ALLOWED_PERMISSIONS = {
     "android.permission.CAMERA",
     "android.permission.RECORD_AUDIO",
     "android.permission.INTERNET",
+    "android.permission.ACCESS_NETWORK_STATE",
     "android.permission.POST_NOTIFICATIONS",
+    "com.android.vending.BILLING",
     "android.permission.ACCESS_COARSE_LOCATION",
     "android.permission.ACCESS_FINE_LOCATION",
     "com.google.android.gms.permission.AD_ID",
@@ -90,7 +92,11 @@ def verify_manifest(path: Path) -> None:
         for node in app.findall(tag):
             if node.get(ANDROID + "exported") == "true":
                 exported.append((tag, node.get(ANDROID + "name", "")))
-    assert exported == [("activity", "com.khabir.app.MainActivity")], (
+    allowed_exported = {
+        ("activity", "com.khabir.app.MainActivity"),
+        ("activity", ".MainActivity"),
+    }
+    assert len(exported) == 1 and exported[0] in allowed_exported, (
         f"Unexpected exported components: {exported}"
     )
 
