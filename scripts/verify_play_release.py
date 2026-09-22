@@ -100,11 +100,31 @@ def verify_manifest(path: Path) -> None:
             if node.get(ANDROID + "exported") == "true":
                 exported.append((tag, node.get(ANDROID + "name", "")))
     allowed_exported = {
+        # App launcher.
         ("activity", "com.khabir.app.MainActivity"),
         ("activity", ".MainActivity"),
+
+        # Firebase Auth browser/recaptcha callbacks.
+        ("activity", "com.google.firebase.auth.internal.GenericIdpActivity"),
+        ("activity", "com.google.firebase.auth.internal.RecaptchaActivity"),
+
+        # Google Sign-In token revocation binding.
+        ("service", "com.google.android.gms.auth.api.signin.RevocationBoundService"),
+
+        # AndroidX WorkManager / diagnostics / profile installer components.
+        ("service", "androidx.work.impl.background.systemjob.SystemJobService"),
+        ("receiver", "androidx.work.impl.diagnostics.DiagnosticsReceiver"),
+        ("receiver", "androidx.profileinstaller.ProfileInstallReceiver"),
     }
-    assert len(exported) == 1 and exported[0] in allowed_exported, (
-        f"Unexpected exported components: {exported}"
+    exported_set = set(exported)
+    main_activity_present = (
+        ("activity", "com.khabir.app.MainActivity") in exported_set
+        or ("activity", ".MainActivity") in exported_set
+    )
+    assert main_activity_present, "Production launcher activity is not exported"
+    unexpected_exported = exported_set - allowed_exported
+    assert not unexpected_exported, (
+        f"Unexpected exported components: {sorted(unexpected_exported)}"
     )
 
 
