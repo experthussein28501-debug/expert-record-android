@@ -999,12 +999,21 @@ private fun ReportImageResultReviewDialog(
     var reviewedText by remember(review.id) { mutableStateOf(review.text) }
     var replaceExisting by remember(review.id) { mutableStateOf(false) }
 
+    val taskLabel = when (review.task) {
+        ReportDocumentTask.SUBJECT -> "موضوع"
+        ReportDocumentTask.ASSIGNMENT -> "مأمورية"
+        ReportDocumentTask.RESEARCH -> "بحث مستند"
+        ReportDocumentTask.SUMMARY -> "تلخيص"
+        ReportDocumentTask.CONCLUSION -> "نتيجة"
+        ReportDocumentTask.CUSTOM -> "طلب مخصص"
+    }
+
     AlertDialog(
         onDismissRequest = {},
         properties = ExplicitDialogProperties,
         title = {
             ExplicitDialogTitle(
-                "مراجعة ${review.source} — ${review.task.name}",
+                "مراجعة ${review.source} — $taskLabel",
                 { viewModel.onImageReviewConsumed(review.id) }
             )
         },
