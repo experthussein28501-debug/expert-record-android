@@ -11,7 +11,7 @@ internal enum class ReportDocumentTask(val defaultInstruction: String) {
     CUSTOM("")
 }
 
-data class ReportDocumentRequest(
+internal data class ReportDocumentRequest(
     val pages: List<File>,
     val instruction: String,
     val task: ReportDocumentTask = ReportDocumentTask.SUMMARY
