@@ -73,10 +73,13 @@ fun BenefitsScreen(onBack: () -> Unit, onAccountDeleted: () -> Unit) {
                 runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/account/subscriptions?sku=${PlayBillingManager.PRODUCT_ID}&package=${context.packageName}"))) }
             }) { Text("إدارة الاشتراك وإلغاؤه") }
             if (controller.privacyOptionsRequired()) TextButton(onClick = controller::showPrivacyOptions) { Text("اختيارات خصوصية الإعلانات") }
-            if (BuildConfig.PRIVACY_POLICY_URL.startsWith("https://")) TextButton(onClick = {
+            if (isSecurePlayUrl(BuildConfig.PRIVACY_POLICY_URL)) TextButton(onClick = {
                 runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(BuildConfig.PRIVACY_POLICY_URL))) }
             }) { Text("سياسة الخصوصية") }
-            TextButton(enabled = controller.api.configured && !controller.busy && entitlement.uid.isNotBlank(), onClick = { confirmDelete = true }) { Text("حذف حسابي") }
+            if (isSecurePlayUrl(BuildConfig.ACCOUNT_DELETION_URL)) TextButton(onClick = {
+                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(BuildConfig.ACCOUNT_DELETION_URL))) }
+            }) { Text("طلب حذف الحساب عبر الويب") }
+            TextButton(enabled = controller.api.configured && !controller.busy && entitlement.uid.isNotBlank(), onClick = { confirmDelete = true }) { Text("حذف حسابي من التطبيق") }
             if (controller.message.isNotBlank()) Text(controller.message)
             InlineHelp("بداية الإعلانات", "تبدأ الإعلانات بعد مرور شهرين على إطلاق التطبيق في Google Play. يحصل الحساب الجديد على شهر مجاني من أول تسجيل دخول. يبدأ الإعلان عند انتهاء الفترتين، وبعد ٢٠ دقيقة استخدام فعلي وعند إنهاء عملك فقط.")
         }
@@ -92,3 +95,9 @@ fun HomeBanner() {
     DisposableEffect(ad) { onDispose { ad.destroy() } }
     AndroidView(factory = { ad }, modifier = Modifier.fillMaxWidth().height(50.dp))
 }
+
+
+internal fun isSecurePlayUrl(value: String): Boolean = runCatching {
+    val uri = java.net.URI(value.trim())
+    uri.scheme == "https" && !uri.host.isNullOrBlank() && uri.userInfo == null
+}.getOrDefault(false)
