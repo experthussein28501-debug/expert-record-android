@@ -46,7 +46,7 @@ jobs:
       - name: Make Gradle executable
         run: chmod +x gradlew
 
-      - name: Build signed APK and AAB
+      - name: Build, lint and sign APK + AAB
         env:
           ORG_GRADLE_PROJECT_KHABIR_UPLOAD_STORE_FILE: ${{ runner.temp }}/expert-record-upload.jks
           ORG_GRADLE_PROJECT_KHABIR_UPLOAD_STORE_PASSWORD: ${{ secrets.KHABIR_UPLOAD_STORE_PASSWORD }}
@@ -65,17 +65,21 @@ jobs:
           ORG_GRADLE_PROJECT_KHABIR_ADMOB_INTERSTITIAL_ID: ${{ secrets.KHABIR_ADMOB_INTERSTITIAL_ID }}
           ORG_GRADLE_PROJECT_KHABIR_ADMOB_REWARDED_ID: ${{ secrets.KHABIR_ADMOB_REWARDED_ID }}
         run: |
-          ./gradlew --no-daemon :app:assembleCombinedRelease :app:bundleCombinedRelease
+          ./gradlew --no-daemon             :app:lintCombinedRelease             :app:assembleCombinedRelease             :app:bundleCombinedRelease
 
       - name: Verify release binary and certificate
         run: |
           set -euo pipefail
           APK="$(find app/build/outputs/apk/combined/release -name '*.apk' | head -n 1)"
           "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest print "$APK" > release-manifest.xml
+          AAB="$(find app/build/outputs/bundle/combinedRelease -name '*.aab' | head -n 1)"
+          test -s "$AAB"
           python3 scripts/verify_apk_security.py "$APK" release-manifest.xml app/build/outputs/mapping/combinedRelease/mapping.txt
           python3 scripts/verify_play_assets.py "$APK"
+          python3 scripts/verify_play_release.py release-manifest.xml "$AAB"
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 "$APK"
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$APK" > signing-fingerprint.txt
+          jarsigner -verify -strict "$AAB" > bundle-signature.txt
 
       - name: Upload release outputs
         uses: actions/upload-artifact@v4
@@ -85,7 +89,10 @@ jobs:
             app/build/outputs/apk/combined/release/*.apk
             app/build/outputs/bundle/combinedRelease/*.aab
             signing-fingerprint.txt
+            bundle-signature.txt
             release-manifest.xml
             app/build/outputs/mapping/combinedRelease/mapping.txt
+            app/build/reports/lint-results-combinedRelease.html
+            app/build/reports/lint-results-combinedRelease.xml
           if-no-files-found: error
           retention-days: 30
