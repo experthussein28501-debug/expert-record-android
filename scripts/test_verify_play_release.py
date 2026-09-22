@@ -9,6 +9,20 @@ from verify_play_release import verify_aab, verify_manifest
 ANDROID = "http://schemas.android.com/apk/res/android"
 
 
+def manifest_with_reviewed_exported_components():
+    text = manifest_xml()
+    return text.replace(
+        '<activity android:name="com.khabir.app.MainActivity" android:exported="true" />',
+        '<activity android:name="com.khabir.app.MainActivity" android:exported="true" />'
+        '<activity android:name="com.google.firebase.auth.internal.GenericIdpActivity" android:exported="true" />'
+        '<activity android:name="com.google.firebase.auth.internal.RecaptchaActivity" android:exported="true" />'
+        '<service android:name="com.google.android.gms.auth.api.signin.RevocationBoundService" android:exported="true" />'
+        '<service android:name="androidx.work.impl.background.systemjob.SystemJobService" android:exported="true" />'
+        '<receiver android:name="androidx.work.impl.diagnostics.DiagnosticsReceiver" android:exported="true" />'
+        '<receiver android:name="androidx.profileinstaller.ProfileInstallReceiver" android:exported="true" />'
+    )
+
+
 def manifest_xml(package="com.khabir.app.combined", version_code="101", version_name="1.0.0",
                  target="36", label="سجل الخبير", extra_permission=""):
     extra = f'<uses-permission android:name="{extra_permission}" />' if extra_permission else ""
@@ -82,6 +96,20 @@ class VerifyPlayReleaseTest(unittest.TestCase):
                 '<uses-permission android:name="com.khabir.app.combined.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />'
             )
             verify_manifest(self.write_manifest(tmp, text))
+
+    def test_reviewed_firebase_and_androidx_exported_components_are_allowed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            verify_manifest(self.write_manifest(tmp, manifest_with_reviewed_exported_components()))
+
+    def test_unknown_exported_component_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            text = manifest_xml().replace(
+                '<activity android:name="com.khabir.app.MainActivity" android:exported="true" />',
+                '<activity android:name="com.khabir.app.MainActivity" android:exported="true" />'
+                '<service android:name="com.example.UnknownExportedService" android:exported="true" />'
+            )
+            with self.assertRaises(AssertionError):
+                verify_manifest(self.write_manifest(tmp, text))
 
     def test_play_aab_structure_passes(self):
         with tempfile.TemporaryDirectory() as tmp:
