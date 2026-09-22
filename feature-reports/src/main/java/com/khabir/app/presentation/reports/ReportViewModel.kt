@@ -39,6 +39,13 @@ import java.time.LocalDate
 import java.io.File
 import javax.inject.Inject
 
+data class ReportImageReview(
+    val id: String,
+    val text: String,
+    val source: String,
+    val task: ReportDocumentTask
+)
+
 data class ReportUiState(
     val reportId: Long = 0L,
     val caseId: Long? = null,
@@ -74,6 +81,7 @@ data class ReportUiState(
     val isExporting: Boolean = false,
     val isOcrProcessing: Boolean = false,
     val pendingReportPages: List<File> = emptyList(),
+    val pendingImageReviews: List<ReportImageReview> = emptyList(),
     val autoSaveStatus: String = "",
     val errorMessage: String? = null,
     val exportedFileUri: Uri? = null,
@@ -120,6 +128,7 @@ class ReportViewModel @Inject constructor(
         val defendants: String
     )
     private var pendingImportedCaseIdentity: PendingImportedCaseIdentity? = null
+    private val pendingImageIdentities = mutableMapOf<String, PendingImportedCaseIdentity>()
     fun retryPages() { _uiState.update { it.copy(canRetryPages = false) }; retryPageRead?.invoke() }
     fun cancelPageRetry() {
         retryFiles.forEach { it.delete() }; retryFiles = emptyList(); retryPageRead = null
@@ -404,8 +413,30 @@ class ReportViewModel @Inject constructor(
         if (_uiState.value.isOcrProcessing) return
         _uiState.value.pendingReportPages.forEach { it.delete() }
         documentResults.clear()
-        _uiState.update { it.copy(pendingReportPages = emptyList(), errorMessage = null) }
+        pendingImageIdentities.clear()
+        _uiState.update { it.copy(pendingReportPages = emptyList(), pendingImageReviews = emptyList(), errorMessage = null) }
         com.khabir.app.data.monetization.WorkAdEvents.finished()
+    }
+
+    fun onImageReviewApproved(id: String) {
+        pendingImageIdentities.remove(id)?.let { pending ->
+            applyIndependentCaseIdentity(pending.parsed, pending.plaintiffs, pending.defendants)
+        }
+        removeImageReview(id)
+    }
+
+    fun onImageReviewConsumed(id: String) {
+        pendingImageIdentities.remove(id)
+        removeImageReview(id)
+    }
+
+    private fun removeImageReview(id: String) {
+        _uiState.update { state ->
+            state.copy(pendingImageReviews = state.pendingImageReviews.filterNot { it.id == id })
+        }
+        if (_uiState.value.pendingImageReviews.isEmpty()) {
+            com.khabir.app.data.monetization.WorkAdEvents.finished()
+        }
     }
 
     fun analyzeRequestedDocuments(documents: List<ReportDocumentRequest>) {
@@ -414,10 +445,11 @@ class ReportViewModel @Inject constructor(
         if (documents.flatMap { it.pages } != expected || expected.isEmpty()) return
         viewModelScope.launch {
             _uiState.update { it.copy(isOcrProcessing = true, errorMessage = null) }
-            var stagedIdentity: PendingImportedCaseIdentity? = null
+            val stagedIdentities = mutableMapOf<String, PendingImportedCaseIdentity>()
             try {
                 val hasPersonalAiKey = personalAiKeyStore.read().trim().isNotBlank()
-                val texts = documents.mapIndexed { index, document ->
+                val reviews = documents.mapIndexed { index, document ->
+                    var identityForReview: PendingImportedCaseIdentity? = null
                     val cacheKey = document.pages.joinToString("|") { it.path } +
                         "\n" + document.task.name + "\n" + document.instruction
                     val resultText = documentResults[cacheKey] ?: when (document.task) {
@@ -444,7 +476,7 @@ class ReportViewModel @Inject constructor(
                             }
                             val formatted = CaseSubjectFormatter.format(subjectSource, _uiState.value.finalRequestsPlacement)
                             if (formatted.isBlank()) error("المستند ${index + 1}: تعذر فصل موضوع الدعوى بأمان")
-                            stagedIdentity = PendingImportedCaseIdentity(parsed, plaintiffs, defendants)
+                            identityForReview = PendingImportedCaseIdentity(parsed, plaintiffs, defendants)
                             formatted
                         }
 
@@ -465,7 +497,7 @@ class ReportViewModel @Inject constructor(
                                 IntakeNarrative.mission(it, parsed.preliminaryJudgmentDate)
                             }.orEmpty()
                             if (assignment.isBlank()) error("المستند ${index + 1}: لم يمكن تحديد مأمورية الخبير بأمان")
-                            stagedIdentity = PendingImportedCaseIdentity(parsed, plaintiffs, defendants)
+                            identityForReview = PendingImportedCaseIdentity(parsed, plaintiffs, defendants)
                             assignment
                         }
 
@@ -517,21 +549,28 @@ class ReportViewModel @Inject constructor(
                             }
                         }
                     }.also { documentResults[cacheKey] = it }
-                    "المستند ${index + 1}\n$resultText"
+                    val reviewId = "report-image-" + java.util.UUID.randomUUID().toString()
+                    identityForReview?.let { stagedIdentities[reviewId] = it }
+                    ReportImageReview(
+                        id = reviewId,
+                        text = resultText,
+                        source = "المستند ${index + 1}",
+                        task = document.task
+                    )
                 }
 
-                pendingImportedCaseIdentity = stagedIdentity
+                pendingImageIdentities.clear()
+                pendingImageIdentities.putAll(stagedIdentities)
                 expected.forEach { it.delete() }
                 documentResults.clear()
                 _uiState.update {
                     it.copy(
                         pendingReportPages = emptyList(),
-                        importedOfficeText = texts.joinToString("\n\n"),
-                        importedOfficeSource = "نتائج الصور — مراجعة قبل الاعتماد",
+                        pendingImageReviews = reviews,
                         errorMessage = if (!hasPersonalAiKey && documents.any {
                                 it.task !in setOf(ReportDocumentTask.SUBJECT, ReportDocumentTask.ASSIGNMENT)
                             }) {
-                            "لا يوجد مفتاح AI؛ استُخدم OCR المحلي. راجع النص قبل الاعتماد."
+                            "لا يوجد مفتاح AI؛ استُخدم OCR المحلي. راجع كل نتيجة قبل الاعتماد."
                         } else null
                     )
                 }
