@@ -2,7 +2,7 @@ package com.khabir.app.presentation.reports
 
 import java.io.File
 
-internal enum class ReportDocumentTask(val defaultInstruction: String) {
+enum class ReportDocumentTask(val defaultInstruction: String) {
     SUMMARY("لخص هذا المستند مع الحفاظ على الأسماء والأرقام والتواريخ والوقائع المهمة دون إضافة معلومات"),
     SUBJECT("استخرج موضوع الدعوى وصغه كموضوع تقرير واحد متكامل، مع إدماج الطلبات الختامية داخل الموضوع دون إنشاء بند مستقل لها"),
     ASSIGNMENT("استخرج مأمورية الحكم التمهيدي فقط مع تاريخ الحكم ورقم الدعوى إن وجدا، دون نسخ الحكم كاملًا"),
@@ -11,7 +11,7 @@ internal enum class ReportDocumentTask(val defaultInstruction: String) {
     CUSTOM("")
 }
 
-internal data class ReportDocumentRequest(
+data class ReportDocumentRequest(
     val pages: List<File>,
     val instruction: String,
     val task: ReportDocumentTask = ReportDocumentTask.SUMMARY
