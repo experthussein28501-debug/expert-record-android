@@ -21,7 +21,10 @@ import kotlinx.coroutines.withContext
 @Composable
 internal fun ReportDocumentRequestDialog(pages: List<File>, busy: Boolean, error: String?, onCancel: () -> Unit, onAnalyze: (List<ReportDocumentRequest>) -> Unit) {
     var joins by rememberSaveable(pages.map { it.path }) { mutableStateOf(List(pages.size) { false }) }
-    var requests by rememberSaveable(pages.map { it.path }) { mutableStateOf(List(pages.size) { "لخص هذا المستند مع الحفاظ على الأرقام والتواريخ المهمة" }) }
+    var tasks by rememberSaveable(pages.map { it.path }) { mutableStateOf(List(pages.size) { ReportDocumentTask.SUMMARY }) }
+    var requests by rememberSaveable(pages.map { it.path }) {
+        mutableStateOf(List(pages.size) { ReportDocumentTask.SUMMARY.defaultInstruction })
+    }
     Dialog(onDismissRequest = { if (!busy) onCancel() }, properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false)) {
         Surface(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
             Column(Modifier.padding(16.dp)) {
@@ -40,12 +43,69 @@ internal fun ReportDocumentRequestDialog(pages: List<File>, busy: Boolean, error
                                     Text("تابع للمستند السابق", Modifier.padding(top = 12.dp))
                                 }
                                 if (!joins[index] || index == 0) {
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        TextButton(enabled = !busy, onClick = { requests = requests.toMutableList().also { it[index] = "لخص هذا المستند مع الحفاظ على الأرقام والتواريخ المهمة" } }) { Text("ملخص") }
-                                        TextButton(enabled = !busy, onClick = { requests = requests.toMutableList().also { it[index] = "استخرج النتيجة النهائية الواردة في المستند، واذكر إذا لم توجد نتيجة صريحة" } }) { Text("النتيجة النهائية") }
+                                    Text("اختر المطلوب", style = MaterialTheme.typography.labelLarge)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                                        FilterChip(
+                                            selected = tasks[index] == ReportDocumentTask.SUBJECT,
+                                            onClick = {
+                                                tasks = tasks.toMutableList().also { it[index] = ReportDocumentTask.SUBJECT }
+                                                requests = requests.toMutableList().also { it[index] = ReportDocumentTask.SUBJECT.defaultInstruction }
+                                            },
+                                            label = { Text("موضوع") },
+                                            enabled = !busy
+                                        )
+                                        FilterChip(
+                                            selected = tasks[index] == ReportDocumentTask.ASSIGNMENT,
+                                            onClick = {
+                                                tasks = tasks.toMutableList().also { it[index] = ReportDocumentTask.ASSIGNMENT }
+                                                requests = requests.toMutableList().also { it[index] = ReportDocumentTask.ASSIGNMENT.defaultInstruction }
+                                            },
+                                            label = { Text("مأمورية") },
+                                            enabled = !busy
+                                        )
+                                        FilterChip(
+                                            selected = tasks[index] == ReportDocumentTask.RESEARCH,
+                                            onClick = {
+                                                tasks = tasks.toMutableList().also { it[index] = ReportDocumentTask.RESEARCH }
+                                                requests = requests.toMutableList().also { it[index] = ReportDocumentTask.RESEARCH.defaultInstruction }
+                                            },
+                                            label = { Text("بحث مستند") },
+                                            enabled = !busy
+                                        )
                                     }
-                                    OutlinedTextField(requests[index], { value -> if (value.length <= 2000) requests = requests.toMutableList().also { it[index] = value } },
-                                        label = { Text("ماذا تريد من هذا المستند؟") }, minLines = 2, enabled = !busy, modifier = Modifier.fillMaxWidth())
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                                        FilterChip(
+                                            selected = tasks[index] == ReportDocumentTask.SUMMARY,
+                                            onClick = {
+                                                tasks = tasks.toMutableList().also { it[index] = ReportDocumentTask.SUMMARY }
+                                                requests = requests.toMutableList().also { it[index] = ReportDocumentTask.SUMMARY.defaultInstruction }
+                                            },
+                                            label = { Text("تلخيص") },
+                                            enabled = !busy
+                                        )
+                                        FilterChip(
+                                            selected = tasks[index] == ReportDocumentTask.CONCLUSION,
+                                            onClick = {
+                                                tasks = tasks.toMutableList().also { it[index] = ReportDocumentTask.CONCLUSION }
+                                                requests = requests.toMutableList().also { it[index] = ReportDocumentTask.CONCLUSION.defaultInstruction }
+                                            },
+                                            label = { Text("نتيجة") },
+                                            enabled = !busy
+                                        )
+                                    }
+                                    OutlinedTextField(
+                                        requests[index],
+                                        { value ->
+                                            if (value.length <= 2000) {
+                                                requests = requests.toMutableList().also { it[index] = value }
+                                                tasks = tasks.toMutableList().also { it[index] = ReportDocumentTask.CUSTOM }
+                                            }
+                                        },
+                                        label = { Text("ماذا تريد من هذا المستند؟") },
+                                        minLines = 2,
+                                        enabled = !busy,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
                                 }
                             }
                         }
@@ -55,7 +115,7 @@ internal fun ReportDocumentRequestDialog(pages: List<File>, busy: Boolean, error
                 if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = onCancel, enabled = !busy) { Text("إلغاء") }
-                    Button(onClick = { onAnalyze(groupReportPages(pages, joins, requests)) },
+                    Button(onClick = { onAnalyze(groupReportPages(pages, joins, requests, tasks)) },
                         enabled = !busy && pages.indices.all { (it > 0 && joins[it]) || requests[it].isNotBlank() }, modifier = Modifier.weight(1f)) { Text(if (busy) "جارٍ التحليل…" else "تحليل المستندات") }
                 }
             }
