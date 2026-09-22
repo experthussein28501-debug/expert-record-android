@@ -42,12 +42,23 @@ class MultiPageDocumentReader @Inject constructor(
         var localFallback = false
         var pagesRead = 0
         var aiError: String? = null
-        pageFiles.chunked(PAGES_PER_REQUEST).forEachIndexed batchLoop@ { batchIndex, files ->
-            val firstPage = batchIndex * PAGES_PER_REQUEST + 1
+        val effectiveUseAi = shouldUseAiBatch(
+            requestedUseAi = useAi,
+            pageCount = pageFiles.size,
+            canAnalyzeMultiplePages = aiVision.canAnalyzeMultiplePages()
+        )
+        if (useAi && !effectiveUseAi) {
+            localFallback = true
+            aiError = "لا يوجد مفتاح AI شخصي للتحليل متعدد الصفحات؛ تم استخدام OCR المحلي صفحة بصفحة."
+            warnings += aiError
+        }
+        val batchSize = if (effectiveUseAi) PAGES_PER_REQUEST else 1
+        pageFiles.chunked(batchSize).forEachIndexed batchLoop@ { batchIndex, files ->
+            val firstPage = batchIndex * batchSize + 1
             // Local OCR is deliberately decoded and recycled one page at a time. Keeping ten
             // camera bitmaps alive together can exceed the heap on real phones and starve the
             // UI long enough for Android to report an ANR.
-            if (!useAi) {
+            if (!effectiveUseAi) {
                 files.forEachIndexed { offset, file ->
                     val pageNumber = firstPage + offset
                     val bitmap = decodeCameraBitmap(context, Uri.fromFile(file), MAX_ANALYSIS_EDGE)
@@ -82,7 +93,7 @@ class MultiPageDocumentReader @Inject constructor(
             }
             if (bitmaps.isEmpty()) return@batchLoop
             try {
-                val result = if (useAi) aiVision.analyzePages(bitmaps, purpose, detectMultipleDocuments) else null
+                val result = aiVision.analyzePages(bitmaps, purpose, detectMultipleDocuments)
                 when (result) {
                     is GeminiDocumentVisionService.Result.Success -> {
                         pages += "[الصفحات $firstPage-${firstPage + bitmaps.size - 1}]\n${result.text.trim()}"
@@ -96,9 +107,9 @@ class MultiPageDocumentReader @Inject constructor(
                             is GeminiDocumentVisionService.Result.Failure -> result.message
                             else -> null
                         }
-                        if (useAi) aiError = failureMessage ?: "تعذر تحليل الصور بالذكاء الاصطناعي"
-                        if (!useAi || fallbackToLocal) {
-                            if (useAi) localFallback = true
+                        aiError = failureMessage ?: "تعذر تحليل الصور بالذكاء الاصطناعي"
+                        if (fallbackToLocal) {
+                            localFallback = true
                             bitmaps.forEachIndexed { offset, bitmap ->
                                 when (val local = localOcr.recognize(bitmap)) {
                                     is ArabicPetitionOcrService.Result.Success -> {
@@ -130,3 +141,9 @@ class MultiPageDocumentReader @Inject constructor(
         const val MAX_ANALYSIS_EDGE = 1800
     }
 }
+
+internal fun shouldUseAiBatch(
+    requestedUseAi: Boolean,
+    pageCount: Int,
+    canAnalyzeMultiplePages: Boolean
+): Boolean = requestedUseAi && (pageCount <= 1 || canAnalyzeMultiplePages)
