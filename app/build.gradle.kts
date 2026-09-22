@@ -233,7 +233,19 @@ val validatePlayRelease by tasks.registering {
         listOf("KHABIR_FIREBASE_API_KEY", "KHABIR_FIREBASE_APP_ID", "KHABIR_FIREBASE_PROJECT_ID", "KHABIR_GOOGLE_WEB_CLIENT_ID", "KHABIR_MONETIZATION_BASE_URL", "KHABIR_PRIVACY_POLICY_URL", "KHABIR_ACCOUNT_DELETION_URL").forEach { key ->
             check(!providers.gradleProperty(key).orNull.isNullOrBlank()) { "Missing release configuration: $key" }
         }
-        check(providers.gradleProperty("KHABIR_MONETIZATION_BASE_URL").get().startsWith("https://"))
+        listOf(
+            "KHABIR_MONETIZATION_BASE_URL",
+            "KHABIR_PRIVACY_POLICY_URL",
+            "KHABIR_ACCOUNT_DELETION_URL"
+        ).forEach { key ->
+            val value = providers.gradleProperty(key).orNull.orEmpty()
+            check(value.startsWith("https://") && value.length > "https://x.y".length) {
+                "A public HTTPS URL is required for $key"
+            }
+        }
+        providers.gradleProperty("KHABIR_GEMINI_VISION_ENDPOINT").orNull
+            ?.takeIf { it.isNotBlank() }
+            ?.let { value -> check(value.startsWith("https://")) { "KHABIR_GEMINI_VISION_ENDPOINT must use HTTPS" } }
         listOf("KHABIR_ADMOB_APP_ID", "KHABIR_ADMOB_BANNER_ID", "KHABIR_ADMOB_INTERSTITIAL_ID", "KHABIR_ADMOB_REWARDED_ID").forEach { key ->
             val value = providers.gradleProperty(key).orNull.orEmpty()
             check(value.startsWith("ca-app-pub-") && !value.contains("3940256099942544")) { "Production AdMob configuration required: $key" }
