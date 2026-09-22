@@ -55,4 +55,10 @@ class SiteSketchDraftCodecTest {
         assertEquals(Offset(0f, 1f), restored.single().points.first())
         assertEquals(Offset(0.5f, 0.5f), restored.single().points.last())
     }
+
+    @Test
+    fun `sketch canvas keeps the requested large drawing area`() {
+        assertTrue(SKETCH_CANVAS_HEIGHT_DP >= 540)
+    }
+
 }
