@@ -152,6 +152,12 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                 ?: scope.launch { snackbar.showSnackbar("تعذر فتح الصورة المختارة للمخطط") }
         }
     }
+    val reportImagesLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+        if (uris.isNotEmpty()) {
+            importedTarget = ReportCaptureField.DOCUMENTS
+            viewModel.prepareImportedReportImages(uris)
+        }
+    }
     val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) showInAppCamera = true
         else scope.launch { snackbar.showSnackbar("يلزم السماح بالكاميرا لتصوير مستندات التقرير") }
@@ -341,6 +347,15 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                         if (state.isOcrProcessing) "جارٍ قراءة صفحات المستند..." else "كل زر تصوير في التقرير يتيح تصوير مستند متعدد الصفحات ثم مراجعته دفعة واحدة.",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary
+                    )
+                    FilledTonalButton(
+                        onClick = { reportImagesLauncher.launch("image/*") },
+                        enabled = !state.isOcrProcessing,
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("استيراد صور للمستند — حتى 10 صور") }
+                    Text(
+                        "بعد التصوير أو الاستيراد ستظهر شاشة علوية لتحديد المطلوب: موضوع، مأمورية، بحث مستند، تلخيص أو نتيجة، ثم شاشة مراجعة قبل الاعتماد.",
+                        style = MaterialTheme.typography.labelSmall
                     )
                     FilledTonalButton(
                         onClick = { editableTemplateLauncher.launch(arrayOf(ReportViewModel.WORD_MIME, "application/msword")) },
@@ -666,8 +681,23 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
     }
 
     if (state.pendingReportPages.isNotEmpty()) ReportDocumentRequestDialog(
-        pages = state.pendingReportPages, busy = state.isOcrProcessing, error = state.errorMessage,
-        onCancel = viewModel::cancelReportDocuments, onAnalyze = viewModel::analyzeRequestedDocuments
+        pages = state.pendingReportPages,
+        busy = state.isOcrProcessing,
+        error = state.errorMessage,
+        onCancel = viewModel::cancelReportDocuments,
+        onAnalyze = { requests ->
+            val singleTask = requests.map { it.task }.distinct().singleOrNull()
+            importedTarget = when (singleTask) {
+                ReportDocumentTask.SUBJECT -> ReportCaptureField.SUBJECT
+                ReportDocumentTask.ASSIGNMENT -> ReportCaptureField.ASSIGNMENT
+                ReportDocumentTask.RESEARCH -> ReportCaptureField.DOCUMENTS
+                ReportDocumentTask.CONCLUSION -> ReportCaptureField.CONCLUSION
+                ReportDocumentTask.SUMMARY,
+                ReportDocumentTask.CUSTOM,
+                null -> importedTarget
+            }
+            viewModel.analyzeRequestedDocuments(requests)
+        }
     )
 
     if (showInAppCamera) {
@@ -681,14 +711,9 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                 showInAppCamera = false
                 viewModel.onReportPhotoCapturedWithGemini(bitmap)
             },
-            onPagesCaptured = { pages, useAi ->
+            onPagesSelected = { pages ->
                 showInAppCamera = false
-                when (importedTarget) {
-                    ReportCaptureField.SUBJECT -> viewModel.onPetitionSubjectPagesCaptured(pages, useAi)
-                    ReportCaptureField.ASSIGNMENT -> viewModel.onPreliminaryJudgmentPagesCaptured(pages, useAi)
-                    ReportCaptureField.DOCUMENTS -> viewModel.onResearchDocumentPagesCaptured(pages, useAi)
-                    else -> if (useAi) viewModel.prepareReportDocuments(pages) else viewModel.onDocumentPagesCaptured(pages, false)
-                }
+                viewModel.prepareReportDocuments(pages)
             },
             onError = { message -> scope.launch { snackbar.showSnackbar(message) } }
         )
@@ -1019,31 +1044,20 @@ private fun ReportTemplateSection(
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             section.headingLines.filter(String::isNotBlank).forEach { Text(it, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium) }
             if (section.id == "subject") {
-                KhabirCard(contentPadding = PaddingValues(10.dp), containerColor = MaterialTheme.colorScheme.secondaryContainer) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("موضع الطلبات الختامية داخل الموضوع", fontWeight = FontWeight.SemiBold)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                            FilterChip(
-                                selected = state.finalRequestsPlacement == FinalRequestsPlacement.START,
-                                onClick = { viewModel.onFinalRequestsPlacementChanged(FinalRequestsPlacement.START) },
-                                label = { Text("في البداية") },
-                                modifier = Modifier.weight(1f)
-                            )
-                            FilterChip(
-                                selected = state.finalRequestsPlacement == FinalRequestsPlacement.END,
-                                onClick = { viewModel.onFinalRequestsPlacementChanged(FinalRequestsPlacement.END) },
-                                label = { Text("في النهاية") },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                        com.khabir.app.presentation.components.InlineHelp("مساعدة", "الاختيار يعيد ترتيب الموضوع الحالي ويُستخدم أيضًا عند استخراج موضوع الدعوى من العريضة.")
-                    }
-                }
                 ReportSectionField(
-                    section.title, mapping.first, mapping.second,
-                    5,
-                    { onCamera(mapping.third, null) }, { onMic(mapping.third, null) },
-                    isExpanded = isExpanded, onExpand = onExpand, expandedHeight = expandedHeight
+                    section.title,
+                    mapping.first,
+                    mapping.second,
+                    8,
+                    { onCamera(mapping.third, null) },
+                    { onMic(mapping.third, null) },
+                    isExpanded = isExpanded,
+                    onExpand = onExpand,
+                    expandedHeight = expandedHeight
+                )
+                com.khabir.app.presentation.components.InlineHelp(
+                    "الموضوع صفحة واحدة",
+                    "الطلبات الختامية تُدمج داخل صياغة الموضوع نفسها عند الاستخراج ولا يوجد لها بند مستقل."
                 )
             } else if (section.id == "statements") {
                 val statements = splitPartyStatements(state.partyStatements)
