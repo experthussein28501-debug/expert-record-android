@@ -354,6 +354,52 @@ class ReportViewModel @Inject constructor(
         _uiState.update { it.copy(pendingReportPages = pages.take(10), errorMessage = null) }
     }
 
+    fun prepareImportedReportImages(uris: List<Uri>) {
+        if (_uiState.value.isOcrProcessing || uris.isEmpty()) return
+        val selected = uris.take(10)
+        viewModelScope.launch {
+            _uiState.update { it.copy(isOcrProcessing = true, errorMessage = null) }
+            val files = mutableListOf<File>()
+            val failure = runCatching {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val directory = File(context.cacheDir, "report_imports").apply { mkdirs() }
+                    selected.forEachIndexed { index, uri ->
+                        val file = File.createTempFile("report_import_${index + 1}_", ".img", directory)
+                        try {
+                            context.contentResolver.openInputStream(uri).use { input ->
+                                requireNotNull(input) { "تعذر فتح الصورة ${index + 1}" }
+                                file.outputStream().use { output -> input.copyTo(output) }
+                            }
+                            require(file.length() > 0L) { "الصورة ${index + 1} فارغة" }
+                            files += file
+                        } catch (error: Throwable) {
+                            file.delete()
+                            throw error
+                        }
+                    }
+                }
+            }.exceptionOrNull()
+            if (failure != null || files.isEmpty()) {
+                files.forEach { it.delete() }
+                _uiState.update {
+                    it.copy(
+                        isOcrProcessing = false,
+                        errorMessage = failure?.message ?: "تعذر استيراد الصور"
+                    )
+                }
+                return@launch
+            }
+            documentResults.clear()
+            _uiState.update {
+                it.copy(
+                    isOcrProcessing = false,
+                    pendingReportPages = files,
+                    errorMessage = if (uris.size > 10) "تم استيراد أول 10 صور فقط." else null
+                )
+            }
+        }
+    }
+
     fun cancelReportDocuments() {
         if (_uiState.value.isOcrProcessing) return
         _uiState.value.pendingReportPages.forEach { it.delete() }
@@ -368,32 +414,152 @@ class ReportViewModel @Inject constructor(
         if (documents.flatMap { it.pages } != expected || expected.isEmpty()) return
         viewModelScope.launch {
             _uiState.update { it.copy(isOcrProcessing = true, errorMessage = null) }
+            var stagedIdentity: PendingImportedCaseIdentity? = null
             try {
+                val hasPersonalAiKey = personalAiKeyStore.read().trim().isNotBlank()
                 val texts = documents.mapIndexed { index, document ->
-                    val cacheKey = document.pages.joinToString("|") { it.path } + "\n" + document.instruction
-                    val resultText = documentResults[cacheKey] ?: run {
-                        val bitmaps = mutableListOf<Bitmap>()
-                        try {
-                            for (file in document.pages) {
-                                val bitmap = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                    com.khabir.app.presentation.common.decodeCameraBitmap(context, Uri.fromFile(file), 1400)
-                                } ?: error("تعذر فتح صورة من المستند ${index + 1}")
-                                bitmaps += bitmap
+                    val cacheKey = document.pages.joinToString("|") { it.path } +
+                        "\n" + document.task.name + "\n" + document.instruction
+                    val resultText = documentResults[cacheKey] ?: when (document.task) {
+                        ReportDocumentTask.SUBJECT -> {
+                            val read = multiPageReader.read(
+                                document.pages,
+                                LegalDocumentPurpose.PETITION,
+                                useAi = hasPersonalAiKey,
+                                deleteAfterRead = false
+                            )
+                            if (read.text.isBlank()) {
+                                error("المستند ${index + 1}: " + read.warnings.joinToString(" ").ifBlank { "تعذر استخراج موضوع الدعوى" })
                             }
-                            when (val result = geminiVision.analyzeReportDocument(bitmaps, document.instruction)) {
-                                is GeminiDocumentVisionService.Result.Success -> result.text.also { documentResults[cacheKey] = it }
-                                is GeminiDocumentVisionService.Result.Failure -> error("المستند ${index + 1}: ${result.message}")
-                                is GeminiDocumentVisionService.Result.Unavailable -> error(result.message)
+                            val parsed = PetitionIntakeParser.parse(read.text)
+                            val plaintiffs = summarizeReportParties(parsed, plaintiff = true)
+                            val defendants = summarizeReportParties(parsed, plaintiff = false)
+                            val subjectSource = buildString {
+                                parsed.finalRequests?.takeIf(String::isNotBlank)?.let {
+                                    append("الطلبات الختامية:\n").append(it.trim()).append("\n\n")
+                                }
+                                parsed.subjectOfCase?.takeIf(String::isNotBlank)?.let {
+                                    append("شرح الدعوى:\n").append(it.trim())
+                                }
                             }
-                        } finally { bitmaps.forEach { it.recycle() } }
-                    }
+                            val formatted = CaseSubjectFormatter.format(subjectSource, _uiState.value.finalRequestsPlacement)
+                            if (formatted.isBlank()) error("المستند ${index + 1}: تعذر فصل موضوع الدعوى بأمان")
+                            stagedIdentity = PendingImportedCaseIdentity(parsed, plaintiffs, defendants)
+                            formatted
+                        }
+
+                        ReportDocumentTask.ASSIGNMENT -> {
+                            val read = multiPageReader.read(
+                                document.pages,
+                                LegalDocumentPurpose.PETITION,
+                                useAi = hasPersonalAiKey,
+                                deleteAfterRead = false
+                            )
+                            if (read.text.isBlank()) {
+                                error("المستند ${index + 1}: " + read.warnings.joinToString(" ").ifBlank { "تعذر استخراج المأمورية" })
+                            }
+                            val parsed = PetitionIntakeParser.parse(read.text)
+                            val plaintiffs = summarizeReportParties(parsed, plaintiff = true)
+                            val defendants = summarizeReportParties(parsed, plaintiff = false)
+                            val assignment = parsed.preliminaryMission?.takeIf(String::isNotBlank)?.let {
+                                IntakeNarrative.mission(it, parsed.preliminaryJudgmentDate)
+                            }.orEmpty()
+                            if (assignment.isBlank()) error("المستند ${index + 1}: لم يمكن تحديد مأمورية الخبير بأمان")
+                            stagedIdentity = PendingImportedCaseIdentity(parsed, plaintiffs, defendants)
+                            assignment
+                        }
+
+                        else -> {
+                            if (hasPersonalAiKey) {
+                                val bitmaps = mutableListOf<Bitmap>()
+                                try {
+                                    document.pages.forEach { file ->
+                                        val bitmap = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                            com.khabir.app.presentation.common.decodeCameraBitmap(context, Uri.fromFile(file), 1400)
+                                        } ?: error("تعذر فتح صورة من المستند ${index + 1}")
+                                        bitmaps += bitmap
+                                    }
+                                    when (val ai = geminiVision.analyzeReportDocument(bitmaps, document.instruction)) {
+                                        is GeminiDocumentVisionService.Result.Success -> ai.text
+                                        is GeminiDocumentVisionService.Result.Failure,
+                                        is GeminiDocumentVisionService.Result.Unavailable -> {
+                                            val local = multiPageReader.read(
+                                                document.pages,
+                                                LegalDocumentPurpose.REPORT,
+                                                useAi = false,
+                                                deleteAfterRead = false
+                                            )
+                                            if (local.text.isBlank()) {
+                                                val message = when (ai) {
+                                                    is GeminiDocumentVisionService.Result.Failure -> ai.message
+                                                    is GeminiDocumentVisionService.Result.Unavailable -> ai.message
+                                                    else -> ""
+                                                }
+                                                error("المستند ${index + 1}: $message")
+                                            }
+                                            formatReportDocumentFallback(local.text, document.task)
+                                        }
+                                    }
+                                } finally {
+                                    bitmaps.forEach { if (!it.isRecycled) it.recycle() }
+                                }
+                            } else {
+                                val local = multiPageReader.read(
+                                    document.pages,
+                                    LegalDocumentPurpose.REPORT,
+                                    useAi = false,
+                                    deleteAfterRead = false
+                                )
+                                if (local.text.isBlank()) {
+                                    error("المستند ${index + 1}: " + local.warnings.joinToString(" ").ifBlank { "تعذر استخراج النص" })
+                                }
+                                formatReportDocumentFallback(local.text, document.task)
+                            }
+                        }
+                    }.also { documentResults[cacheKey] = it }
                     "المستند ${index + 1}\n$resultText"
                 }
-                expected.forEach { it.delete() }; documentResults.clear()
-                _uiState.update { it.copy(pendingReportPages = emptyList(), importedOfficeText = texts.joinToString("\n\n"), importedOfficeSource = "نتائج المستندات") }
-            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
-            catch (error: Exception) { _uiState.update { it.copy(errorMessage = error.message ?: "تعذر تحليل المستندات") } }
-            finally { _uiState.update { it.copy(isOcrProcessing = false) } }
+
+                pendingImportedCaseIdentity = stagedIdentity
+                expected.forEach { it.delete() }
+                documentResults.clear()
+                _uiState.update {
+                    it.copy(
+                        pendingReportPages = emptyList(),
+                        importedOfficeText = texts.joinToString("\n\n"),
+                        importedOfficeSource = "نتائج الصور — مراجعة قبل الاعتماد",
+                        errorMessage = if (!hasPersonalAiKey && documents.any {
+                                it.task !in setOf(ReportDocumentTask.SUBJECT, ReportDocumentTask.ASSIGNMENT)
+                            }) {
+                            "لا يوجد مفتاح AI؛ استُخدم OCR المحلي. راجع النص قبل الاعتماد."
+                        } else null
+                    )
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                _uiState.update { it.copy(errorMessage = error.message ?: "تعذر تحليل المستندات") }
+            } finally {
+                _uiState.update { it.copy(isOcrProcessing = false) }
+            }
+        }
+    }
+
+    private fun formatReportDocumentFallback(raw: String, task: ReportDocumentTask): String {
+        val text = raw.trim()
+        if (text.isBlank()) return ""
+        return when (task) {
+            ReportDocumentTask.RESEARCH -> formatResearchDocumentLocally(text)
+            ReportDocumentTask.CONCLUSION -> {
+                val result = Regex(
+                    "(?ims)(?:النتيجة\\s+النهائية|النتيجة|وانتهى(?:\\s+التقرير)?\\s+إلى|انتهى(?:\\s+التقرير)?\\s+إلى)\\s*[:：-]?\\s*(.+)$"
+                ).find(text)?.groupValues?.getOrNull(1)?.trim()
+                result?.takeIf(String::isNotBlank) ?: text
+            }
+            ReportDocumentTask.SUMMARY,
+            ReportDocumentTask.CUSTOM -> text
+            ReportDocumentTask.SUBJECT,
+            ReportDocumentTask.ASSIGNMENT -> text
         }
     }
 
