@@ -100,8 +100,7 @@ class MultiPageDocumentReader @Inject constructor(
                         pagesRead += bitmaps.size
                     }
                     is GeminiDocumentVisionService.Result.Unavailable,
-                    is GeminiDocumentVisionService.Result.Failure,
-                    null -> {
+                    is GeminiDocumentVisionService.Result.Failure -> {
                         val failureMessage = when (result) {
                             is GeminiDocumentVisionService.Result.Unavailable -> result.message
                             is GeminiDocumentVisionService.Result.Failure -> result.message
@@ -110,14 +109,29 @@ class MultiPageDocumentReader @Inject constructor(
                         aiError = failureMessage ?: "تعذر تحليل الصور بالذكاء الاصطناعي"
                         if (fallbackToLocal) {
                             localFallback = true
-                            bitmaps.forEachIndexed { offset, bitmap ->
-                                when (val local = localOcr.recognize(bitmap)) {
-                                    is ArabicPetitionOcrService.Result.Success -> {
-                                        pages += "[الصفحة ${firstPage + offset}]\n${local.text.trim()}"
-                                        pagesRead++
+                            // Release the AI batch before local OCR. Otherwise an API/key failure
+                            // would keep up to ten decoded pages alive while Tesseract allocates
+                            // its own working buffers.
+                            bitmaps.forEach { if (!it.isRecycled) it.recycle() }
+                            files.forEachIndexed { offset, file ->
+                                val bitmap = decodeCameraBitmap(context, Uri.fromFile(file), MAX_ANALYSIS_EDGE)
+                                if (bitmap == null) {
+                                    warnings += "تعذر قراءة الصفحة ${firstPage + offset}"
+                                } else {
+                                    try {
+                                        when (val local = localOcr.recognize(bitmap)) {
+                                            is ArabicPetitionOcrService.Result.Success -> {
+                                                pages += "[الصفحة ${firstPage + offset}]\n${local.text.trim()}"
+                                                pagesRead++
+                                            }
+                                            is ArabicPetitionOcrService.Result.Failure ->
+                                                warnings += "الصفحة ${firstPage + offset}: ${local.message}"
+                                        }
+                                    } finally {
+                                        if (!bitmap.isRecycled) bitmap.recycle()
                                     }
-                                    is ArabicPetitionOcrService.Result.Failure -> warnings += "الصفحة ${firstPage + offset}: ${local.message}"
                                 }
+                                yield()
                             }
                         } else {
                             warnings += aiError.orEmpty()
