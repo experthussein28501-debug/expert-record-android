@@ -93,6 +93,7 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
         release {
+            manifestPlaceholders["appLabel"] = "سجل الخبير"
             isDebuggable = false
             isMinifyEnabled = true
             isShrinkResources = true
