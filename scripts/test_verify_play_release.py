@@ -70,6 +70,19 @@ class VerifyPlayReleaseTest(unittest.TestCase):
                     tmp, manifest_xml(extra_permission="android.permission.READ_CALENDAR")
                 ))
 
+
+    def test_reviewed_sdk_permissions_are_allowed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            text = manifest_xml(extra_permission="android.permission.FOREGROUND_SERVICE")
+            text = text.replace(
+                '<uses-permission android:name="android.permission.CAMERA" />',
+                '<uses-permission android:name="android.permission.CAMERA" />'
+                '<uses-permission android:name="android.permission.WAKE_LOCK" />'
+                '<uses-permission android:name="com.google.android.providers.gsf.permission.READ_GSERVICES" />'
+                '<uses-permission android:name="com.khabir.app.combined.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />'
+            )
+            verify_manifest(self.write_manifest(tmp, text))
+
     def test_play_aab_structure_passes(self):
         with tempfile.TemporaryDirectory() as tmp:
             verify_aab(self.write_aab(tmp))
