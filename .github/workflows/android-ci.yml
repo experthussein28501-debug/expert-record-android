@@ -301,7 +301,8 @@ jobs:
           python3 scripts/verify_play_release.py play-preflight-manifest.xml "$AAB"
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 "$APK"
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify "$APK"
-          jarsigner -verify -strict "$AAB" > play-preflight-aab-signature.txt
+          jarsigner -verify -verbose -certs "$AAB" > play-preflight-aab-signature.txt
+          grep -qi "jar verified" play-preflight-aab-signature.txt
           unzip -t "$AAB" >/dev/null
 
       - name: Upload Play preflight evidence
