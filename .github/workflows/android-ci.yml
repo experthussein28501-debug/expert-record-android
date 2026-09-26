@@ -5,19 +5,6 @@ on:
   workflow_run:
     workflows: [ "Import Source ZIP" ]
     types: [ completed ]
-  push:
-    branches: [ "main" ]
-    paths:
-      - "**/*.kt"
-      - "**/*.kts"
-      - "**/*.java"
-      - "**/*.xml"
-      - "gradle/**"
-      - "gradlew"
-      - "gradle.properties"
-      - "settings.gradle.kts"
-      - "build.gradle.kts"
-      - ".github/workflows/android-ci.yml"
   pull_request:
     branches: [ "main" ]
 
