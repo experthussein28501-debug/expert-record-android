@@ -809,6 +809,9 @@ private fun CaptureReviewDialog(
     AlertDialog(onDismissRequest = onDismiss, title = { Text("مراجعة الإدخال") }, text = {
         Column(Modifier.heightIn(max = 450.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("اختر القسم ثم راجع أو عدّل النص قبل اعتماده")
+            KhabirCard(contentPadding = PaddingValues(8.dp), containerColor = MaterialTheme.colorScheme.primaryContainer) {
+                Text("سيتم الإدراج في: ${chosenTarget.label}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            }
             Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(replaceExisting, { replaceExisting = it }); Text("استبدال النص القديم بالكامل (بدل الإضافة)") }
             ReportCaptureField.entries.filter { it != ReportCaptureField.CUSTOM || captureCustomSectionId != null }.forEach { field -> FilterChip(selected = chosenTarget == field, onClick = { chosenTarget = field }, label = { Text(field.label) }) }
             KhabirTextField(quickInputText, onQuickInputTextChange, label = { Text("النص المستخرج / المملى") }, minLines = 5, modifier = Modifier.fillMaxWidth())
@@ -855,6 +858,9 @@ private fun OfficeImportReviewDialog(
     AlertDialog(onDismissRequest = viewModel::onImportedOfficeTextConsumed, title = { Text("مراجعة استيراد ${importedOfficeSource ?: "Word"}") }, text = {
         Column(Modifier.heightIn(max = 450.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("اختر القسم الذي سيضاف إليه النص. لن يتم اعتماد النص قبل المراجعة.")
+            KhabirCard(contentPadding = PaddingValues(8.dp), containerColor = MaterialTheme.colorScheme.primaryContainer) {
+                Text("سيتم الإدراج في: ${importedTarget.label}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            }
             Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(replaceExisting, { replaceExisting = it }); Text("استبدال النص القديم بالكامل") }
             ReportCaptureField.entries.filter { it != ReportCaptureField.CUSTOM || captureCustomSectionId != null }.forEach { field -> FilterChip(selected = importedTarget == field, onClick = { onImportedTargetChange(field) }, label = { Text(field.label) }) }
             KhabirTextField(value = reviewedText, onValueChange = { reviewedText = it }, minLines = 6, maxLines = 12, modifier = Modifier.fillMaxWidth())
