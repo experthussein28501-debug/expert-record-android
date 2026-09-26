@@ -93,7 +93,7 @@ fun CompleteHomeScreen(
                 HomeModuleCard("بيانات الخبير", "بيانات المكتب والذكاء الاصطناعي", Icons.Filled.Person, onOpenExpertProfile, Modifier.weight(1f))
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                HomeModuleCard("المهام والاشتراك", "المكافآت والوقت بدون إعلانات", Icons.Filled.Person, onOpenBenefits, Modifier.weight(1f))
+                HomeModuleCard("الاشتراك والمكافآت", "الوقت بدون إعلانات وخطط الاشتراك", Icons.Filled.Person, onOpenBenefits, Modifier.weight(1f))
                 HomeModuleCard("النسخ الاحتياطي", "نسخة مشفرة واستعادة", Icons.Filled.Backup, onOpenBackup, Modifier.weight(1f))
             }
 
