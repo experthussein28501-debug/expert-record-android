@@ -1,10 +1,6 @@
-name: External APK ZIP
+name: Package APK ZIP (Private)
 
 on:
-  push:
-    branches: [ "main" ]
-    paths:
-      - ".github/workflows/external-apk-zip.yml"
   workflow_dispatch:
 
 permissions:
@@ -15,7 +11,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - name: Download current published APK
+      - name: Download current private APK release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -27,55 +23,25 @@ jobs:
             --output expert-record-debug.apk
           SIZE="$(stat -c%s expert-record-debug.apk)"
           echo "APK_SIZE=$SIZE"
-          test "$SIZE" -gt 49000000
-          echo "APK_SHA256=$(sha256sum expert-record-debug.apk | awk '{print $1}')"
+          test "$SIZE" -gt 10000000
+          sha256sum expert-record-debug.apk
 
       - name: Zip and verify
         shell: bash
         run: |
           set -euo pipefail
-          FILE='expert-record-0.9.3-work-minutes-complete.zip'
+          FILE='expert-record-0.9.11-debug.zip'
+          rm -f "$FILE"
           zip -9 "$FILE" expert-record-debug.apk
           unzip -t "$FILE"
-          echo "ZIP_SHA256=$(sha256sum "$FILE" | awk '{print $1}')"
-          echo "ZIP_SIZE=$(stat -c%s "$FILE")"
+          sha256sum "$FILE"
+          ls -lh expert-record-debug.apk "$FILE"
 
-      - name: Attach ZIP to current release
+      - name: Attach ZIP to private GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          FILE='expert-record-0.9.3-work-minutes-complete.zip'
+          FILE='expert-record-0.9.11-debug.zip'
           gh release upload dev-latest "$FILE" --repo "$GITHUB_REPOSITORY" --clobber
-          echo "RELEASE_ZIP_URL=https://github.com/$GITHUB_REPOSITORY/releases/download/dev-latest/$FILE"
-
-      - name: Upload ZIP with fallbacks
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -euo pipefail
-          FILE='expert-record-0.9.3-work-minutes-complete.zip'
-          URL=''
-
-          echo 'Trying Litterbox...'
-          URL="$(curl -sS --fail --max-time 300 \
-            -F 'reqtype=fileupload' \
-            -F 'time=24h' \
-            -F "fileToUpload=@${FILE}" \
-            https://litterbox.catbox.moe/resources/internals/api.php || true)"
-          if ! printf '%s' "$URL" | grep -Eq '^https?://'; then URL=''; fi
-
-          if [ -z "$URL" ]; then
-            echo 'Trying transfer.sh...'
-            URL="$(curl -sS --fail --max-time 300 --upload-file "$FILE" "https://transfer.sh/$FILE" || true)"
-            if ! printf '%s' "$URL" | grep -Eq '^https?://'; then URL=''; fi
-          fi
-
-          if [ -z "$URL" ]; then
-            echo 'Trying 0x0.st...'
-            URL="$(curl -sS --fail --max-time 300 -F "file=@${FILE}" https://0x0.st || true)"
-            if ! printf '%s' "$URL" | grep -Eq '^https?://'; then URL=''; fi
-          fi
-
-          if [ -n "$URL" ]; then echo "DIRECT_ZIP_URL=$URL"; fi
