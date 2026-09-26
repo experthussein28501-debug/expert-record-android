@@ -21,23 +21,26 @@ class AgendaStore @Inject constructor(@ApplicationContext context: Context) {
     fun get(date: LocalDate): AgendaDayNote? = _records.value[date.toEpochDay()]
 
     fun save(record: AgendaDayNote) {
-        val key = record.date.toEpochDay().toString()
-        if (
-            record.text.isBlank() &&
+        val epoch = record.date.toEpochDay()
+        val key = epoch.toString()
+        val isEmpty = record.text.isBlank() &&
             record.strokes.isEmpty() &&
             record.imagePaths.isEmpty() &&
             record.manualAppointments.isEmpty()
-        ) {
+
+        if (isEmpty) {
             prefs.remove(key)
+            _records.value = _records.value - epoch
         } else {
             prefs.put(key, AgendaDayCodec.encode(record))
+            _records.value = _records.value + (epoch to record)
         }
-        _records.value = loadAll()
     }
 
     fun delete(date: LocalDate) {
-        prefs.remove(date.toEpochDay().toString())
-        _records.value = loadAll()
+        val epoch = date.toEpochDay()
+        prefs.remove(epoch.toString())
+        _records.value = _records.value - epoch
     }
 
     private fun loadAll(): Map<Long, AgendaDayNote> = prefs.all().mapNotNull { (key, value) ->
