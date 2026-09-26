@@ -18,9 +18,11 @@ import com.khabir.app.data.local.entity.PartyEntity
 import com.khabir.app.data.local.entity.ReportEntity
 import com.khabir.app.data.local.entity.WorkMinutesEntity
 
+internal const val KHABIR_DATABASE_VERSION = 18
+
 @Database(
     entities = [CaseEntity::class, PartyEntity::class, ExpertProfileEntity::class, NotificationBatchEntity::class, NotificationRecipientEntity::class, ReportEntity::class, WorkMinutesEntity::class],
-    version = 18,
+    version = KHABIR_DATABASE_VERSION,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
