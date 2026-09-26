@@ -52,6 +52,7 @@ import com.khabir.app.presentation.common.ExplicitDialogTitle
 import com.khabir.app.presentation.components.KhabirCard
 import com.khabir.app.presentation.components.KhabirPrimaryButton
 import com.khabir.app.presentation.components.KhabirTextField
+import com.khabir.app.presentation.components.ArabicListHangingIndentTransformation
 import com.khabir.app.domain.model.ReportSectionDefinition
 import com.khabir.app.domain.model.ReportTemplateCatalog
 import java.time.Instant
@@ -950,6 +951,9 @@ private fun CaptureReviewDialog(
     AlertDialog(onDismissRequest = { }, properties = ExplicitDialogProperties, title = { ExplicitDialogTitle("مراجعة الإدخال", onDismiss) }, text = {
         Column(Modifier.heightIn(max = 450.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("اختر القسم ثم راجع أو عدّل النص قبل اعتماده")
+            KhabirCard(contentPadding = PaddingValues(8.dp), containerColor = MaterialTheme.colorScheme.primaryContainer) {
+                Text("سيتم الإدراج في: ${chosenTarget.label}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            }
             Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(replaceExisting, { replaceExisting = it }); Text("استبدال النص القديم بالكامل (بدل الإضافة)") }
             ReportCaptureField.entries.filter { it != ReportCaptureField.CUSTOM || captureCustomSectionId != null }.forEach { field -> FilterChip(selected = chosenTarget == field, onClick = { chosenTarget = field }, label = { Text(field.label) }) }
             KhabirTextField(quickInputText, onQuickInputTextChange, label = { Text("النص المستخرج / المملى") }, minLines = 5, modifier = Modifier.fillMaxWidth())
@@ -1023,6 +1027,9 @@ private fun ReportImageResultReviewDialog(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text("راجع النتيجة ثم اعتمدها في القسم المطلوب. باقي نتائج الصور ستظهر تباعًا بعد هذه المراجعة.")
+                KhabirCard(contentPadding = PaddingValues(8.dp), containerColor = MaterialTheme.colorScheme.primaryContainer) {
+                    Text("سيتم الإدراج في: ${chosenTarget.label}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(replaceExisting, { replaceExisting = it })
                     Text("استبدال النص القديم بالكامل")
@@ -1077,6 +1084,9 @@ private fun OfficeImportReviewDialog(
     AlertDialog(onDismissRequest = { }, properties = ExplicitDialogProperties, title = { ExplicitDialogTitle("مراجعة استيراد ${importedOfficeSource ?: "Word"}", viewModel::onImportedOfficeTextConsumed) }, text = {
         Column(Modifier.heightIn(max = 450.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("اختر القسم الذي سيضاف إليه النص. لن يتم اعتماد النص قبل المراجعة.")
+            KhabirCard(contentPadding = PaddingValues(8.dp), containerColor = MaterialTheme.colorScheme.primaryContainer) {
+                Text("سيتم الإدراج في: ${importedTarget.label}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            }
             Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(replaceExisting, { replaceExisting = it }); Text("استبدال النص القديم بالكامل") }
             ReportCaptureField.entries.filter { it != ReportCaptureField.CUSTOM || captureCustomSectionId != null }.forEach { field -> FilterChip(selected = importedTarget == field, onClick = { onImportedTargetChange(field) }, label = { Text(field.label) }) }
             KhabirTextField(value = reviewedText, onValueChange = { reviewedText = it }, minLines = 6, maxLines = 12, modifier = Modifier.fillMaxWidth())
@@ -1291,6 +1301,7 @@ private fun ReportSectionField(
 ) {
     var listMenuExpanded by remember(label) { mutableStateOf(false) }
     var activeListStyle by remember(label) { mutableStateOf<ReportListStyle?>(null) }
+    val listIndentTransformation = remember { ArabicListHangingIndentTransformation() }
     KhabirCard(
         contentPadding = PaddingValues(12.dp),
         containerColor = if (isExpanded) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
@@ -1352,6 +1363,7 @@ private fun ReportSectionField(
                     .let { if (isExpanded) it.weight(1f) else it },
                 minLines = minLines,
                 maxLines = if (isExpanded) Int.MAX_VALUE else minLines,
+                visualTransformation = listIndentTransformation,
                 placeholder = { Text("اكتب هنا أو استخدم الكاميرا أو الإملاء الصوتي") }
             )
         }
