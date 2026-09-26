@@ -2,6 +2,7 @@ package com.khabir.agenda
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.khabir.app.domain.repository.CaseRepository
 import com.khabir.app.domain.repository.NotificationBatchRepository
 import com.khabir.app.domain.repository.WorkMinutesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -28,20 +29,29 @@ class AgendaViewModel @Inject constructor(
     private val store: AgendaStore,
     workMinutesRepository: WorkMinutesRepository,
     notificationBatchRepository: NotificationBatchRepository,
+    caseRepository: CaseRepository,
     private val holidays: EgyptOfficialHolidayProvider
 ) : ViewModel() {
     private val month = MutableStateFlow(YearMonth.now())
     private val selectedDate = MutableStateFlow<LocalDate?>(null)
+    private val sourceData = combine(
+        workMinutesRepository.observeAll(),
+        notificationBatchRepository.observeAll(),
+        caseRepository.search("")
+    ) { workMinutes, batches, cases ->
+        Triple(workMinutes, batches, cases)
+    }
 
     val uiState: StateFlow<AgendaUiState> = combine(
         month,
         selectedDate,
         store.records,
-        workMinutesRepository.observeAll(),
-        notificationBatchRepository.observeAll()
-    ) { currentMonth, selected, manualNotes, workMinutes, batches ->
+        sourceData
+    ) { currentMonth, selected, manualNotes, sources ->
+        val (workMinutes, batches, cases) = sources
         val holidayMap = holidays.holidaysFor(currentMonth.year).associateBy { it.date }
         val eventMap = buildList {
+            cases.mapNotNull { it.toHearingAgendaEventOrNull() }.forEach(::add)
             batches.forEach { batch ->
                 batch.recipients
                     .map { Triple(it.caseNo, it.caseYear, it.court) }
