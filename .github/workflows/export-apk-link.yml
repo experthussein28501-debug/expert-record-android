@@ -1,31 +1,31 @@
-name: Export APK Signed URL
+name: Verify APK Release Asset
 
 on:
-  push:
-    branches: [ "main" ]
-    paths:
-      - ".github/workflows/export-apk-link.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  export:
+  verify:
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-      - name: Resolve private release asset
+      - name: Verify latest private APK asset
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          API="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/assets/569460447"
-          URL="$(curl -sS -L -o /dev/null -w '%{url_effective}' \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/octet-stream" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "${API}")"
-          echo -n "${URL}" | base64 -w0 | sed 's/^/SIGNED_APK_URL_B64=/'
-          echo
-          curl -sS -L -o /dev/null -w 'VERIFY_HTTP=%{http_code} VERIFY_SIZE=%{size_download}\n' "${URL}"
+          ASSET_ID="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/dev-latest" \
+            --jq '.assets[] | select(.name == "expert-record-debug.apk") | .id' | head -n1)"
+          test -n "$ASSET_ID"
+          echo "APK_ASSET_ID=$ASSET_ID"
+          gh release download dev-latest \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "expert-record-debug.apk" \
+            --output expert-record-debug.apk
+          test -s expert-record-debug.apk
+          sha256sum expert-record-debug.apk
+          ls -lh expert-record-debug.apk
+          echo "Private release asset verified."
