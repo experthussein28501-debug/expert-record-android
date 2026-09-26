@@ -14,6 +14,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 
@@ -61,10 +62,18 @@ fun KhabirTextField(
         visualTransformation = visualTransformation,
         leadingIcon = leadingIcon,
         trailingIcon = trailingIcon,
+        textStyle = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
         shape = MaterialTheme.shapes.small,
         colors = OutlinedTextFieldDefaults.colors(
+            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
             focusedBorderColor = MaterialTheme.colorScheme.primary,
-            unfocusedBorderColor = MaterialTheme.colorScheme.outline
+            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.95f),
+            cursorColor = MaterialTheme.colorScheme.primary,
+            focusedLabelColor = MaterialTheme.colorScheme.primary,
+            unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant
         )
     )
 }
