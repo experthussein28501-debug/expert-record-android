@@ -1,6 +1,4 @@
 name: Android CI
-# Functional tests and installable APK build run independently so one failure
-# does not hide the next actionable build problem.
 
 on:
   workflow_dispatch:
@@ -31,10 +29,11 @@ permissions:
   contents: write
 
 jobs:
-  tests:
+  verify:
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -69,68 +68,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for attempt in 1 2 3; do
-            if ./gradlew --no-daemon -PKHABIR_SKIP_SCREENSHOT_TESTS=true \
-              :core:testDebugUnitTest \
-              :feature-auth:testDebugUnitTest \
-              :feature-cases:testDebugUnitTest \
-              :feature-notifications:testDebugUnitTest \
-              :feature-reports:testDebugUnitTest \
-              :feature-agenda:testDebugUnitTest \
-              :app:testCombinedDebugUnitTest; then
-              exit 0
-            fi
-            if [ "$attempt" -eq 3 ]; then exit 1; fi
-            ./gradlew --stop || true
-            sleep 5
-          done
-
-  apk:
-    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: main
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "17"
-          cache: gradle
-
-      - name: Install Android 36 SDK
-        shell: bash
-        run: |
-          set -euo pipefail
-          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-          if [ ! -x "$SDKMANAGER" ]; then
-            SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | sort -V | tail -n 1)"
-          fi
-          test -n "$SDKMANAGER"
-          test -x "$SDKMANAGER"
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" --install "platform-tools" "platforms;android-36" "build-tools;36.0.0"
-
-      - name: Make Gradle executable
-        run: chmod +x gradlew
+          ./gradlew --no-daemon -PKHABIR_SKIP_SCREENSHOT_TESTS=true \
+            :core:testDebugUnitTest \
+            :feature-auth:testDebugUnitTest \
+            :feature-cases:testDebugUnitTest \
+            :feature-notifications:testDebugUnitTest \
+            :feature-reports:testDebugUnitTest \
+            :feature-agenda:testDebugUnitTest \
+            :app:testCombinedDebugUnitTest
 
       - name: Build combined debug APK
         shell: bash
         run: |
           set -euo pipefail
-          for attempt in 1 2 3; do
-            if ./gradlew --no-daemon :app:assembleCombinedDebug; then
-              exit 0
-            fi
-            if [ "$attempt" -eq 3 ]; then exit 1; fi
-            ./gradlew --stop || true
-            sleep 5
-          done
+          ./gradlew --no-daemon :app:assembleCombinedDebug
 
       - name: Prepare chat APK
         shell: bash
@@ -138,27 +89,29 @@ jobs:
           set -euo pipefail
           APK="$(find app/build/outputs/apk -type f -name '*.apk' | head -n 1)"
           test -n "$APK"
-          cp "$APK" expert-record-debug.apk
+          cp "$APK" expert-record-0.9.11-debug.apk
+          sha256sum expert-record-0.9.11-debug.apk
+          ls -lh expert-record-0.9.11-debug.apk
 
       - name: Upload APK for chat transfer
-        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: expert-record-chat-download
-          path: expert-record-debug.apk
+          name: expert-record-0.9.11-chat-download
+          path: expert-record-0.9.11-debug.apk
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 3
           compression-level: 0
 
       - name: Publish latest debug APK
+        if: ${{ github.event_name != 'pull_request' }}
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
           gh release delete dev-latest --yes --cleanup-tag || true
-          gh release create dev-latest expert-record-debug.apk \
+          gh release create dev-latest expert-record-0.9.11-debug.apk \
             --target "$GITHUB_SHA" \
-            --title "Expert Record - Latest Debug APK" \
-            --notes "Automated debug build from main." \
+            --title "Expert Record 0.9.11 - Latest Debug APK" \
+            --notes "Automated verified debug build from main." \
             --prerelease
