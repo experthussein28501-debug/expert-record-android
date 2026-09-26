@@ -68,7 +68,7 @@ fun HomeScreen(
                         ) {
                             Text(
                                 when {
-                                    combinedMode -> "مجمعة 0.9.0"
+                                    combinedMode -> "مجمعة 0.9.11"
                                     reportsEnabled -> "التقارير 0.8.2"
                                     notificationsEnabled -> "الإخطارات"
                                     else -> "الوحدة الأولى"
