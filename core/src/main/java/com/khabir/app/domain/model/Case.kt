@@ -18,7 +18,9 @@ data class Case(
     val isArchived: Boolean = false,
     val updatedAt: Long = 0L,
     val receiptDate: LocalDate? = null,
-    val preliminaryJudgmentDate: LocalDate? = null
+    val preliminaryJudgmentDate: LocalDate? = null,
+    val hearingDate: LocalDate? = null,
+    val hearingTime: String = ""
 ) {
     fun validate(): List<CaseValidationError> {
         val errors = mutableListOf<CaseValidationError>()
