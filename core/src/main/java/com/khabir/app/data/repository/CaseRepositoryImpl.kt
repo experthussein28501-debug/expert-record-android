@@ -76,7 +76,9 @@ private fun CaseEntity.toDomain(parties: List<Party>) = Case(
     isArchived = isArchived,
     updatedAt = updatedAtEpochMillis,
     receiptDate = receiptDateEpochDay?.let(LocalDate::ofEpochDay),
-    preliminaryJudgmentDate = preliminaryJudgmentDateEpochDay?.let(LocalDate::ofEpochDay)
+    preliminaryJudgmentDate = preliminaryJudgmentDateEpochDay?.let(LocalDate::ofEpochDay),
+    hearingDate = hearingDateEpochDay?.let(LocalDate::ofEpochDay),
+    hearingTime = hearingTime
 )
 
 private fun Case.toEntity(created: Long, updated: Long) = CaseEntity(
@@ -96,7 +98,9 @@ private fun Case.toEntity(created: Long, updated: Long) = CaseEntity(
     isArchived = isArchived,
     isDeleted = false,
     receiptDateEpochDay = receiptDate?.toEpochDay(),
-    preliminaryJudgmentDateEpochDay = preliminaryJudgmentDate?.toEpochDay()
+    preliminaryJudgmentDateEpochDay = preliminaryJudgmentDate?.toEpochDay(),
+    hearingDateEpochDay = hearingDate?.toEpochDay(),
+    hearingTime = hearingTime.trim()
 )
 
 private fun PartyEntity.toDomain(): Party {

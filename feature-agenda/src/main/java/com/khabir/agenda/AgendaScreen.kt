@@ -512,6 +512,7 @@ private fun EventCard(event: AgendaEvent) {
             if (event.details.isNotBlank()) Text(event.details, style = MaterialTheme.typography.bodySmall)
             Text(
                 when (event.source) {
+                    AgendaEventSource.CASE_HEARING -> "موعد جلسة من بيانات القضية"
                     AgendaEventSource.NOTIFICATION_APPOINTMENT -> "مستورد من مواعيد الإخطارات"
                     AgendaEventSource.WORK_MINUTES -> "مستورد من محاضر الأعمال"
                     AgendaEventSource.MANUAL -> "موعد يدوي"

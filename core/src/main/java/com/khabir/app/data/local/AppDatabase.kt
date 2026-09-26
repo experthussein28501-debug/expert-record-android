@@ -20,7 +20,7 @@ import com.khabir.app.data.local.entity.WorkMinutesEntity
 
 @Database(
     entities = [CaseEntity::class, PartyEntity::class, ExpertProfileEntity::class, NotificationBatchEntity::class, NotificationRecipientEntity::class, ReportEntity::class, WorkMinutesEntity::class],
-    version = 17,
+    version = 18,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -33,6 +33,14 @@ abstract class AppDatabase : RoomDatabase() {
 
     companion object {
         const val DB_NAME = "khabir.db"
+
+        val MIGRATION_17_18 = object : Migration(17, 18) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `cases` ADD COLUMN `hearingDateEpochDay` INTEGER")
+                db.execSQL("ALTER TABLE `cases` ADD COLUMN `hearingTime` TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         val MIGRATION_16_17 = object : Migration(16, 17) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(

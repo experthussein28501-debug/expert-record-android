@@ -43,6 +43,8 @@ data class CaseFormUiState(
     val preliminaryMission: String = "",
     val receiptDate: LocalDate? = null,
     val preliminaryJudgmentDate: LocalDate? = null,
+    val hearingDate: LocalDate? = null,
+    val hearingTime: String = "",
     val parties: List<PartyDraft> = emptyList(),
     val partyEntry: PartyDraft = PartyDraft(localId = 0L),
     val adminNotes: String = "",
@@ -90,6 +92,8 @@ class CaseFormViewModel @Inject constructor(
                     preliminaryMission = c.preliminaryMission,
                     receiptDate = c.receiptDate,
                     preliminaryJudgmentDate = c.preliminaryJudgmentDate,
+                    hearingDate = c.hearingDate,
+                    hearingTime = c.hearingTime,
                     parties = c.parties.map { p -> PartyDraft(nextId++, p.firstName, p.restName, p.role, p.withCapacity, p.address, p.claimKind) },
                     adminNotes = c.adminNotes
                 )
@@ -108,6 +112,8 @@ class CaseFormViewModel @Inject constructor(
     fun onPreliminaryMissionChanged(v: String) = _uiState.update { it.copy(preliminaryMission = v) }
     fun onReceiptDateChanged(v: LocalDate?) = _uiState.update { it.copy(receiptDate = v) }
     fun onPreliminaryJudgmentDateChanged(v: LocalDate?) = _uiState.update { it.copy(preliminaryJudgmentDate = v) }
+    fun onHearingDateChanged(v: LocalDate?) = _uiState.update { it.copy(hearingDate = v) }
+    fun onHearingTimeChanged(v: String) = _uiState.update { it.copy(hearingTime = v) }
     fun onAdminNotesChanged(v: String) = _uiState.update { it.copy(adminNotes = v) }
 
     fun updatePartyEntry(fn: (PartyDraft) -> PartyDraft) = _uiState.update { state ->
@@ -447,7 +453,9 @@ class CaseFormViewModel @Inject constructor(
                 )
             },
             receiptDate = s.receiptDate,
-            preliminaryJudgmentDate = s.preliminaryJudgmentDate
+            preliminaryJudgmentDate = s.preliminaryJudgmentDate,
+            hearingDate = s.hearingDate,
+            hearingTime = s.hearingTime.trim()
         )
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }

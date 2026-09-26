@@ -2,7 +2,7 @@ package com.khabir.agenda
 
 import java.time.LocalDate
 
-enum class AgendaEventSource { NOTIFICATION_APPOINTMENT, WORK_MINUTES, MANUAL, HOLIDAY }
+enum class AgendaEventSource { CASE_HEARING, NOTIFICATION_APPOINTMENT, WORK_MINUTES, MANUAL, HOLIDAY }
 
 data class AgendaPoint(val x: Float, val y: Float)
 

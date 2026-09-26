@@ -22,5 +22,7 @@ data class CaseEntity(
     val isDeleted: Boolean = false,
     val syncVersion: Long = 0L,
     val receiptDateEpochDay: Long? = null,
-    val preliminaryJudgmentDateEpochDay: Long? = null
+    val preliminaryJudgmentDateEpochDay: Long? = null,
+    val hearingDateEpochDay: Long? = null,
+    val hearingTime: String = ""
 )
