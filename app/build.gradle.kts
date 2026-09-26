@@ -93,7 +93,7 @@ android {
             applicationIdSuffix = ".combined"
             versionNameSuffix = "-combined"
             buildConfigField("String", "MODULE_MODE", "\"COMBINED\"")
-            manifestPlaceholders["appLabel"] = "سجل الخبير — النسخة المجمعة 0.9.6"
+            manifestPlaceholders["appLabel"] = "سجل الخبير — النسخة المجمعة 0.9.11"
         }
         create("notifications") {
             dimension = "module"
