@@ -75,6 +75,7 @@ fun CaseFormScreen(
     var showIncomingDatePicker by remember { mutableStateOf(false) }
     var showReceiptDatePicker by remember { mutableStateOf(false) }
     var showJudgmentDatePicker by remember { mutableStateOf(false) }
+    var showHearingDatePicker by remember { mutableStateOf(false) }
     var caseTypeMenuExpanded by remember { mutableStateOf(false) }
     var showInAppCamera by remember { mutableStateOf(false) }
     var showLensCamera by remember { mutableStateOf(false) }
@@ -330,6 +331,27 @@ fun CaseFormScreen(
                 }
             }
 
+            Text("موعد الجلسة", style = MaterialTheme.typography.titleSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                KhabirTextField(
+                    value = state.hearingDate?.toString().orEmpty(),
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("تاريخ الجلسة") },
+                    placeholder = { Text("اختياري") },
+                    modifier = Modifier.weight(1f),
+                    trailingIcon = { IconButton(onClick = { showHearingDatePicker = true }) { Icon(Icons.Filled.CalendarMonth, "اختيار تاريخ الجلسة") } }
+                )
+                KhabirTextField(
+                    value = state.hearingTime,
+                    onValueChange = viewModel::onHearingTimeChanged,
+                    label = { Text("وقت الجلسة") },
+                    placeholder = { Text("مثال: ٩ صباحًا") },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Text("يظهر هذا الموعد تلقائيًا داخل الأجندة بعد حفظ القضية.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 KhabirTextField(
                     value = state.receiptDate?.toString().orEmpty(), onValueChange = {}, readOnly = true,
@@ -472,6 +494,9 @@ fun CaseFormScreen(
 
     if (showIncomingDatePicker) {
         CaseDatePicker(state.incomingDate.toEpochDay(), { showIncomingDatePicker = false }) { viewModel.onIncomingDateChanged(it); showIncomingDatePicker = false }
+    }
+    if (showHearingDatePicker) {
+        CaseDatePicker(state.hearingDate?.toEpochDay(), { showHearingDatePicker = false }) { viewModel.onHearingDateChanged(it); showHearingDatePicker = false }
     }
     if (showReceiptDatePicker) {
         CaseDatePicker(state.receiptDate?.toEpochDay(), { showReceiptDatePicker = false }) { viewModel.onReceiptDateChanged(it); showReceiptDatePicker = false }
