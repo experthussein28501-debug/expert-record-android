@@ -51,7 +51,7 @@ class AgendaViewModel @Inject constructor(
         val (workMinutes, batches, cases) = sources
         val holidayMap = holidays.holidaysFor(currentMonth.year).associateBy { it.date }
         val eventMap = buildList {
-            cases.mapNotNull { it.toHearingAgendaEventOrNull() }.forEach(::add)
+            cases.mapNotNull { it.toHearingAgendaEventOrNull() }.forEach { add(it) }
             batches.forEach { batch ->
                 batch.recipients
                     .map { Triple(it.caseNo, it.caseYear, it.court) }
