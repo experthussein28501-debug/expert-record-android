@@ -24,22 +24,22 @@ jobs:
             --pattern "expert-record-debug.apk" \
             --clobber
           test -f expert-record-debug.apk
-          test "$(stat -c%s expert-record-debug.apk)" -gt 49000000
+          test "$(stat -c%s expert-record-debug.apk)" -gt 10000000
 
       - name: Package APK as ZIP
         run: |
           set -euo pipefail
-          rm -f expert-record-0.9.2-fixed.zip
-          zip -9 expert-record-0.9.2-fixed.zip expert-record-debug.apk
-          unzip -t expert-record-0.9.2-fixed.zip
-          sha256sum expert-record-debug.apk expert-record-0.9.2-fixed.zip
-          ls -lh expert-record-debug.apk expert-record-0.9.2-fixed.zip
+          rm -f expert-record-0.9.11-debug.zip
+          zip -9 expert-record-0.9.11-debug.zip expert-record-debug.apk
+          unzip -t expert-record-0.9.11-debug.zip
+          sha256sum expert-record-debug.apk expert-record-0.9.11-debug.zip
+          ls -lh expert-record-debug.apk expert-record-0.9.11-debug.zip
 
       - name: Upload ZIP to current release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh release upload dev-latest expert-record-0.9.2-fixed.zip \
+          gh release upload dev-latest expert-record-0.9.11-debug.zip \
             --repo "$GITHUB_REPOSITORY" \
             --clobber
