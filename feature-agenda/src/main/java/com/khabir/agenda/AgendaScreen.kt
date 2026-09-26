@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
+import com.khabir.app.presentation.components.KhabirTextField
 import androidx.hilt.navigation.compose.hiltViewModel
 import java.io.File
 import java.io.FileOutputStream
@@ -242,6 +243,18 @@ internal fun AgendaDayDialog(
     var confirmClear by remember { mutableStateOf(false) }
     var inputError by remember { mutableStateOf<String?>(null) }
     var pendingImageReads by remember { mutableStateOf(0) }
+
+    fun pendingManualAppointmentOrNull(): AgendaManualAppointment? {
+        val appointment = AgendaManualAppointment(
+            title = manualTitle.trim(),
+            time = manualTime.trim(),
+            location = manualLocation.trim(),
+            details = manualDetails.trim()
+        )
+        return appointment.takeIf {
+            it.title.isNotBlank() || it.time.isNotBlank() || it.location.isNotBlank() || it.details.isNotBlank()
+        }
+    }
     val readingImage = pendingImageReads > 0
     com.khabir.app.data.monetization.BlockWorkAds(true)
     val scope = rememberCoroutineScope()
@@ -267,7 +280,9 @@ internal fun AgendaDayDialog(
         if (readingImage || saving) return
         if (editingText) editingText = false
         else if (text != summary.note?.text.orEmpty() || strokes.toList() != summary.note?.strokes.orEmpty() ||
-            images.toList() != summary.note?.imagePaths.orEmpty() || manualAppointments.toList() != summary.note?.manualAppointments.orEmpty()) confirmClose = true
+            images.toList() != summary.note?.imagePaths.orEmpty() ||
+            manualAppointments.toList() != summary.note?.manualAppointments.orEmpty() ||
+            pendingManualAppointmentOrNull() != null) confirmClose = true
         else onDismiss()
     }
 
@@ -384,14 +399,14 @@ internal fun AgendaDayDialog(
                             verticalArrangement = Arrangement.spacedBy(7.dp)
                         ) {
                             Text("إضافة موعد يدوي", fontWeight = FontWeight.Bold)
-                            OutlinedTextField(
+                            KhabirTextField(
                                 value = manualTitle,
                                 onValueChange = { manualTitle = it },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
                                 label = { Text("العنوان أو رقم الدعوى") }
                             )
-                            OutlinedTextField(
+                            KhabirTextField(
                                 value = manualTime,
                                 onValueChange = { manualTime = it },
                                 modifier = Modifier.fillMaxWidth(),
@@ -402,23 +417,27 @@ internal fun AgendaDayDialog(
                                 Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                OutlinedButton(
+                                FilterChip(
+                                    selected = manualLocation == "المكتب",
                                     onClick = { manualLocation = "المكتب" },
+                                    label = { Text("المكتب") },
                                     modifier = Modifier.weight(1f)
-                                ) { Text("المكتب") }
-                                OutlinedButton(
+                                )
+                                FilterChip(
+                                    selected = manualLocation == "المحكمة",
                                     onClick = { manualLocation = "المحكمة" },
+                                    label = { Text("المحكمة") },
                                     modifier = Modifier.weight(1f)
-                                ) { Text("المحكمة") }
+                                )
                             }
-                            OutlinedTextField(
+                            KhabirTextField(
                                 value = manualLocation,
                                 onValueChange = { manualLocation = it },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
                                 label = { Text("المكان") }
                             )
-                            OutlinedTextField(
+                            KhabirTextField(
                                 value = manualDetails,
                                 onValueChange = { manualDetails = it },
                                 modifier = Modifier.fillMaxWidth(),
@@ -427,20 +446,8 @@ internal fun AgendaDayDialog(
                             )
                             Button(
                                 onClick = {
-                                    if (
-                                        manualTitle.isNotBlank() ||
-                                        manualTime.isNotBlank() ||
-                                        manualLocation.isNotBlank() ||
-                                        manualDetails.isNotBlank()
-                                    ) {
-                                        manualAppointments.add(
-                                            AgendaManualAppointment(
-                                                title = manualTitle.trim(),
-                                                time = manualTime.trim(),
-                                                location = manualLocation.trim(),
-                                                details = manualDetails.trim()
-                                            )
-                                        )
+                                    pendingManualAppointmentOrNull()?.let { appointment ->
+                                        manualAppointments.add(appointment)
                                         manualTitle = ""
                                         manualTime = ""
                                         manualLocation = ""
@@ -539,7 +546,10 @@ internal fun AgendaDayDialog(
                 }
                 Button(
                     enabled = !readingImage && !saving,
-                    onClick = { onSave(text, strokes.toList(), images.toList(), manualAppointments.toList()) },
+                    onClick = {
+                        val appointmentsToSave = manualAppointments.toList() + listOfNotNull(pendingManualAppointmentOrNull())
+                        onSave(text, strokes.toList(), images.toList(), appointmentsToSave)
+                    },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("agenda-save")
                 ) {
                     Icon(Icons.Filled.Save, null)
@@ -552,7 +562,10 @@ internal fun AgendaDayDialog(
         onDismissRequest = { confirmClose = false },
         title = { Text("حفظ تغييرات اليوم؟") },
         text = { Text("توجد ملاحظات لم تُحفظ بعد.") },
-        confirmButton = { TextButton(onClick = { onSave(text, strokes.toList(), images.toList(), manualAppointments.toList()) }) { Text("حفظ وإغلاق") } },
+        confirmButton = { TextButton(onClick = {
+            val appointmentsToSave = manualAppointments.toList() + listOfNotNull(pendingManualAppointmentOrNull())
+            onSave(text, strokes.toList(), images.toList(), appointmentsToSave)
+        }) { Text("حفظ وإغلاق") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("تجاهل التغييرات") } }
     )
     if (confirmClear) AlertDialog(
@@ -574,6 +587,7 @@ private fun EventCard(event: AgendaEvent) {
             if (event.details.isNotBlank()) Text(event.details, style = MaterialTheme.typography.bodySmall)
             Text(
                 when (event.source) {
+                    AgendaEventSource.CASE_HEARING -> "موعد جلسة من بيانات القضية"
                     AgendaEventSource.NOTIFICATION_APPOINTMENT -> "مستورد من مواعيد الإخطارات"
                     AgendaEventSource.WORK_MINUTES -> "مستورد من محاضر الأعمال"
                     AgendaEventSource.MANUAL -> "موعد يدوي"
