@@ -24,9 +24,9 @@ class ArabicListHangingIndentTransformation(
     override fun filter(text: AnnotatedString): TransformedText {
         if (text.text.isBlank()) return TransformedText(text, OffsetMapping.Identity)
 
-        val builder = AnnotatedString.Builder(text)
-        var lineStart = 0
         val source = text.text
+        val builder = AnnotatedString.Builder(source.length).apply { append(source) }
+        var lineStart = 0
 
         while (lineStart <= source.length) {
             val newline = source.indexOf('\n', lineStart)
