@@ -304,14 +304,18 @@ private fun AgendaDayDialog(
                                 Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                OutlinedButton(
+                                FilterChip(
+                                    selected = manualLocation == "المكتب",
                                     onClick = { manualLocation = "المكتب" },
+                                    label = { Text("المكتب") },
                                     modifier = Modifier.weight(1f)
-                                ) { Text("المكتب") }
-                                OutlinedButton(
+                                )
+                                FilterChip(
+                                    selected = manualLocation == "المحكمة",
                                     onClick = { manualLocation = "المحكمة" },
+                                    label = { Text("المحكمة") },
                                     modifier = Modifier.weight(1f)
-                                ) { Text("المحكمة") }
+                                )
                             }
                             KhabirTextField(
                                 value = manualLocation,
