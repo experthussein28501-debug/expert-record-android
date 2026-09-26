@@ -35,8 +35,8 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         minSdk = 26
         targetSdk = 36
-        versionCode = 100
-        versionName = "0.9.10-play-preparation"
+        versionCode = 102
+        versionName = "0.9.11"
         buildConfigField("String", "MONETIZATION_BASE_URL", "\"${providers.gradleProperty("KHABIR_MONETIZATION_BASE_URL").orNull.orEmpty()}\"")
         listOf("PRIVACY_POLICY_URL", "ACCOUNT_DELETION_URL").forEach { key ->
             buildConfigField("String", key, "\"${providers.gradleProperty("KHABIR_$key").orNull.orEmpty()}\"")
@@ -82,9 +82,9 @@ android {
         }
         create("hardened") {
             initWith(getByName("debug"))
-            applicationIdSuffix = ".preview.v0910"
+            applicationIdSuffix = ".preview.v0911"
             versionNameSuffix = "-preview"
-            manifestPlaceholders["appLabel"] = "سجل الخبير — تجربة 0.9.10"
+            manifestPlaceholders["appLabel"] = "سجل الخبير — تجربة 0.9.11"
             isDebuggable = false
             isMinifyEnabled = true
             isShrinkResources = true
@@ -115,10 +115,10 @@ android {
         create("combined") {
             dimension = "module"
             applicationIdSuffix = ".combined"
-            versionCode = 101
-            versionName = "1.0.0"
+            versionCode = 102
+            versionName = "0.9.11"
             buildConfigField("String", "MODULE_MODE", "\"COMBINED\"")
-            manifestPlaceholders["appLabel"] = "سجل الخبير — النسخة المجمعة"
+            manifestPlaceholders["appLabel"] = "سجل الخبير — النسخة المجمعة 0.9.11"
         }
         create("notifications") {
             dimension = "module"
