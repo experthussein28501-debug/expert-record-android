@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
+import com.khabir.app.presentation.components.KhabirTextField
 import androidx.hilt.navigation.compose.hiltViewModel
 import java.io.File
 import java.io.FileOutputStream
@@ -202,10 +203,11 @@ private fun AgendaDayDialog(
     onSave: (String, List<AgendaStroke>, List<String>, List<AgendaManualAppointment>) -> Unit
 ) {
     val context = LocalContext.current
-    var text by remember(summary.date) { mutableStateOf(summary.note?.text.orEmpty()) }
-    val strokes = remember(summary.date) { mutableStateListOf<AgendaStroke>().apply { addAll(summary.note?.strokes.orEmpty()) } }
-    val images = remember(summary.date) { mutableStateListOf<String>().apply { addAll(summary.note?.imagePaths.orEmpty()) } }
-    val manualAppointments = remember(summary.date) {
+    val noteVersion = summary.note?.updatedAt
+    var text by remember(summary.date, noteVersion) { mutableStateOf(summary.note?.text.orEmpty()) }
+    val strokes = remember(summary.date, noteVersion) { mutableStateListOf<AgendaStroke>().apply { addAll(summary.note?.strokes.orEmpty()) } }
+    val images = remember(summary.date, noteVersion) { mutableStateListOf<String>().apply { addAll(summary.note?.imagePaths.orEmpty()) } }
+    val manualAppointments = remember(summary.date, noteVersion) {
         mutableStateListOf<AgendaManualAppointment>().apply { addAll(summary.note?.manualAppointments.orEmpty()) }
     }
     var manualTitle by remember(summary.date) { mutableStateOf("") }
@@ -216,6 +218,18 @@ private fun AgendaDayDialog(
     var selectedSketchTool by remember(summary.date) { mutableStateOf(AgendaSketchTool.FREEHAND) }
     var selectedSketchColor by remember(summary.date) { mutableStateOf(0xFF1B1B1B.toInt()) }
     var selectedSketchWidth by remember(summary.date) { mutableStateOf(4f) }
+
+    fun pendingManualAppointmentOrNull(): AgendaManualAppointment? {
+        val appointment = AgendaManualAppointment(
+            title = manualTitle.trim(),
+            time = manualTime.trim(),
+            location = manualLocation.trim(),
+            details = manualDetails.trim()
+        )
+        return appointment.takeIf {
+            it.title.isNotBlank() || it.time.isNotBlank() || it.location.isNotBlank() || it.details.isNotBlank()
+        }
+    }
 
     val voiceLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val spoken = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
@@ -272,14 +286,14 @@ private fun AgendaDayDialog(
                             verticalArrangement = Arrangement.spacedBy(7.dp)
                         ) {
                             Text("إضافة موعد يدوي", fontWeight = FontWeight.Bold)
-                            OutlinedTextField(
+                            KhabirTextField(
                                 value = manualTitle,
                                 onValueChange = { manualTitle = it },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
                                 label = { Text("العنوان أو رقم الدعوى") }
                             )
-                            OutlinedTextField(
+                            KhabirTextField(
                                 value = manualTime,
                                 onValueChange = { manualTime = it },
                                 modifier = Modifier.fillMaxWidth(),
@@ -299,14 +313,14 @@ private fun AgendaDayDialog(
                                     modifier = Modifier.weight(1f)
                                 ) { Text("المحكمة") }
                             }
-                            OutlinedTextField(
+                            KhabirTextField(
                                 value = manualLocation,
                                 onValueChange = { manualLocation = it },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
                                 label = { Text("المكان") }
                             )
-                            OutlinedTextField(
+                            KhabirTextField(
                                 value = manualDetails,
                                 onValueChange = { manualDetails = it },
                                 modifier = Modifier.fillMaxWidth(),
@@ -315,20 +329,8 @@ private fun AgendaDayDialog(
                             )
                             Button(
                                 onClick = {
-                                    if (
-                                        manualTitle.isNotBlank() ||
-                                        manualTime.isNotBlank() ||
-                                        manualLocation.isNotBlank() ||
-                                        manualDetails.isNotBlank()
-                                    ) {
-                                        manualAppointments.add(
-                                            AgendaManualAppointment(
-                                                title = manualTitle.trim(),
-                                                time = manualTime.trim(),
-                                                location = manualLocation.trim(),
-                                                details = manualDetails.trim()
-                                            )
-                                        )
+                                    pendingManualAppointmentOrNull()?.let { appointment ->
+                                        manualAppointments.add(appointment)
                                         manualTitle = ""
                                         manualTime = ""
                                         manualLocation = ""
@@ -365,7 +367,7 @@ private fun AgendaDayDialog(
                         }
                     }
 
-                    OutlinedTextField(
+                    KhabirTextField(
                         value = text,
                         onValueChange = { text = it },
                         modifier = Modifier.fillMaxWidth(),
@@ -482,7 +484,10 @@ private fun AgendaDayDialog(
 
                 }
                 Button(
-                    onClick = { onSave(text, strokes.toList(), images.toList(), manualAppointments.toList()) },
+                    onClick = {
+                        val appointmentsToSave = manualAppointments.toList() + listOfNotNull(pendingManualAppointmentOrNull())
+                        onSave(text, strokes.toList(), images.toList(), appointmentsToSave)
+                    },
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                 ) {
                     Icon(Icons.Filled.Save, null)
