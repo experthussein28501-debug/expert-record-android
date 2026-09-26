@@ -46,6 +46,7 @@ import com.khabir.app.presentation.common.InAppCameraCapture
 import com.khabir.app.presentation.components.KhabirCard
 import com.khabir.app.presentation.components.KhabirPrimaryButton
 import com.khabir.app.presentation.components.KhabirTextField
+import com.khabir.app.presentation.components.ArabicListHangingIndentTransformation
 import com.khabir.app.domain.model.ReportSectionDefinition
 import com.khabir.app.domain.model.ReportTemplateCatalog
 import java.time.Instant
@@ -1023,6 +1024,7 @@ private fun ReportSectionField(
     onExpand: () -> Unit = {},
     expandedHeight: Dp = 480.dp
 ) {
+    val listIndentTransformation = remember { ArabicListHangingIndentTransformation() }
     KhabirCard(
         contentPadding = PaddingValues(12.dp),
         containerColor = if (isExpanded) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
@@ -1057,6 +1059,7 @@ private fun ReportSectionField(
                     .let { if (isExpanded) it.weight(1f) else it },
                 minLines = minLines,
                 maxLines = if (isExpanded) Int.MAX_VALUE else minLines,
+                visualTransformation = listIndentTransformation,
                 placeholder = { Text("اكتب هنا أو استخدم الكاميرا أو الإملاء الصوتي") }
             )
         }
