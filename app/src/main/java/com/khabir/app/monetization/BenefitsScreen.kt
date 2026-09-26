@@ -34,7 +34,7 @@ fun BenefitsScreen(onBack: () -> Unit, onAccountDeleted: () -> Unit) {
         confirmButton = { TextButton(enabled = !controller.busy, onClick = { controller.deleteAccount { confirmDelete = false; onAccountDeleted() } }) { Text("حذف حسابي") } },
         dismissButton = { TextButton(enabled = !controller.busy, onClick = { confirmDelete = false }) { Text("رجوع") } }
     )
-    Scaffold(topBar = { TopAppBar(title = { Text("المهام والاشتراك") }, navigationIcon = {
+    Scaffold(topBar = { TopAppBar(title = { Text("الاشتراك والمكافآت") }, navigationIcon = {
         IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") }
     }) }) { padding ->
         Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
