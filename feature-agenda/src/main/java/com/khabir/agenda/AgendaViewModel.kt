@@ -48,25 +48,7 @@ class AgendaViewModel @Inject constructor(
         val (workMinutes, batches, cases) = sources
         val holidayMap = holidays.holidaysFor(currentMonth.year).associateBy { it.date }
         val eventMap = buildList {
-            cases.asSequence()
-                .filterNot { it.isArchived }
-                .forEach { case ->
-                    case.hearingDate?.let { date ->
-                        add(
-                            AgendaEvent(
-                                date = date,
-                                title = caseLabel(case.caseNo, case.caseYear),
-                                time = case.hearingTime,
-                                location = case.court,
-                                details = listOf(
-                                    "موعد جلسة مثبت ببيانات القضية",
-                                    case.caseType.takeIf(String::isNotBlank)
-                                ).filterNotNull().joinToString(" — "),
-                                source = AgendaEventSource.CASE_HEARING
-                            )
-                        )
-                    }
-                }
+            cases.mapNotNull { it.toHearingAgendaEventOrNull() }.forEach(::add)
             batches.forEach { batch ->
                 batch.recipients
                     .map { Triple(it.caseNo, it.caseYear, it.court) }
