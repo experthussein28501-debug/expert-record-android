@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.khabir.app.domain.model.PartyRole
+import com.khabir.app.presentation.common.DocumentCameraCapture
 import com.khabir.app.presentation.common.InAppCameraCapture
 import com.khabir.app.presentation.common.ExplicitDialogProperties
 import com.khabir.app.presentation.common.ExplicitDialogTitle
@@ -162,11 +163,12 @@ fun CaseFormScreen(
     }
 
     Scaffold(
+        modifier = Modifier.fillMaxSize().imePadding(),
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = { TopAppBar(title = { Text(if (state.caseId == 0L) "تسجيل قضية" else "تعديل القضية المسجلة") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") } }) }
     ) { padding ->
         Column(
-            modifier = Modifier.padding(padding).imePadding().padding(16.dp).verticalScroll(rememberScrollState()),
+            modifier = Modifier.padding(padding).padding(16.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             KhabirCard(
@@ -551,12 +553,8 @@ fun CaseFormScreen(
     }
 
     if (showInAppCamera) {
-        InAppCameraCapture(
+        DocumentCameraCapture(
             onDismiss = { showInAppCamera = false },
-            onCaptured = { bitmap ->
-                showInAppCamera = false
-                viewModel.onPetitionPhotoCaptured(bitmap)
-            },
             onPagesSelected = { pages ->
                 showInAppCamera = false
                 viewModel.onDocumentPagesAdded(pages)

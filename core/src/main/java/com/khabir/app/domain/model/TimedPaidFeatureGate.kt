@@ -35,8 +35,10 @@ sealed interface FeatureGateState {
 object FutureFeatureGates {
     val TASKS = TimedPaidFeatureGate(
         featureId = "tasks",
-        visible = false,
-        unlockAfterDays = 0,
+        // The module itself stays unavailable; the dashboard may show a
+        // locked teaser after the same two-month trial used by the app.
+        visible = true,
+        unlockAfterDays = 60,
         requiredProductId = "khabir_ad_free"
     )
 }

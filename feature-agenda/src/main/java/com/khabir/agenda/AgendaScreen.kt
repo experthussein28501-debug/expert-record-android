@@ -238,7 +238,9 @@ internal fun AgendaDayDialog(
     var selectedSketchWidth by remember(summary.date) { mutableStateOf(3f) }
     var editingText by rememberSaveable(summary.date) { mutableStateOf(false) }
     var showTools by remember { mutableStateOf(false) }
-    var showAppointments by remember { mutableStateOf(false) }
+    // Existing appointments are always visible above the notes. This flag
+    // controls only the form for adding a new appointment.
+    var showAppointments by remember(summary.date) { mutableStateOf(false) }
     var confirmClose by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
     var inputError by remember { mutableStateOf<String?>(null) }
@@ -342,6 +344,37 @@ internal fun AgendaDayDialog(
                     Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(top = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    val importedEvents = summary.events.filter { it.source != AgendaEventSource.MANUAL }
+                    if (importedEvents.isNotEmpty()) {
+                        Text("المواعيد المستوردة", fontWeight = FontWeight.Bold)
+                        importedEvents.forEach { event -> EventCard(event) }
+                    }
+
+                    if (manualAppointments.isNotEmpty()) {
+                        Text("المواعيد اليدوية", fontWeight = FontWeight.Bold)
+                        manualAppointments.forEachIndexed { index, appointment ->
+                            Card(
+                                Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+                            ) {
+                                Row(
+                                    Modifier.fillMaxWidth().padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(appointment.title.ifBlank { "موعد يدوي" }, fontWeight = FontWeight.Bold)
+                                        if (appointment.time.isNotBlank()) Text("الساعة: ${appointment.time}")
+                                        if (appointment.location.isNotBlank()) Text("المكان: ${appointment.location}")
+                                        if (appointment.details.isNotBlank()) Text(appointment.details, style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    IconButton(onClick = { manualAppointments.removeAt(index) }) {
+                                        Icon(Icons.Filled.Delete, "حذف الموعد")
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
@@ -384,12 +417,6 @@ internal fun AgendaDayDialog(
                     }
 
                     if (showAppointments) {
-                    val importedEvents = summary.events.filter { it.source != AgendaEventSource.MANUAL }
-                    if (importedEvents.isNotEmpty()) {
-                        Text("المواعيد المستوردة", fontWeight = FontWeight.Bold)
-                        importedEvents.forEach { event -> EventCard(event) }
-                    }
-
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
@@ -459,30 +486,6 @@ internal fun AgendaDayDialog(
                         }
                     }
 
-                    if (manualAppointments.isNotEmpty()) {
-                        Text("المواعيد اليدوية", fontWeight = FontWeight.Bold)
-                        manualAppointments.forEachIndexed { index, appointment ->
-                            Card(
-                                Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
-                            ) {
-                                Row(
-                                    Modifier.fillMaxWidth().padding(10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                        Text(appointment.title.ifBlank { "موعد يدوي" }, fontWeight = FontWeight.Bold)
-                                        if (appointment.time.isNotBlank()) Text("الساعة: ${appointment.time}")
-                                        if (appointment.location.isNotBlank()) Text("المكان: ${appointment.location}")
-                                        if (appointment.details.isNotBlank()) Text(appointment.details, style = MaterialTheme.typography.bodySmall)
-                                    }
-                                    IconButton(onClick = { manualAppointments.removeAt(index) }) {
-                                        Icon(Icons.Filled.Delete, "حذف الموعد")
-                                    }
-                                }
-                            }
-                        }
-                    }
 
                     }
                 }
@@ -539,7 +542,7 @@ internal fun AgendaDayDialog(
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                         TextButton(onClick = { showTools = !showTools; showAppointments = false }) { Text(if (showTools) "إخفاء الأدوات" else "أدوات القلم") }
-                        TextButton(onClick = { showAppointments = !showAppointments; showTools = false }) { Text("المواعيد (${summary.events.count { it.source != AgendaEventSource.MANUAL } + manualAppointments.size})") }
+                        TextButton(onClick = { showAppointments = !showAppointments; showTools = false }) { Text(if (showAppointments) "إغلاق إضافة الموعد" else "إضافة موعد") }
                         TextButton(onClick = { requestClose() }) { Text("إغلاق") }
                     }
 

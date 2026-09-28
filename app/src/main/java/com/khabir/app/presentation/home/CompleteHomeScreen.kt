@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mail
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.TableChart
@@ -96,10 +97,37 @@ fun CompleteHomeScreen(
                 HomeModuleCard("الاشتراك والمكافآت", "الوقت بدون إعلانات وخطط الاشتراك", Icons.Filled.Person, onOpenBenefits, Modifier.weight(1f))
                 HomeModuleCard("النسخ الاحتياطي", "نسخة مشفرة واستعادة", Icons.Filled.Backup, onOpenBackup, Modifier.weight(1f))
             }
+            LockedFutureModuleCard()
 
             com.khabir.app.monetization.HomeBanner()
             if (!notificationsEnabled) Text("ملاحظة: وحدة الإخطارات غير مفعلة في نمط البناء الحالي.", color = MaterialTheme.colorScheme.error)
             if (!reportsEnabled) Text("ملاحظة: وحدة التقارير غير مفعلة في نمط البناء الحالي.", color = MaterialTheme.colorScheme.error)
+        }
+    }
+}
+
+@Composable
+private fun LockedFutureModuleCard() {
+    Card(
+        onClick = {},
+        enabled = false,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Filled.Lock, contentDescription = "مقفولة")
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("المهام — قريبًا", fontWeight = FontWeight.Bold)
+                Text(
+                    "مقفولة حاليًا. مخطط لإتاحتها بعد فترة التجربة، ثم ضمن الاشتراك الذي يحدده متجر Google Play.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
         }
     }
 }

@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -46,6 +47,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.khabir.app.presentation.common.DocumentCameraCapture
 import com.khabir.app.presentation.common.InAppCameraCapture
 import com.khabir.app.presentation.common.ExplicitDialogProperties
 import com.khabir.app.presentation.common.ExplicitDialogTitle
@@ -90,13 +92,15 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
     var showDepositDatePicker by remember { mutableStateOf(false) }
     var showTemplateEditor by remember { mutableStateOf(false) }
     var captureTarget by remember { mutableStateOf<ReportCaptureField?>(null) }
-    var captureCustomSectionId by remember { mutableStateOf<String?>(null) }
+    var captureCustomSectionId by rememberSaveable { mutableStateOf<String?>(null) }
     var newSectionTitle by remember { mutableStateOf("") }
     var quickInputText by remember { mutableStateOf("") }
     var fileMenuExpanded by remember { mutableStateOf(false) }
     var pendingAction by remember { mutableStateOf(FileAction.OPEN) }
     var pendingSourceUri by remember { mutableStateOf<android.net.Uri?>(null) }
-    var importedTarget by remember { mutableStateOf(ReportCaptureField.DOCUMENTS) }
+    var importedTarget by rememberSaveable { mutableStateOf(ReportCaptureField.DOCUMENTS) }
+    var reportDocumentDefaultTask by rememberSaveable { mutableStateOf(ReportDocumentTask.SUMMARY) }
+    var reportCaptureDestination by rememberSaveable { mutableStateOf<String?>(null) }
     var showInAppCamera by remember { mutableStateOf(false) }
     var voiceChoiceTarget by remember { mutableStateOf<ReportCaptureField?>(null) }
     var activeVoiceTarget by remember { mutableStateOf<ReportCaptureField?>(null) }
@@ -156,6 +160,9 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
     val reportImagesLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
         if (uris.isNotEmpty()) {
             importedTarget = ReportCaptureField.DOCUMENTS
+            captureCustomSectionId = null
+            reportCaptureDestination = null
+            reportDocumentDefaultTask = ReportDocumentTask.SUMMARY
             viewModel.prepareImportedReportImages(uris)
         }
     }
@@ -223,6 +230,14 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
 
     fun startReportCamera(target: ReportCaptureField, customSectionId: String? = null) {
         importedTarget = target
+        reportCaptureDestination = target.name
+        reportDocumentDefaultTask = when (target) {
+            ReportCaptureField.SUBJECT -> ReportDocumentTask.SUBJECT
+            ReportCaptureField.ASSIGNMENT -> ReportDocumentTask.ASSIGNMENT
+            ReportCaptureField.DOCUMENTS, ReportCaptureField.RESEARCH -> ReportDocumentTask.RESEARCH
+            ReportCaptureField.CONCLUSION -> ReportDocumentTask.CONCLUSION
+            else -> ReportDocumentTask.SUMMARY
+        }
         captureCustomSectionId = customSectionId
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             showInAppCamera = true
@@ -254,6 +269,7 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
     }
 
     Scaffold(
+        modifier = Modifier.fillMaxSize().imePadding(),
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = { TopAppBar(title = { Column { Text("تقرير الخبرة", fontWeight = FontWeight.Bold); Text(if (state.isIndependent) "تقرير مستقل" else "مرتبط بقضية مسجلة", style = MaterialTheme.typography.labelMedium) } }, actions = { if (!state.isIndependent) TextButton(enabled = !state.isLoading, onClick = viewModel::reviewCaseUpdates) { Text("تحديثات القضية") } }, navigationIcon = { IconButton(onClick = { viewModel.saveAndClose(onBack) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") } }) },
         bottomBar = {
@@ -683,10 +699,15 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
 
     if (state.pendingReportPages.isNotEmpty()) ReportDocumentRequestDialog(
         pages = state.pendingReportPages,
+        defaultTask = reportDocumentDefaultTask,
         busy = state.isOcrProcessing,
         error = state.errorMessage,
         onCancel = viewModel::cancelReportDocuments,
-        onAnalyze = viewModel::analyzeRequestedDocuments
+        onAnalyze = { documents ->
+            viewModel.analyzeRequestedDocuments(documents.map { request ->
+                request.copy(destinationField = reportCaptureDestination, customSectionId = captureCustomSectionId)
+            })
+        }
     )
 
     state.pendingImageReviews.firstOrNull()?.let { review ->
@@ -698,15 +719,18 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
     }
 
     if (showInAppCamera) {
-        InAppCameraCapture(
+        DocumentCameraCapture(
             onDismiss = { showInAppCamera = false },
-            onCaptured = { bitmap ->
+            onPagesAnalyze = { pages ->
                 showInAppCamera = false
-                viewModel.onReportPhotoCaptured(bitmap)
-            },
-            onGeminiCaptured = { bitmap ->
-                showInAppCamera = false
-                viewModel.onReportPhotoCapturedWithGemini(bitmap)
+                viewModel.prepareReportDocuments(pages)
+                viewModel.analyzeRequestedDocuments(listOf(ReportDocumentRequest(
+                    pages = pages,
+                    instruction = reportDocumentDefaultTask.defaultInstruction,
+                    task = reportDocumentDefaultTask,
+                    destinationField = reportCaptureDestination,
+                    customSectionId = captureCustomSectionId
+                )))
             },
             onPagesSelected = { pages ->
                 showInAppCamera = false
@@ -992,16 +1016,18 @@ private fun ReportImageResultReviewDialog(
     viewModel: ReportViewModel
 ) {
     val defaultTarget = remember(review.id) {
-        when (defaultReviewDestination(review.task)) {
+        ReportCaptureField.entries.firstOrNull {
+            it.name == review.destinationField && (it != ReportCaptureField.CUSTOM || review.customSectionId != null)
+        } ?: when (defaultReviewDestination(review.task)) {
             ReportReviewDestination.SUBJECT -> ReportCaptureField.SUBJECT
             ReportReviewDestination.ASSIGNMENT -> ReportCaptureField.ASSIGNMENT
             ReportReviewDestination.DOCUMENTS -> ReportCaptureField.DOCUMENTS
             ReportReviewDestination.CONCLUSION -> ReportCaptureField.CONCLUSION
         }
     }
-    var chosenTarget by remember(review.id) { mutableStateOf(defaultTarget) }
-    var reviewedText by remember(review.id) { mutableStateOf(review.text) }
-    var replaceExisting by remember(review.id) { mutableStateOf(false) }
+    var chosenTarget by rememberSaveable(review.id) { mutableStateOf(defaultTarget) }
+    var reviewedText by rememberSaveable(review.id) { mutableStateOf(review.text) }
+    var replaceExisting by rememberSaveable(review.id) { mutableStateOf(false) }
 
     val taskLabel = when (review.task) {
         ReportDocumentTask.SUBJECT -> "موضوع"
@@ -1035,7 +1061,7 @@ private fun ReportImageResultReviewDialog(
                     Text("استبدال النص القديم بالكامل")
                 }
                 ReportCaptureField.entries
-                    .filter { it != ReportCaptureField.CUSTOM }
+                    .filter { it != ReportCaptureField.CUSTOM || review.customSectionId != null }
                     .forEach { field ->
                         FilterChip(
                             selected = chosenTarget == field,
@@ -1056,7 +1082,13 @@ private fun ReportImageResultReviewDialog(
             Button(
                 enabled = reviewedText.isNotBlank(),
                 onClick = {
-                    chosenTarget.write(viewModel, reviewedText, replaceExisting)
+                    if (chosenTarget == ReportCaptureField.CUSTOM) {
+                        review.customSectionId?.let { sectionId ->
+                            viewModel.onCustomSectionChanged(sectionId, mergeReportInput(
+                                state.customSectionContents[sectionId].orEmpty(), reviewedText, replaceExisting
+                            ))
+                        }
+                    } else chosenTarget.write(viewModel, reviewedText, replaceExisting)
                     viewModel.onImageReviewApproved(review.id)
                 }
             ) { Text("اعتماد ثم التالي") }

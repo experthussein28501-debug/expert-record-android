@@ -43,7 +43,9 @@ data class ReportImageReview(
     val id: String,
     val text: String,
     val source: String,
-    val task: ReportDocumentTask
+    val task: ReportDocumentTask,
+    val destinationField: String? = null,
+    val customSectionId: String? = null
 )
 
 data class ReportUiState(
@@ -555,7 +557,9 @@ class ReportViewModel @Inject constructor(
                         id = reviewId,
                         text = resultText,
                         source = "المستند ${index + 1}",
-                        task = document.task
+                        task = document.task,
+                        destinationField = document.destinationField,
+                        customSectionId = document.customSectionId
                     )
                 }
 

@@ -19,11 +19,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 @Composable
-internal fun ReportDocumentRequestDialog(pages: List<File>, busy: Boolean, error: String?, onCancel: () -> Unit, onAnalyze: (List<ReportDocumentRequest>) -> Unit) {
+internal fun ReportDocumentRequestDialog(pages: List<File>, busy: Boolean, error: String?, defaultTask: ReportDocumentTask = ReportDocumentTask.SUMMARY, onCancel: () -> Unit, onAnalyze: (List<ReportDocumentRequest>) -> Unit) {
     var joins by rememberSaveable(pages.map { it.path }) { mutableStateOf(List(pages.size) { false }) }
-    var tasks by rememberSaveable(pages.map { it.path }) { mutableStateOf(List(pages.size) { ReportDocumentTask.SUMMARY }) }
+    var tasks by rememberSaveable(pages.map { it.path }, defaultTask) { mutableStateOf(List(pages.size) { defaultTask }) }
     var requests by rememberSaveable(pages.map { it.path }) {
-        mutableStateOf(List(pages.size) { ReportDocumentTask.SUMMARY.defaultInstruction })
+        mutableStateOf(List(pages.size) { defaultTask.defaultInstruction })
     }
     Dialog(onDismissRequest = { if (!busy) onCancel() }, properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false)) {
         Surface(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
@@ -134,5 +134,6 @@ private fun ReportPageThumbnail(file: File) {
         }
     }
     bitmap?.let { Image(it.asImageBitmap(), "معاينة المستند", Modifier.fillMaxWidth().height(110.dp)) }
-    DisposableEffect(bitmap) { onDispose { bitmap?.recycle() } }
+    // Compose may still draw the last frame after disposal. Let GC release
+    // this bounded thumbnail rather than recycling a bitmap used by RenderThread.
 }

@@ -27,7 +27,9 @@ enum class ReportDocumentTask(val defaultInstruction: String) {
 data class ReportDocumentRequest(
     val pages: List<File>,
     val instruction: String,
-    val task: ReportDocumentTask = ReportDocumentTask.SUMMARY
+    val task: ReportDocumentTask = ReportDocumentTask.SUMMARY,
+    val destinationField: String? = null,
+    val customSectionId: String? = null
 )
 
 internal fun groupReportPages(
