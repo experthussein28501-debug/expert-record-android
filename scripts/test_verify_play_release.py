@@ -23,7 +23,7 @@ def manifest_with_reviewed_exported_components():
     )
 
 
-def manifest_xml(package="com.khabir.app.combined", version_code="101", version_name="1.0.0",
+def manifest_xml(package="com.khabir.app.combined", version_code="104", version_name="0.9.13",
                  target="36", label="سجل الخبير", extra_permission=""):
     extra = f'<uses-permission android:name="{extra_permission}" />' if extra_permission else ""
     return f'''<?xml version="1.0" encoding="utf-8"?>
@@ -69,6 +69,11 @@ class VerifyPlayReleaseTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(AssertionError):
                 verify_manifest(self.write_manifest(tmp, manifest_xml(target="35")))
+
+    def test_non_semantic_version_name_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(AssertionError):
+                verify_manifest(self.write_manifest(tmp, manifest_xml(version_name="0.9.13-preview")))
 
     def test_background_location_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
