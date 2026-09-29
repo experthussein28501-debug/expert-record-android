@@ -385,10 +385,11 @@ internal fun AgendaDayDialog(
                             EventCard(event)
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 TextButton(onClick = {
-                                    manualAppointments.add(AgendaManualAppointment(event.title, event.time, event.location, event.details))
+                                    text = listOf(text, event.toAgendaNoteText()).filter(String::isNotBlank).joinToString("\n")
                                     hiddenImportedKeys.add(event.importKey())
                                 }, modifier = Modifier.weight(1f)) { Text("↓ لليوم") }
                                 TextButton(onClick = {
+                                    pendingManualAppointmentOrNull()?.let { manualAppointments.add(it) }
                                     manualTitle = event.title; manualTime = event.time
                                     manualLocation = event.location; manualDetails = event.details
                                     hiddenImportedKeys.add(event.importKey())

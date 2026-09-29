@@ -44,6 +44,11 @@ data class AgendaEvent(
 
 internal fun AgendaEvent.importKey(): String = listOf(source.name, date.toString(), title, time, location, details).joinToString("\u001f")
 
+internal fun AgendaEvent.toAgendaNoteText(): String = listOf(
+    title, time.takeIf(String::isNotBlank)?.let { "الساعة: $it" },
+    location.takeIf(String::isNotBlank)?.let { "المكان: $it" }, details
+).filterNotNull().filter(String::isNotBlank).joinToString("\n")
+
 data class AgendaHoliday(val date: LocalDate, val name: String)
 
 data class AgendaDaySummary(
