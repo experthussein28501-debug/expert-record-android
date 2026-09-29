@@ -92,7 +92,6 @@ fun KhabirNavHost() {
                     onOpenReports = { navController.navigate(Routes.REPORTS_HUB) },
                     onOpenRegisters = { navController.navigate(Routes.REGISTERS) },
                     onOpenWorkMinutes = { navController.navigate(Routes.WORK_MINUTES_HUB) },
-                    onOpenBenefits = { navController.navigate(Routes.BENEFITS) },
                     onOpenAgenda = { navController.navigate(Routes.AGENDA) },
                     onOpenExpertProfile = { navController.navigate(Routes.EXPERT_PROFILE) },
                     onOpenBackup = { navController.navigate(Routes.BACKUP) },
