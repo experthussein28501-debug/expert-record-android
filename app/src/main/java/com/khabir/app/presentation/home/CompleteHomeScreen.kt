@@ -46,7 +46,6 @@ fun CompleteHomeScreen(
     onOpenReports: () -> Unit,
     onOpenRegisters: () -> Unit,
     onOpenWorkMinutes: () -> Unit,
-    onOpenBenefits: () -> Unit,
     onOpenAgenda: () -> Unit,
     onOpenExpertProfile: () -> Unit,
     onOpenBackup: () -> Unit,
