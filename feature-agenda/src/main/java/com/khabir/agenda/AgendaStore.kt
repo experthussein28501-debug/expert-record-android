@@ -61,7 +61,7 @@ internal object AgendaDayCodec {
         b64(record.imagePaths.joinToString("\n")),
         record.updatedAt.toString(),
         b64(encodeManualAppointments(record.manualAppointments)),
-        b64(record.hiddenImportedKeys.joinToString("\n"))
+        b64(encodeHiddenImportedKeys(record.hiddenImportedKeys))
     ).joinToString("\t")
 
     fun decode(date: LocalDate, spec: String): AgendaDayNote? = runCatching {
@@ -73,7 +73,7 @@ internal object AgendaDayCodec {
             imagePaths = unb64(parts.getOrNull(2).orEmpty()).split("\n").filter(String::isNotBlank),
             updatedAt = parts.getOrNull(3)?.toLongOrNull() ?: 0L,
             manualAppointments = decodeManualAppointments(unb64(parts.getOrNull(4).orEmpty())),
-            hiddenImportedKeys = unb64(parts.getOrNull(5).orEmpty()).split("\n").filter(String::isNotBlank).toSet()
+            hiddenImportedKeys = decodeHiddenImportedKeys(unb64(parts.getOrNull(5).orEmpty()))
         )
     }.getOrNull()
 
@@ -132,6 +132,21 @@ internal object AgendaDayCodec {
                     it.title.isNotBlank() || it.time.isNotBlank() || it.location.isNotBlank() || it.details.isNotBlank()
                 }
             }
+
+    private fun encodeHiddenImportedKeys(keys: Set<String>): String =
+        if (keys.isEmpty()) "" else "v2|" + keys.joinToString("|") { b64(it) }
+
+    private fun decodeHiddenImportedKeys(spec: String): Set<String> {
+        if (spec.isBlank()) return emptySet()
+        return if (spec.startsWith("v2|")) {
+            spec.removePrefix("v2|").split("|").filter(String::isNotBlank).mapNotNull { encoded ->
+                runCatching { unb64(encoded) }.getOrNull()?.takeIf(String::isNotBlank)
+            }.toSet()
+        } else {
+            // Backward compatibility with 0.9.14 preview records.
+            spec.split("\n").filter(String::isNotBlank).toSet()
+        }
+    }
 
     private fun b64(value: String): String = Base64.getUrlEncoder().withoutPadding()
         .encodeToString(value.toByteArray(StandardCharsets.UTF_8))
