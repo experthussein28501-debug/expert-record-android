@@ -111,12 +111,12 @@ internal fun ReportDocumentRequestDialog(pages: List<File>, busy: Boolean, error
                                         )
                                     }
                                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                                        listOf("مستندات المدعين" to "حلل مستندات المدعين واستخرج الوقائع والأسماء والتواريخ المرتبطة بهم", "مستندات المدعى عليهم" to "حلل مستندات المدعى عليهم واستخرج الوقائع والأسماء والتواريخ المرتبطة بهم").forEach { (label, prompt) ->
+                                        listOf(ReportCaptureField.PLAINTIFF_DOCUMENTS to "حلل مستندات المدعين واستخرج الوقائع والأسماء والتواريخ المرتبطة بهم", ReportCaptureField.DEFENDANT_DOCUMENTS to "حلل مستندات المدعى عليهم واستخرج الوقائع والأسماء والتواريخ المرتبطة بهم").forEach { (field, prompt) ->
                                             FilterChip(selected = requests[index] == prompt, onClick = {
                                                 tasks = tasks.toMutableList().also { it[index] = ReportDocumentTask.CUSTOM }
                                                 requests = requests.toMutableList().also { it[index] = prompt }
-                                                destinations = destinations.toMutableList().also { it[index] = ReportCaptureField.DOCUMENTS.name }
-                                            }, label = { Text(label) }, enabled = !busy)
+                                                destinations = destinations.toMutableList().also { it[index] = field.name }
+                                            }, label = { Text(field.label) }, enabled = !busy)
                                         }
                                     }
                                     var destinationMenu by remember(file.path) { mutableStateOf(false) }

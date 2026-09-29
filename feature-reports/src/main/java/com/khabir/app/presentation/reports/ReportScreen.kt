@@ -1241,19 +1241,23 @@ private fun joinPartyStatements(plaintiff: String, defendant: String): String = 
 }.trim()
 
 internal enum class ReportCaptureField(val label: String) {
-    PARTIES("الخصوم والصفات"), SUBJECT("الموضوع"), ASSIGNMENT("المأمورية"), PROCEEDINGS("مباشرة المأمورية"), STATEMENTS("أقوال طرفي التداعي"), WITNESSES("سماع الشهود"), INSPECTION("المعاينة على الطبيعة"), DOCUMENTS("بحث المستندات"), FACTS("الوقائع والملاحظات"), RESEARCH("البحث"), CALCULATIONS("الحسابات والجداول"), CONCLUSION("النتيجة النهائية"), ATTACHMENTS("ملاحظات المرفقات"), CUSTOM("البند المضاف");
+    PARTIES("الخصوم والصفات"), SUBJECT("الموضوع"), ASSIGNMENT("المأمورية"), PROCEEDINGS("مباشرة المأمورية"), STATEMENTS("أقوال طرفي التداعي"), WITNESSES("سماع الشهود"), INSPECTION("المعاينة على الطبيعة"), DOCUMENTS("بحث المستندات"), PLAINTIFF_DOCUMENTS("مستندات المدعين"), DEFENDANT_DOCUMENTS("مستندات المدعى عليهم"), FACTS("الوقائع والملاحظات"), RESEARCH("البحث"), CALCULATIONS("الحسابات والجداول"), CONCLUSION("النتيجة النهائية"), ATTACHMENTS("ملاحظات المرفقات"), CUSTOM("البند المضاف");
     fun write(vm: ReportViewModel, incoming: String, replace: Boolean = false) {
         val state = vm.uiState.value
         val old = when (this) {
             PARTIES -> state.partiesSummary; SUBJECT -> state.subjectOfCase; ASSIGNMENT -> state.assignment
             PROCEEDINGS -> state.proceedings; STATEMENTS -> state.partyStatements; WITNESSES -> state.witnessStatements
-            INSPECTION -> state.inspection; DOCUMENTS -> state.documentsSubmitted; FACTS -> state.facts
+            INSPECTION -> state.inspection; DOCUMENTS, PLAINTIFF_DOCUMENTS, DEFENDANT_DOCUMENTS -> state.documentsSubmitted; FACTS -> state.facts
             RESEARCH -> state.research; CALCULATIONS -> state.calculationsTable; CONCLUSION -> state.conclusion
             ATTACHMENTS -> state.attachmentsNote; CUSTOM -> ""
         }
-        val value = mergeReportInput(old, incoming, replace)
+        val labeled = when (this) {
+            PLAINTIFF_DOCUMENTS, DEFENDANT_DOCUMENTS -> "$label:\n$incoming"
+            else -> incoming
+        }
+        val value = mergeReportInput(old, labeled, replace)
         when (this) {
-        PARTIES -> vm.onPartiesSummaryChanged(value); SUBJECT -> vm.onSubjectChanged(value); ASSIGNMENT -> vm.onAssignmentChanged(value); PROCEEDINGS -> vm.onProceedingsChanged(value); STATEMENTS -> vm.onPartyStatementsChanged(value); WITNESSES -> vm.onWitnessStatementsChanged(value); INSPECTION -> vm.onInspectionChanged(value); DOCUMENTS -> vm.onDocumentsChanged(value); FACTS -> vm.onFactsChanged(value); RESEARCH -> vm.onResearchChanged(value); CALCULATIONS -> vm.onCalculationsChanged(value); CONCLUSION -> vm.onConclusionChanged(value); ATTACHMENTS -> vm.onAttachmentsNoteChanged(value); CUSTOM -> Unit
+        PARTIES -> vm.onPartiesSummaryChanged(value); SUBJECT -> vm.onSubjectChanged(value); ASSIGNMENT -> vm.onAssignmentChanged(value); PROCEEDINGS -> vm.onProceedingsChanged(value); STATEMENTS -> vm.onPartyStatementsChanged(value); WITNESSES -> vm.onWitnessStatementsChanged(value); INSPECTION -> vm.onInspectionChanged(value); DOCUMENTS, PLAINTIFF_DOCUMENTS, DEFENDANT_DOCUMENTS -> vm.onDocumentsChanged(value); FACTS -> vm.onFactsChanged(value); RESEARCH -> vm.onResearchChanged(value); CALCULATIONS -> vm.onCalculationsChanged(value); CONCLUSION -> vm.onConclusionChanged(value); ATTACHMENTS -> vm.onAttachmentsNoteChanged(value); CUSTOM -> Unit
         }
     }
 }
