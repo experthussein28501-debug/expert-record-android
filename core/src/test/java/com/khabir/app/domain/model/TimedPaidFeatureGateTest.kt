@@ -20,12 +20,12 @@ class TimedPaidFeatureGateTest {
         assertEquals(FeatureGateState.PriceLocked("khabir_ad_free"), gate.evaluate(first, first, false))
         assertEquals(FeatureGateState.Available, gate.evaluate(first, first, true))
     }
-    @Test fun `future tasks use two month delay and existing subscription product`() {
+    @Test fun `future tasks stay unavailable regardless of subscription or date`() {
         val gate = FutureFeatureGates.TASKS
-        assertEquals(60, gate.unlockAfterDays)
+        assertEquals(0, gate.unlockAfterDays)
         assertEquals("khabir_ad_free", gate.requiredProductId)
-        assertTrue(gate.visible)
-        assertTrue(gate.evaluate(first, LocalDate.of(2026, 9, 20), false) is FeatureGateState.TimeLocked)
-        assertEquals(FeatureGateState.Available, gate.evaluate(first, LocalDate.of(2026, 10, 31), true))
+        assertEquals(false, gate.visible)
+        assertEquals(FeatureGateState.Hidden, gate.evaluate(first, LocalDate.of(2026, 9, 20), false))
+        assertEquals(FeatureGateState.Hidden, gate.evaluate(first, LocalDate.of(2030, 1, 1), true))
     }
 }
