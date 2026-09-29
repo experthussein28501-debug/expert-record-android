@@ -152,7 +152,7 @@ fun AgendaScreen(
             saving = saving,
             draft = viewModel.draft,
             onDismiss = viewModel::closeDay,
-            onExportPdf = { exportDays = listOf(summary); pdfLauncher.launch("agenda-${date}.pdf") },
+            onExportPdf = { currentDay -> exportDays = listOf(currentDay); pdfLauncher.launch("agenda-${date}.pdf") },
             onSave = { text, strokes, images, manualAppointments ->
                 viewModel.saveDay(date, text, strokes, images, manualAppointments)
             }
@@ -250,7 +250,7 @@ internal fun AgendaDayDialog(
     onSave: (String, List<AgendaStroke>, List<String>, List<AgendaManualAppointment>) -> Unit,
     saving: Boolean = false,
     draft: AgendaDraft? = null,
-    onExportPdf: (() -> Unit)? = null
+    onExportPdf: ((AgendaDaySummary) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val retained = draft ?: remember(summary.date) { AgendaDraft(summary.note) }
@@ -368,7 +368,14 @@ internal fun AgendaDayDialog(
                         summary.holiday?.let { Text(it.name, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold) }
                     }
                     InlineHelp("ملاحظات اليوم", "اضغط على الورقة لفتح الكتابة بالكيبورد. استخدم القلم في المساحة السفلية، وافتح أدواته من أسفل. زر حفظ اليوم يحفظ النص والقلم والصور معًا.")
-                    onExportPdf?.let { TextButton(onClick = it) { Text("PDF") } }
+                    onExportPdf?.let { export -> TextButton(onClick = {
+                        val appointments = manualAppointments.toList() + listOfNotNull(pendingManualAppointmentOrNull())
+                        export(summary.copy(
+                            events = summary.events.filter { it.source != AgendaEventSource.MANUAL && it.importKey() !in hiddenImportedKeys } +
+                                appointments.map { AgendaEvent(summary.date, it.title, it.time, it.location, it.details, AgendaEventSource.MANUAL) },
+                            note = AgendaDayNote(summary.date, text, strokes.toList(), images.toList(), appointments, hiddenImportedKeys.toSet())
+                        ))
+                    }, enabled = !readingImage && !saving) { Text("PDF") } }
                 }
                 HorizontalDivider()
                 BackHandler { requestClose() }

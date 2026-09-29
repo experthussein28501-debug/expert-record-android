@@ -7,22 +7,31 @@ import android.net.Uri
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+internal fun agendaCsvCell(value: String): String {
+    val flattened = value.replace("\r", " ").replace("\n", " ؛ ")
+    val safe = if (flattened.trimStart().firstOrNull() in listOf('=', '+', '-', '@')) "'$flattened" else flattened
+    return "\"" + safe.replace("\"", "\"\"") + "\""
+}
+
+internal fun AgendaDaySummary.hasRecordedWork(): Boolean = events.isNotEmpty() || note?.let {
+    it.text.isNotBlank() || it.strokes.isNotEmpty() || it.imagePaths.isNotEmpty() || it.manualAppointments.isNotEmpty()
+} == true
+
 /** Export every day, including days with no work, for a complete monthly register. */
 internal fun exportAgendaCsv(context: Context, uri: Uri, days: List<AgendaDaySummary>) {
-    fun cell(value: String) = "\"" + value.replace("\"", "\"\"").replace("\r", " ").replace("\n", " ؛ ") + "\""
     val rows = buildList {
         add(listOf("التاريخ", "الحالة", "القضية أو الموعد", "الساعة", "المكان", "التفاصيل", "ملاحظات اليوم"))
         days.sortedBy { it.date }.forEach { day ->
             val items: List<AgendaEvent?> = if (day.events.isEmpty()) listOf(null) else day.events
             items.forEach { event ->
-                add(listOf(day.date.toString(), if (day.events.isEmpty() && day.note?.text.isNullOrBlank()) "لا توجد أعمال" else "عمل",
+                add(listOf(day.date.toString(), if (day.hasRecordedWork()) "عمل" else "لا توجد أعمال",
                     event?.title.orEmpty(), event?.time.orEmpty(), event?.location.orEmpty(),
                     event?.details.orEmpty(), day.note?.text.orEmpty()))
             }
         }
     }
     context.contentResolver.openOutputStream(uri)?.use { out ->
-        out.write(("\uFEFF" + rows.joinToString("\r\n") { row -> row.joinToString(",", transform = ::cell) }).toByteArray(Charsets.UTF_8))
+        out.write(("\uFEFF" + rows.joinToString("\r\n") { row -> row.joinToString(",", transform = ::agendaCsvCell) }).toByteArray(Charsets.UTF_8))
     } ?: error("تعذر إنشاء الملف")
 }
 
@@ -62,7 +71,7 @@ internal fun exportAgendaPdf(context: Context, uri: Uri, days: List<AgendaDaySum
         days.sortedBy { it.date }.forEach { day ->
             line(day.date.format(dateFormat), heading = true)
             day.holiday?.let { line("إجازة: ${it.name}") }
-            if (day.events.isEmpty() && day.note?.text.isNullOrBlank()) line("لا توجد أعمال مسجلة")
+            if (!day.hasRecordedWork()) line("لا توجد أعمال مسجلة")
             day.events.forEach { event ->
                 line(listOf(event.title, event.time.takeIf(String::isNotBlank)?.let { "الساعة $it" },
                     event.location, event.details).filterNotNull().filter(String::isNotBlank).joinToString(" — "))

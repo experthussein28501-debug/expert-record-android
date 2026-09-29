@@ -17,6 +17,17 @@ class AgendaWritingFlowTest {
     @get:Rule val compose = createComposeRule()
     private val date = LocalDate.of(2026, 9, 20)
 
+    @Test fun exportIncludesCurrentDraftAndPendingAppointment() {
+        val draft = AgendaDraft(null).apply { text.value = "ملاحظة جديدة"; manualTitle.value = "جلسة"; manualTime.value = "11:15" }
+        var exported: AgendaDaySummary? = null
+        compose.setContent { MaterialTheme { AgendaDayDialog(AgendaDaySummary(date), {}, { _, _, _, _ -> }, draft = draft, onExportPdf = { exported = it }) } }
+        compose.onNodeWithText("PDF").performClick()
+        compose.runOnIdle {
+            assertEquals("ملاحظة جديدة", exported?.note?.text)
+            assertEquals("11:15", exported?.events?.single()?.time)
+        }
+    }
+
     @Test fun movingImportedAppointmentKeepsTimeInEditableNotes() {
         val event = AgendaEvent(date, "جلسة الدعوى", "10:30", "المحكمة", "مراجعة المستندات", AgendaEventSource.CASE_HEARING)
         val draft = AgendaDraft(null)
