@@ -46,7 +46,8 @@ fun KhabirTextField(
     readOnly: Boolean = false,
     visualTransformation: VisualTransformation = VisualTransformation.None,
     leadingIcon: @Composable (() -> Unit)? = null,
-    trailingIcon: @Composable (() -> Unit)? = null
+    trailingIcon: @Composable (() -> Unit)? = null,
+    textStyle: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
 ) {
     OutlinedTextField(
         value = value,
@@ -62,7 +63,7 @@ fun KhabirTextField(
         visualTransformation = visualTransformation,
         leadingIcon = leadingIcon,
         trailingIcon = trailingIcon,
-        textStyle = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+        textStyle = textStyle,
         shape = MaterialTheme.shapes.small,
         colors = OutlinedTextFieldDefaults.colors(
             focusedTextColor = MaterialTheme.colorScheme.onSurface,

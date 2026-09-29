@@ -147,10 +147,15 @@ fun KhabirNavHost() {
             )
         }
 
-        composable(Routes.BENEFITS) { com.khabir.app.monetization.BenefitsScreen(onBack = { navController.popBackStack() }, onAccountDeleted = {
-            entryGate.showGateAgain()
-            navController.navigate(Routes.LOGIN) { popUpTo(Routes.HOME) { inclusive = true } }
-        }) }
+        // Also close a restored legacy benefits route; no plans or prices are rendered.
+        composable(Routes.BENEFITS) {
+            androidx.compose.runtime.LaunchedEffect(Unit) {
+                navController.navigate(Routes.HOME) {
+                    popUpTo(Routes.BENEFITS) { inclusive = true }
+                    launchSingleTop = true
+                }
+            }
+        }
 
         composable(Routes.BACKUP) { BackupScreen(onBack = { navController.popBackStack() }) }
         composable(Routes.REGISTERS) { RegisterScreen(onBack = { navController.popBackStack() }) }

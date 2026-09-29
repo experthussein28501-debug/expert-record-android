@@ -108,7 +108,7 @@ class CaseFormViewModel @Inject constructor(
     fun onCaseYearChanged(v: String) = _uiState.update { it.copy(caseYear = v) }
     fun onCourtChanged(v: String) = _uiState.update { it.copy(court = v) }
     fun onCaseTypeChanged(v: String) = _uiState.update { it.copy(caseType = v) }
-    fun onSubjectOfCaseChanged(v: String) = _uiState.update { it.copy(subjectOfCase = v) }
+    fun onSubjectOfCaseChanged(v: String) = _uiState.update { it.copy(subjectOfCase = v, finalRequests = "") }
     fun onFinalRequestsChanged(v: String) = _uiState.update { it.copy(finalRequests = v) }
     fun onPreliminaryMissionChanged(v: String) = _uiState.update { it.copy(preliminaryMission = v) }
     fun onReceiptDateChanged(v: LocalDate?) = _uiState.update { it.copy(receiptDate = v) }

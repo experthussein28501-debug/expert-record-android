@@ -263,6 +263,10 @@ class ReportViewModel @Inject constructor(
             customSectionContents = state.customSectionContents - sectionId
         )
     }
+    fun onTextFormatChanged(format: com.khabir.app.domain.model.ReportTextFormat) = edit { state ->
+        state.copy(customSectionContents = state.customSectionContents + (com.khabir.app.domain.model.ReportTextFormat.KEY to format.encode()))
+    }
+
     fun onCustomSectionChanged(sectionId: String, value: String) = edit { state ->
         state.copy(customSectionContents = state.customSectionContents + (sectionId to value))
     }

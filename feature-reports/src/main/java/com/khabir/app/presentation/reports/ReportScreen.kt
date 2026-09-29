@@ -1,5 +1,6 @@
 package com.khabir.app.presentation.reports
 
+import com.khabir.app.domain.model.ReportTextFormat
 import android.Manifest
 import android.app.Activity
 import android.content.Context
@@ -319,6 +320,8 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                 }
             }
             Spacer(Modifier.height(12.dp))
+            ReportFormattingToolbar(ReportTextFormat.decode(state.customSectionContents[ReportTextFormat.KEY]), viewModel::onTextFormatChanged)
+            Spacer(Modifier.height(12.dp))
             KhabirCard(contentPadding = PaddingValues(14.dp)) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Link, null); Spacer(Modifier.width(8.dp)); Text("بيانات الدعوى للتقرير", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold) }
@@ -337,6 +340,7 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                         )
                         com.khabir.app.presentation.components.InlineHelp("مساعدة", "مثال: تقرير في الدعوى رقم ... — اتركه فارغًا إذا لم ترغب في رأس صفحة")
                         ReportSectionField(
+                            ReportTextFormat.decode(state.customSectionContents[ReportTextFormat.KEY]),
                             "الخصوم والصفات",
                             state.partiesSummary,
                             viewModel::onPartiesSummaryChanged,
@@ -1156,6 +1160,7 @@ private fun ReportTemplateSection(
             section.headingLines.filter(String::isNotBlank).forEach { Text(it, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium) }
             if (section.id == "subject") {
                 ReportSectionField(
+                            ReportTextFormat.decode(state.customSectionContents[ReportTextFormat.KEY]),
                     section.title,
                     mapping.first,
                     mapping.second,
@@ -1173,6 +1178,7 @@ private fun ReportTemplateSection(
             } else if (section.id == "statements") {
                 val statements = splitPartyStatements(state.partyStatements)
                 ReportSectionField(
+                            ReportTextFormat.decode(state.customSectionContents[ReportTextFormat.KEY]),
                     "أقوال المدعي",
                     statements.first,
                     { plaintiff -> viewModel.onPartyStatementsChanged(joinPartyStatements(plaintiff, statements.second)) },
@@ -1185,6 +1191,7 @@ private fun ReportTemplateSection(
                 )
                 Spacer(Modifier.height(8.dp))
                 ReportSectionField(
+                            ReportTextFormat.decode(state.customSectionContents[ReportTextFormat.KEY]),
                     "أقوال المدعى عليه",
                     statements.second,
                     { defendant -> viewModel.onPartyStatementsChanged(joinPartyStatements(statements.first, defendant)) },
@@ -1197,6 +1204,7 @@ private fun ReportTemplateSection(
                 )
             } else {
                 ReportSectionField(
+                            ReportTextFormat.decode(state.customSectionContents[ReportTextFormat.KEY]),
                     section.title, mapping.first, mapping.second,
                     if (section.id in setOf("witnesses", "inspection", "documents", "research")) 5 else 4,
                     { onCamera(mapping.third, null) }, { onMic(mapping.third, null) },
@@ -1207,6 +1215,7 @@ private fun ReportTemplateSection(
         }
     } else {
         ReportSectionField(
+                            ReportTextFormat.decode(state.customSectionContents[ReportTextFormat.KEY]),
             section.title,
             state.customSectionContents[section.id].orEmpty(),
             { viewModel.onCustomSectionChanged(section.id, it) },
@@ -1316,6 +1325,7 @@ private fun reportArabicLetter(index: Int): String {
 
 @Composable
 private fun ReportSectionField(
+    textFormat: ReportTextFormat,
     label: String,
     value: String,
     onChange: (String) -> Unit,
@@ -1392,6 +1402,7 @@ private fun ReportSectionField(
                 minLines = minLines,
                 maxLines = if (isExpanded) Int.MAX_VALUE else minLines,
                 visualTransformation = listIndentTransformation,
+                textStyle = reportEditorTextStyle(textFormat),
                 placeholder = { Text("اكتب هنا أو استخدم الكاميرا أو الإملاء الصوتي") }
             )
         }

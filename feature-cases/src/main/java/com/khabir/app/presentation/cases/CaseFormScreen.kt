@@ -369,19 +369,11 @@ fun CaseFormScreen(
             }
 
             KhabirTextField(
-                value = state.subjectOfCase,
+                value = com.khabir.app.domain.model.UnifiedCaseSubject.compose(state.subjectOfCase, state.finalRequests),
                 onValueChange = viewModel::onSubjectOfCaseChanged,
-                label = { Text("موضوع الدعوى المستخرج") },
+                label = { Text("موضوع الدعوى — الطلبات ثم الشرح") },
                 supportingText = { Text("يُنقل تلقائيًا إلى بند الموضوع في التقرير") },
                 minLines = 4,
-                modifier = Modifier.fillMaxWidth()
-            )
-            KhabirTextField(
-                value = state.finalRequests,
-                onValueChange = viewModel::onFinalRequestsChanged,
-                label = { Text("الطلبات الختامية") },
-                supportingText = { Text("تُستخرج من خاتمة العريضة وتظل قابلة للتعديل قبل الحفظ") },
-                minLines = 3,
                 modifier = Modifier.fillMaxWidth()
             )
             KhabirTextField(
