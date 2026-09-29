@@ -94,36 +94,13 @@ fun CompleteHomeScreen(
                 HomeModuleCard("بيانات الخبير", "بيانات المكتب والذكاء الاصطناعي", Icons.Filled.Person, onOpenExpertProfile, Modifier.weight(1f))
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                HomeModuleCard("الاشتراك والمكافآت", "الوقت بدون إعلانات وخطط الاشتراك", Icons.Filled.Person, onOpenBenefits, Modifier.weight(1f))
+                HomeModuleCard("المهام", "غير مفعلة حاليًا", Icons.Filled.Lock, {}, Modifier.weight(1f), enabled = false)
                 HomeModuleCard("النسخ الاحتياطي", "نسخة مشفرة واستعادة", Icons.Filled.Backup, onOpenBackup, Modifier.weight(1f))
             }
-            LockedFutureModuleCard()
 
             com.khabir.app.monetization.HomeBanner()
             if (!notificationsEnabled) Text("ملاحظة: وحدة الإخطارات غير مفعلة في نمط البناء الحالي.", color = MaterialTheme.colorScheme.error)
             if (!reportsEnabled) Text("ملاحظة: وحدة التقارير غير مفعلة في نمط البناء الحالي.", color = MaterialTheme.colorScheme.error)
-        }
-    }
-}
-
-@Composable
-private fun LockedFutureModuleCard() {
-    Card(
-        onClick = {},
-        enabled = false,
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-    ) {
-        Row(
-            Modifier.fillMaxWidth().padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(Icons.Filled.Lock, contentDescription = "مقفولة")
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("ميزة مقفولة", fontWeight = FontWeight.Bold)
-            }
         }
     }
 }
