@@ -33,8 +33,9 @@ class AgendaWritingFlowTest {
         val draft = AgendaDraft(null)
         var saved = ""
         compose.setContent { MaterialTheme { AgendaDayDialog(AgendaDaySummary(date, events = listOf(event)), {}, { text, _, _, _ -> saved = text }, draft = draft) } }
-        compose.onNodeWithText("↓ لليوم").performClick()
-        compose.onNodeWithTag("agenda-save").performClick()
+        compose.onNodeWithText("↓ لليوم").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(event.toAgendaNoteText(), draft.text.value) }
+        compose.onNodeWithTag("agenda-save").assertIsDisplayed().performClick()
         compose.runOnIdle {
             assertEquals(event.toAgendaNoteText(), saved)
             assertEquals(listOf(event.importKey()), draft.hiddenImportedKeys.toList())
