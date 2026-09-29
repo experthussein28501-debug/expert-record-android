@@ -303,6 +303,13 @@ class CaseFormViewModel @Inject constructor(
         val state = _uiState.value
         val document = state.documentReview.firstOrNull { it.id == documentId } ?: return
         val group = DocumentReviewParser.matchingGroup(state.documentReview, document)
+        useReviewedDocuments(group.map { it.id }.toSet())
+    }
+
+    fun useReviewedDocuments(documentIds: Set<Int>) {
+        val state = _uiState.value
+        val group = state.documentReview.filter { it.id in documentIds }
+        if (group.isEmpty() || group.size != documentIds.size) return
         _uiState.update {
             it.copy(
                 voiceReviewText = DocumentReviewParser.combinedText(group),

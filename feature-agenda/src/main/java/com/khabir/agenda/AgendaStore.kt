@@ -26,7 +26,7 @@ class AgendaStore @Inject constructor(@ApplicationContext context: Context) {
         val isEmpty = record.text.isBlank() &&
             record.strokes.isEmpty() &&
             record.imagePaths.isEmpty() &&
-            record.manualAppointments.isEmpty()
+            record.manualAppointments.isEmpty() && record.hiddenImportedKeys.isEmpty()
 
         if (isEmpty) {
             prefs.remove(key)
@@ -60,7 +60,8 @@ internal object AgendaDayCodec {
         b64(encodeStrokes(record.strokes)),
         b64(record.imagePaths.joinToString("\n")),
         record.updatedAt.toString(),
-        b64(encodeManualAppointments(record.manualAppointments))
+        b64(encodeManualAppointments(record.manualAppointments)),
+        b64(record.hiddenImportedKeys.joinToString("\n"))
     ).joinToString("\t")
 
     fun decode(date: LocalDate, spec: String): AgendaDayNote? = runCatching {
@@ -71,7 +72,8 @@ internal object AgendaDayCodec {
             strokes = decodeStrokes(unb64(parts.getOrNull(1).orEmpty())),
             imagePaths = unb64(parts.getOrNull(2).orEmpty()).split("\n").filter(String::isNotBlank),
             updatedAt = parts.getOrNull(3)?.toLongOrNull() ?: 0L,
-            manualAppointments = decodeManualAppointments(unb64(parts.getOrNull(4).orEmpty()))
+            manualAppointments = decodeManualAppointments(unb64(parts.getOrNull(4).orEmpty())),
+            hiddenImportedKeys = unb64(parts.getOrNull(5).orEmpty()).split("\n").filter(String::isNotBlank).toSet()
         )
     }.getOrNull()
 

@@ -6,6 +6,23 @@ import java.io.File
 
 class ReportDocumentRequestTest {
     @Test
+    fun nonAdjacentPagesCanShareOneDestinationWithoutStealingOtherPages() {
+        val pages = (1..4).map { File("page-$it") }
+        val grouped = groupReportPagesBySelection(
+            pages, listOf(0, 1, 0, 2),
+            listOf("استخرج الموضوع", "استخرج المأمورية", "", "حلل مستند المدعي"),
+            listOf(ReportDocumentTask.SUBJECT, ReportDocumentTask.ASSIGNMENT, ReportDocumentTask.CUSTOM, ReportDocumentTask.CUSTOM),
+            listOf("SUBJECT", "ASSIGNMENT", "DOCUMENTS", "DOCUMENTS")
+        )
+        assertEquals(3, grouped.size)
+        assertEquals(listOf(pages[0], pages[2]), grouped[0].pages)
+        assertEquals("SUBJECT", grouped[0].destinationField)
+        assertEquals(listOf(pages[1]), grouped[1].pages)
+        assertEquals("ASSIGNMENT", grouped[1].destinationField)
+        assertEquals(listOf(pages[3]), grouped[2].pages)
+        assertEquals(pages.toSet(), grouped.flatMap { it.pages }.toSet())
+    }
+    @Test
     fun independentInstructionsStayWithTheirDocuments() {
         val pages = (1..3).map { File("page-$it") }
         val groups = groupReportPages(

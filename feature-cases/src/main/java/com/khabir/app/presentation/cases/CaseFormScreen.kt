@@ -547,6 +547,7 @@ fun CaseFormScreen(
             pagePaths = state.pendingPagePaths,
             onEdit = viewModel::editReviewedDocument,
             onUse = viewModel::useReviewedDocument,
+            onUseSelected = viewModel::useReviewedDocuments,
             onExclude = viewModel::excludeReviewedDocument,
             onBack = viewModel::dismissDocumentReview
         )
@@ -714,11 +715,28 @@ private fun DocumentGroupsReviewDialog(
     pagePaths: List<String>,
     onEdit: (Int, String) -> Unit,
     onUse: (Int) -> Unit,
+    onUseSelected: (Set<Int>) -> Unit,
     onExclude: (Int) -> Unit,
     onBack: () -> Unit
 ) {
     var editingId by remember { mutableStateOf<Int?>(null) }
     var editedText by remember { mutableStateOf("") }
+    var selectedIds by remember(documents) { mutableStateOf(emptySet<Int>()) }
+    var confirmConflict by remember { mutableStateOf(false) }
+    val selected = documents.filter { it.id in selectedIds }
+    val conflicting = selected.any { first -> selected.any { second ->
+        first.id < second.id && DocumentReviewParser.compare(first, second).first == DocumentMatchStatus.DIFFERENT
+    } }
+    if (confirmConflict) {
+        AlertDialog(
+            onDismissRequest = { confirmConflict = false },
+            title = { Text("أرقام القضايا مختلفة") },
+            text = { Text("المستندات المختارة فيها رقم دعوى أو سنة مختلفة. ضمها رغم ذلك سيجعلها قضية واحدة. راجع الصور قبل الاعتماد.") },
+            confirmButton = { TextButton(onClick = { confirmConflict = false; onUseSelected(selectedIds) }) { Text("ضم بعد المراجعة") } },
+            dismissButton = { TextButton(onClick = { confirmConflict = false }) { Text("رجوع") } }
+        )
+        return
+    }
     if (editingId != null) {
         AlertDialog(
             onDismissRequest = { editingId = null },
@@ -739,11 +757,17 @@ private fun DocumentGroupsReviewDialog(
                 modifier = Modifier.heightIn(max = 580.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text("تم تقسيم الصور إلى ${documents.size} مستند. راجع سبب المطابقة قبل اختيار المستند المستخدم في القضية.")
+                Text("حدد أي عدد من المستندات لنفس القضية، حتى لو لم يتعرف التطبيق على تطابقها. ستُستخرج بيانات العريضة والحكم معًا في قضية واحدة.")
                 documents.forEach { document ->
                     KhabirCard(contentPadding = PaddingValues(10.dp)) {
                         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                             Text("المستند ${document.id}: ${document.type}", style = MaterialTheme.typography.titleSmall)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(checked = document.id in selectedIds, onCheckedChange = { checked ->
+                                    selectedIds = if (checked) selectedIds + document.id else selectedIds - document.id
+                                })
+                                Text("ضم هذا المستند للقضية المختارة")
+                            }
                             Text("الصفحات: ${document.pageNumbers.joinToString("، ")}")
                             document.pageNumbers.forEach { page ->
                                 pagePaths.getOrNull(page - 1)?.let { TemporaryPagePreview(it, Modifier.fillMaxWidth().height(180.dp)) }
@@ -775,7 +799,11 @@ private fun DocumentGroupsReviewDialog(
                 }
             }
         },
-        confirmButton = {},
+        confirmButton = {
+            Button(enabled = selectedIds.isNotEmpty(), onClick = {
+                if (conflicting) confirmConflict = true else onUseSelected(selectedIds)
+            }) { Text("مراجعة ${selectedIds.size} مستند في قضية واحدة") }
+        },
         dismissButton = { TextButton(onClick = onBack) { Text("رجوع للصور") } }
     )
 }

@@ -29,6 +29,7 @@ data class AgendaDayNote(
     val strokes: List<AgendaStroke> = emptyList(),
     val imagePaths: List<String> = emptyList(),
     val manualAppointments: List<AgendaManualAppointment> = emptyList(),
+    val hiddenImportedKeys: Set<String> = emptySet(),
     val updatedAt: Long = System.currentTimeMillis()
 )
 
@@ -40,6 +41,8 @@ data class AgendaEvent(
     val details: String = "",
     val source: AgendaEventSource
 )
+
+internal fun AgendaEvent.importKey(): String = listOf(source.name, date.toString(), title, time, location, details).joinToString("\u001f")
 
 data class AgendaHoliday(val date: LocalDate, val name: String)
 

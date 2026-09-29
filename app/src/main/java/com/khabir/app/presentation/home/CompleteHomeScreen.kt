@@ -122,11 +122,7 @@ private fun LockedFutureModuleCard() {
         ) {
             Icon(Icons.Filled.Lock, contentDescription = "مقفولة")
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("المهام — قريبًا", fontWeight = FontWeight.Bold)
-                Text(
-                    "مقفولة حاليًا. مخطط لإتاحتها بعد فترة التجربة، ثم ضمن الاشتراك الذي يحدده متجر Google Play.",
-                    style = MaterialTheme.typography.bodySmall
-                )
+                Text("ميزة مقفولة", fontWeight = FontWeight.Bold)
             }
         }
     }

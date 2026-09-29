@@ -444,7 +444,9 @@ class ReportViewModel @Inject constructor(
     fun analyzeRequestedDocuments(documents: List<ReportDocumentRequest>) {
         if (_uiState.value.isOcrProcessing) return
         val expected = _uiState.value.pendingReportPages
-        if (documents.flatMap { it.pages } != expected || expected.isEmpty()) return
+        val requestedPages = documents.flatMap { it.pages }
+        if (expected.isEmpty() || requestedPages.size != expected.size ||
+            requestedPages.toSet() != expected.toSet()) return
         viewModelScope.launch {
             _uiState.update { it.copy(isOcrProcessing = true, errorMessage = null) }
             val stagedIdentities = mutableMapOf<String, PendingImportedCaseIdentity>()

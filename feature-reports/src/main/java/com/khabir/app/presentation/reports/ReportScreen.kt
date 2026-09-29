@@ -700,14 +700,13 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
     if (state.pendingReportPages.isNotEmpty()) ReportDocumentRequestDialog(
         pages = state.pendingReportPages,
         defaultTask = reportDocumentDefaultTask,
+        defaultDestination = reportCaptureDestination,
         busy = state.isOcrProcessing,
         error = state.errorMessage,
         onCancel = viewModel::cancelReportDocuments,
-        onAnalyze = { documents ->
-            viewModel.analyzeRequestedDocuments(documents.map { request ->
-                request.copy(destinationField = reportCaptureDestination, customSectionId = captureCustomSectionId)
-            })
-        }
+        onAnalyze = { documents -> viewModel.analyzeRequestedDocuments(documents.map { request ->
+            request.copy(customSectionId = if (request.destinationField == ReportCaptureField.CUSTOM.name) captureCustomSectionId else null)
+        }) }
     )
 
     state.pendingImageReviews.firstOrNull()?.let { review ->
@@ -724,13 +723,6 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
             onPagesAnalyze = { pages ->
                 showInAppCamera = false
                 viewModel.prepareReportDocuments(pages)
-                viewModel.analyzeRequestedDocuments(listOf(ReportDocumentRequest(
-                    pages = pages,
-                    instruction = reportDocumentDefaultTask.defaultInstruction,
-                    task = reportDocumentDefaultTask,
-                    destinationField = reportCaptureDestination,
-                    customSectionId = captureCustomSectionId
-                )))
             },
             onPagesSelected = { pages ->
                 showInAppCamera = false
@@ -1248,7 +1240,7 @@ private fun joinPartyStatements(plaintiff: String, defendant: String): String = 
     append(defendant.trim())
 }.trim()
 
-private enum class ReportCaptureField(val label: String) {
+internal enum class ReportCaptureField(val label: String) {
     PARTIES("الخصوم والصفات"), SUBJECT("الموضوع"), ASSIGNMENT("المأمورية"), PROCEEDINGS("مباشرة المأمورية"), STATEMENTS("أقوال طرفي التداعي"), WITNESSES("سماع الشهود"), INSPECTION("المعاينة على الطبيعة"), DOCUMENTS("بحث المستندات"), FACTS("الوقائع والملاحظات"), RESEARCH("البحث"), CALCULATIONS("الحسابات والجداول"), CONCLUSION("النتيجة النهائية"), ATTACHMENTS("ملاحظات المرفقات"), CUSTOM("البند المضاف");
     fun write(vm: ReportViewModel, incoming: String, replace: Boolean = false) {
         val state = vm.uiState.value

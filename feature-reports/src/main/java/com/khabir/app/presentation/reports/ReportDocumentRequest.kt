@@ -59,3 +59,21 @@ internal fun groupReportPages(
     }
     return groups
 }
+
+/** A group may contain non-adjacent camera pages; each page is analyzed exactly once. */
+internal fun groupReportPagesBySelection(
+    pages: List<File>, groupIds: List<Int>, instructions: List<String>,
+    tasks: List<ReportDocumentTask>, destinations: List<String>
+): List<ReportDocumentRequest> {
+    require(pages.size in 1..10 && listOf(groupIds, instructions, tasks, destinations).all { it.size == pages.size })
+    require(groupIds.all { it in pages.indices })
+    return groupIds.distinct().map { groupId ->
+        val first = groupIds.indexOf(groupId)
+        require(instructions[first].isNotBlank() && instructions[first].length <= 2000)
+        ReportDocumentRequest(
+            pages = pages.filterIndexed { index, _ -> groupIds[index] == groupId },
+            instruction = instructions[first].trim(), task = tasks[first],
+            destinationField = destinations[first]
+        )
+    }
+}

@@ -55,6 +55,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
@@ -83,6 +84,17 @@ fun AgendaScreen(
     viewModel: AgendaViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+    var exportDays by remember { mutableStateOf(emptyList<AgendaDaySummary>()) }
+    var exportError by remember { mutableStateOf<String?>(null) }
+    var exportMenu by remember { mutableStateOf(false) }
+    val pdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
+        uri?.let { runCatching { exportAgendaPdf(context, it, exportDays) }.onFailure { exportError = "تعذر تصدير PDF" } }
+    }
+    val csvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        uri?.let { runCatching { exportAgendaCsv(context, it, exportDays) }.onFailure { exportError = "تعذر تصدير الشيت" } }
+    }
+    exportError?.let { message -> AlertDialog(onDismissRequest = { exportError = null }, text = { Text(message) }, confirmButton = { TextButton(onClick = { exportError = null }) { Text("حسنًا") } }) }
     val saveError by viewModel.saveError.collectAsState()
     val saving by viewModel.isSaving.collectAsState()
     saveError?.let { message -> AlertDialog(onDismissRequest = { viewModel.saveError.value = null }, text = { Text(message) }, confirmButton = { TextButton(onClick = { viewModel.saveError.value = null }) { Text("حسنًا") } }) }
@@ -99,6 +111,19 @@ fun AgendaScreen(
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") }
                 },
                 actions = {
+                    Box {
+                        TextButton(onClick = { exportMenu = true }) { Text("تصدير") }
+                        DropdownMenu(expanded = exportMenu, onDismissRequest = { exportMenu = false }) {
+                            DropdownMenuItem(text = { Text("الشهر PDF") }, onClick = {
+                                exportMenu = false; exportDays = state.days.values.toList()
+                                pdfLauncher.launch("agenda-${state.month}.pdf")
+                            })
+                            DropdownMenuItem(text = { Text("شيت الشهر CSV") }, onClick = {
+                                exportMenu = false; exportDays = state.days.values.toList()
+                                csvLauncher.launch("agenda-${state.month}.csv")
+                            })
+                        }
+                    }
                     IconButton(onClick = viewModel::previousMonth) { Icon(Icons.Filled.ChevronRight, "الشهر السابق") }
                     IconButton(onClick = viewModel::goToday) { Icon(Icons.Filled.Today, "اليوم") }
                     IconButton(onClick = viewModel::nextMonth) { Icon(Icons.Filled.ChevronLeft, "الشهر التالي") }
@@ -127,6 +152,7 @@ fun AgendaScreen(
             saving = saving,
             draft = viewModel.draft,
             onDismiss = viewModel::closeDay,
+            onExportPdf = { exportDays = listOf(summary); pdfLauncher.launch("agenda-${date}.pdf") },
             onSave = { text, strokes, images, manualAppointments ->
                 viewModel.saveDay(date, text, strokes, images, manualAppointments)
             }
@@ -165,15 +191,16 @@ private fun MonthGrid(
             while (size % 7 != 0) add(null)
         }
     }
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(7),
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        items(slots) { date ->
-            if (date == null) Spacer(Modifier.aspectRatio(.78f))
-            else AgendaDayCell(days[date] ?: AgendaDaySummary(date), onDayClick)
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        slots.chunked(7).forEach { week ->
+            Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                week.forEach { date ->
+                    if (date == null) Spacer(Modifier.weight(1f).fillMaxHeight())
+                    else Box(Modifier.weight(1f).fillMaxHeight()) {
+                        AgendaDayCell(days[date] ?: AgendaDaySummary(date), onDayClick)
+                    }
+                }
+            }
         }
     }
 }
@@ -183,7 +210,7 @@ private fun AgendaDayCell(summary: AgendaDaySummary, onClick: (LocalDate) -> Uni
     val today = summary.date == LocalDate.now()
     val hasContent = summary.holiday != null || summary.events.isNotEmpty() || summary.note != null
     Card(
-        modifier = Modifier.aspectRatio(.78f).clickable { onClick(summary.date) },
+        modifier = Modifier.fillMaxSize().clickable { onClick(summary.date) },
         shape = RoundedCornerShape(10.dp),
         colors = CardDefaults.cardColors(
             containerColor = when {
@@ -199,8 +226,10 @@ private fun AgendaDayCell(summary: AgendaDaySummary, onClick: (LocalDate) -> Uni
                 Text(it.name, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             summary.events.firstOrNull()?.let {
+                if (it.time.isNotBlank()) Text("الساعة ${it.time}", style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
-                    listOf(it.time, it.title).filter(String::isNotBlank).joinToString(" "),
+                    it.title,
                     style = MaterialTheme.typography.labelSmall,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
@@ -220,7 +249,8 @@ internal fun AgendaDayDialog(
     onDismiss: () -> Unit,
     onSave: (String, List<AgendaStroke>, List<String>, List<AgendaManualAppointment>) -> Unit,
     saving: Boolean = false,
-    draft: AgendaDraft? = null
+    draft: AgendaDraft? = null,
+    onExportPdf: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val retained = draft ?: remember(summary.date) { AgendaDraft(summary.note) }
@@ -228,6 +258,7 @@ internal fun AgendaDayDialog(
     val strokes = retained.strokes
     val images = retained.images
     val manualAppointments = retained.appointments
+    val hiddenImportedKeys = retained.hiddenImportedKeys
     var manualTitle by retained.manualTitle
     var manualTime by retained.manualTime
     var manualLocation by retained.manualLocation
@@ -238,6 +269,7 @@ internal fun AgendaDayDialog(
     var selectedSketchWidth by remember(summary.date) { mutableStateOf(3f) }
     var editingText by rememberSaveable(summary.date) { mutableStateOf(false) }
     var showTools by remember { mutableStateOf(false) }
+    var expandedDrawing by remember { mutableStateOf(false) }
     // Existing appointments are always visible above the notes. This flag
     // controls only the form for adding a new appointment.
     var showAppointments by remember(summary.date) { mutableStateOf(false) }
@@ -284,6 +316,7 @@ internal fun AgendaDayDialog(
         else if (text != summary.note?.text.orEmpty() || strokes.toList() != summary.note?.strokes.orEmpty() ||
             images.toList() != summary.note?.imagePaths.orEmpty() ||
             manualAppointments.toList() != summary.note?.manualAppointments.orEmpty() ||
+            hiddenImportedKeys.toSet() != summary.note?.hiddenImportedKeys.orEmpty() ||
             pendingManualAppointmentOrNull() != null) confirmClose = true
         else onDismiss()
     }
@@ -335,6 +368,7 @@ internal fun AgendaDayDialog(
                         summary.holiday?.let { Text(it.name, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold) }
                     }
                     InlineHelp("ملاحظات اليوم", "اضغط على الورقة لفتح الكتابة بالكيبورد. استخدم القلم في المساحة السفلية، وافتح أدواته من أسفل. زر حفظ اليوم يحفظ النص والقلم والصور معًا.")
+                    onExportPdf?.let { TextButton(onClick = it) { Text("PDF") } }
                 }
                 HorizontalDivider()
                 BackHandler { requestClose() }
@@ -344,10 +378,25 @@ internal fun AgendaDayDialog(
                     Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(top = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    val importedEvents = summary.events.filter { it.source != AgendaEventSource.MANUAL }
+                    val importedEvents = summary.events.filter { it.source != AgendaEventSource.MANUAL && it.importKey() !in hiddenImportedKeys }
                     if (importedEvents.isNotEmpty()) {
                         Text("المواعيد المستوردة", fontWeight = FontWeight.Bold)
-                        importedEvents.forEach { event -> EventCard(event) }
+                        importedEvents.forEach { event ->
+                            EventCard(event)
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                TextButton(onClick = {
+                                    manualAppointments.add(AgendaManualAppointment(event.title, event.time, event.location, event.details))
+                                    hiddenImportedKeys.add(event.importKey())
+                                }, modifier = Modifier.weight(1f)) { Text("↓ لليوم") }
+                                TextButton(onClick = {
+                                    manualTitle = event.title; manualTime = event.time
+                                    manualLocation = event.location; manualDetails = event.details
+                                    hiddenImportedKeys.add(event.importKey())
+                                    showAppointments = true
+                                }, modifier = Modifier.weight(1f)) { Text("تعديل") }
+                                TextButton(onClick = { hiddenImportedKeys.add(event.importKey()) }, modifier = Modifier.weight(1f)) { Text("حذف") }
+                            }
+                        }
                     }
 
                     if (manualAppointments.isNotEmpty()) {
@@ -385,6 +434,7 @@ internal fun AgendaDayDialog(
                         }
                     }
                     Text("الكتابة بالقلم", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    TextButton(onClick = { expandedDrawing = true }) { Text("تكبير مساحة الرسم") }
                     DrawingBoard(
                         strokes = strokes,
                         currentStroke = currentStroke,
@@ -571,6 +621,23 @@ internal fun AgendaDayDialog(
         }) { Text("حفظ وإغلاق") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("تجاهل التغييرات") } }
     )
+    if (expandedDrawing) Dialog(onDismissRequest = { expandedDrawing = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxSize().safeDrawingPadding()) {
+            Column(Modifier.fillMaxSize().padding(12.dp)) {
+                Text("ارسم على الشاشة كاملة؛ ستُغلق بعد رفع القلم", style = MaterialTheme.typography.titleMedium)
+                TextButton(onClick = { expandedDrawing = false }) { Text("تصغير") }
+                DrawingBoard(strokes, currentStroke, selectedSketchTool, selectedSketchColor, selectedSketchWidth,
+                    { currentStroke = it },
+                    { point -> strokes.indexOfLast { agendaStrokeHit(it, point) }.takeIf { it >= 0 }?.let(strokes::removeAt) },
+                    { points ->
+                        if (selectedSketchTool != AgendaSketchTool.ERASER && points.isNotEmpty())
+                            strokes.add(AgendaStroke(points, selectedSketchTool, selectedSketchColor, selectedSketchWidth))
+                        currentStroke = emptyList()
+                        expandedDrawing = false
+                    }, Modifier.weight(1f))
+            }
+        }
+    }
     if (confirmClear) AlertDialog(
         onDismissRequest = { confirmClear = false },
         title = { Text("مسح الكتابة بالقلم؟") },
@@ -612,7 +679,8 @@ private fun DrawingBoard(
     selectedWidth: Float,
     onCurrentStrokeChange: (List<AgendaPoint>) -> Unit,
     onErase: (AgendaPoint) -> Unit,
-    onStrokeFinished: (List<AgendaPoint>) -> Unit
+    onStrokeFinished: (List<AgendaPoint>) -> Unit,
+    modifier: Modifier = Modifier.height(300.dp)
 ) {
     val latestCurrentStroke by rememberUpdatedState(currentStroke)
     val latestOnCurrentStrokeChange by rememberUpdatedState(onCurrentStrokeChange)
@@ -620,12 +688,13 @@ private fun DrawingBoard(
     val latestOnErase by rememberUpdatedState(onErase)
     val latestTool by rememberUpdatedState(selectedTool)
     Canvas(
-        modifier = Modifier.fillMaxWidth().height(300.dp).testTag("agenda-writing-board").clip(RoundedCornerShape(12.dp))
+        modifier = modifier.fillMaxWidth().testTag("agenda-writing-board").clip(RoundedCornerShape(12.dp))
             .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
             .pointerInput(Unit) {
+                fun normalized(offset: Offset) = AgendaPoint(offset.x, offset.y * (300.dp.toPx() / size.height.coerceAtLeast(1).toFloat()))
                 detectDragGestures(
                     onDragStart = { offset ->
-                        val point = AgendaPoint(offset.x, offset.y)
+                        val point = normalized(offset)
                         if (latestTool == AgendaSketchTool.ERASER) {
                             latestOnErase(point)
                             latestOnCurrentStrokeChange(emptyList())
@@ -633,7 +702,7 @@ private fun DrawingBoard(
                     },
                     onDrag = { change, _ ->
                         change.consume()
-                        val point = AgendaPoint(change.position.x.coerceIn(0f, size.width.toFloat()), change.position.y.coerceIn(0f, size.height.toFloat()))
+                        val point = normalized(Offset(change.position.x.coerceIn(0f, size.width.toFloat()), change.position.y.coerceIn(0f, size.height.toFloat())))
                         if (latestTool == AgendaSketchTool.ERASER) {
                             latestOnErase(point)
                             latestOnCurrentStrokeChange(emptyList())
@@ -650,7 +719,7 @@ private fun DrawingBoard(
             }
             .pointerInput(Unit) {
                 detectTapGestures { offset ->
-                    val point = AgendaPoint(offset.x, offset.y)
+                    val point = AgendaPoint(offset.x, offset.y * (300.dp.toPx() / size.height.coerceAtLeast(1).toFloat()))
                     if (latestTool == AgendaSketchTool.ERASER) latestOnErase(point)
                     else latestOnStrokeFinished(listOf(point))
                 }
@@ -663,9 +732,11 @@ private fun DrawingBoard(
             drawLine(Color(0xFFE1E4E8), Offset(0f, lineY), Offset(size.width, lineY), strokeWidth = 1f)
             lineY += spacing
         }
-        strokes.forEach { drawAgendaStroke(it) }
-        if (currentStroke.isNotEmpty() && selectedTool != AgendaSketchTool.ERASER) {
-            drawAgendaStroke(AgendaStroke(currentStroke, selectedTool, selectedColorArgb, selectedWidth))
+        withTransform({ scale(1f, size.height / 300.dp.toPx(), pivot = Offset.Zero) }) {
+            strokes.forEach { drawAgendaStroke(it) }
+            if (currentStroke.isNotEmpty() && selectedTool != AgendaSketchTool.ERASER) {
+                drawAgendaStroke(AgendaStroke(currentStroke, selectedTool, selectedColorArgb, selectedWidth))
+            }
         }
     }
 }

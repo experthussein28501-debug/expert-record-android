@@ -25,6 +25,7 @@ class AgendaDayCodecTest {
                     details = "مراجعة المستندات"
                 )
             ),
+            hiddenImportedKeys = setOf("WORK_MINUTES\u001f2026-09-20\u001fالدعوى 105\u001f9 صباحًا"),
             updatedAt = 1234L
         )
 
@@ -38,6 +39,7 @@ class AgendaDayCodecTest {
         assertEquals("9 صباحًا", decoded.manualAppointments.single().time)
         assertEquals("المكتب", decoded.manualAppointments.single().location)
         assertEquals("مراجعة المستندات", decoded.manualAppointments.single().details)
+        assertEquals(original.hiddenImportedKeys, decoded.hiddenImportedKeys)
     }
 
     @Test
