@@ -62,4 +62,16 @@ class AgendaDayCodecTest {
         assertEquals(1, decoded.strokes.size)
         assertTrue(decoded.manualAppointments.isEmpty())
     }
+
+    @Test
+    fun `hidden imported key with multiline details survives round trip`() {
+        val date = LocalDate.of(2026, 9, 21)
+        val key = "WORK_MINUTES\u001f2026-09-21\u001fجلسة\u001f10:00\u001fالمكتب\u001fسطر أول\nسطر ثان"
+        val original = AgendaDayNote(date = date, hiddenImportedKeys = setOf(key), updatedAt = 55L)
+
+        val decoded = AgendaDayCodec.decode(date, AgendaDayCodec.encode(original))
+
+        assertEquals(setOf(key), decoded?.hiddenImportedKeys)
+    }
+
 }
