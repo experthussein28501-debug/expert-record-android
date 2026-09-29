@@ -732,7 +732,8 @@ private fun DrawingBoard(
             drawLine(Color(0xFFE1E4E8), Offset(0f, lineY), Offset(size.width, lineY), strokeWidth = 1f)
             lineY += spacing
         }
-        withTransform({ scale(1f, size.height / 300.dp.toPx(), pivot = Offset.Zero) }) {
+        val boardScaleY = size.height / 300.dp.toPx()
+        withTransform({ scale(1f, boardScaleY, pivot = Offset.Zero) }) {
             strokes.forEach { drawAgendaStroke(it) }
             if (currentStroke.isNotEmpty() && selectedTool != AgendaSketchTool.ERASER) {
                 drawAgendaStroke(AgendaStroke(currentStroke, selectedTool, selectedColorArgb, selectedWidth))
