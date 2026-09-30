@@ -159,6 +159,9 @@ jobs:
           APK="$(find app/build/outputs/apk/combined/hardened -name '*.apk' | head -n 1)"
           ANALYZER="$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer"
           "$ANALYZER" manifest print "$APK" > /tmp/khabir-manifest.xml
+          APP_ID="$("$ANALYZER" manifest application-id "$APK")"
+          test "$APP_ID" = "com.khabir.app.combined.preview.v0915"
+          test "$APP_ID" != "com.khabir.app.combined.preview.v0914"
           python3 scripts/verify_apk_security.py "$APK" /tmp/khabir-manifest.xml app/build/outputs/mapping/combinedHardened/mapping.txt
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify "$APK"
           python3 scripts/verify_play_assets.py "$APK"
