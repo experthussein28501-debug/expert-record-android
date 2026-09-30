@@ -74,4 +74,26 @@ class AgendaDayCodecTest {
         assertEquals(setOf(key), decoded?.hiddenImportedKeys)
     }
 
+
+    @Test
+    fun `early preview multiline hidden key is reconstructed on decode`() {
+        fun b64(value: String): String = Base64.getUrlEncoder().withoutPadding()
+            .encodeToString(value.toByteArray(StandardCharsets.UTF_8))
+
+        val date = LocalDate.of(2026, 9, 22)
+        val key = "WORK_MINUTES\u001f2026-09-22\u001fجلسة\u001f10:00\u001fالمكتب\u001fسطر أول\nسطر ثان"
+        val legacySixColumn = listOf(
+            b64(""),
+            b64(""),
+            b64(""),
+            "77",
+            b64(""),
+            b64(key)
+        ).joinToString("\t")
+
+        val decoded = AgendaDayCodec.decode(date, legacySixColumn)
+
+        assertEquals(setOf(key), decoded?.hiddenImportedKeys)
+    }
+
 }
