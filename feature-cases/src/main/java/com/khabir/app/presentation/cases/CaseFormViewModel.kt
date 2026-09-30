@@ -108,7 +108,7 @@ class CaseFormViewModel @Inject constructor(
     fun onCaseYearChanged(v: String) = _uiState.update { it.copy(caseYear = v) }
     fun onCourtChanged(v: String) = _uiState.update { it.copy(court = v) }
     fun onCaseTypeChanged(v: String) = _uiState.update { it.copy(caseType = v) }
-    fun onSubjectOfCaseChanged(v: String) = _uiState.update { it.copy(subjectOfCase = v) }
+    fun onSubjectOfCaseChanged(v: String) = _uiState.update { it.copy(subjectOfCase = v, finalRequests = "") }
     fun onFinalRequestsChanged(v: String) = _uiState.update { it.copy(finalRequests = v) }
     fun onPreliminaryMissionChanged(v: String) = _uiState.update { it.copy(preliminaryMission = v) }
     fun onReceiptDateChanged(v: LocalDate?) = _uiState.update { it.copy(receiptDate = v) }
@@ -303,6 +303,13 @@ class CaseFormViewModel @Inject constructor(
         val state = _uiState.value
         val document = state.documentReview.firstOrNull { it.id == documentId } ?: return
         val group = DocumentReviewParser.matchingGroup(state.documentReview, document)
+        useReviewedDocuments(group.map { it.id }.toSet())
+    }
+
+    fun useReviewedDocuments(documentIds: Set<Int>) {
+        val state = _uiState.value
+        val group = state.documentReview.filter { it.id in documentIds }
+        if (group.isEmpty() || group.size != documentIds.size) return
         _uiState.update {
             it.copy(
                 voiceReviewText = DocumentReviewParser.combinedText(group),

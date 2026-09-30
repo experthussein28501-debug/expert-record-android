@@ -43,7 +43,9 @@ data class ReportImageReview(
     val id: String,
     val text: String,
     val source: String,
-    val task: ReportDocumentTask
+    val task: ReportDocumentTask,
+    val destinationField: String? = null,
+    val customSectionId: String? = null
 )
 
 data class ReportUiState(
@@ -261,6 +263,10 @@ class ReportViewModel @Inject constructor(
             customSectionContents = state.customSectionContents - sectionId
         )
     }
+    fun onTextFormatChanged(format: com.khabir.app.domain.model.ReportTextFormat) = edit { state ->
+        state.copy(customSectionContents = state.customSectionContents + (com.khabir.app.domain.model.ReportTextFormat.KEY to format.encode()))
+    }
+
     fun onCustomSectionChanged(sectionId: String, value: String) = edit { state ->
         state.copy(customSectionContents = state.customSectionContents + (sectionId to value))
     }
@@ -355,7 +361,8 @@ class ReportViewModel @Inject constructor(
         }
     }
 
-    private val documentResults = mutableMapOf<String, String>()
+    private data class AnalyzedDocument(val text: String, val identity: PendingImportedCaseIdentity?)
+    private val documentResults = mutableMapOf<String, AnalyzedDocument>()
 
     fun prepareReportDocuments(pages: List<File>) {
         if (_uiState.value.isOcrProcessing) return
@@ -442,7 +449,9 @@ class ReportViewModel @Inject constructor(
     fun analyzeRequestedDocuments(documents: List<ReportDocumentRequest>) {
         if (_uiState.value.isOcrProcessing) return
         val expected = _uiState.value.pendingReportPages
-        if (documents.flatMap { it.pages } != expected || expected.isEmpty()) return
+        val requestedPages = documents.flatMap { it.pages }
+        if (expected.isEmpty() || requestedPages.size != expected.size ||
+            requestedPages.toSet() != expected.toSet()) return
         viewModelScope.launch {
             _uiState.update { it.copy(isOcrProcessing = true, errorMessage = null) }
             val stagedIdentities = mutableMapOf<String, PendingImportedCaseIdentity>()
@@ -452,7 +461,9 @@ class ReportViewModel @Inject constructor(
                     var identityForReview: PendingImportedCaseIdentity? = null
                     val cacheKey = document.pages.joinToString("|") { it.path } +
                         "\n" + document.task.name + "\n" + document.instruction
-                    val resultText = documentResults[cacheKey] ?: when (document.task) {
+                    val cached = documentResults[cacheKey]
+                    identityForReview = cached?.identity
+                    val resultText = cached?.text ?: when (document.task) {
                         ReportDocumentTask.SUBJECT -> {
                             val read = multiPageReader.read(
                                 document.pages,
@@ -548,14 +559,16 @@ class ReportViewModel @Inject constructor(
                                 formatReportDocumentFallback(local.text, document.task)
                             }
                         }
-                    }.also { documentResults[cacheKey] = it }
+                    }.also { documentResults[cacheKey] = AnalyzedDocument(it, identityForReview) }
                     val reviewId = "report-image-" + java.util.UUID.randomUUID().toString()
                     identityForReview?.let { stagedIdentities[reviewId] = it }
                     ReportImageReview(
                         id = reviewId,
                         text = resultText,
                         source = "المستند ${index + 1}",
-                        task = document.task
+                        task = document.task,
+                        destinationField = document.destinationField,
+                        customSectionId = document.customSectionId
                     )
                 }
 

@@ -25,6 +25,7 @@ class AgendaDayCodecTest {
                     details = "مراجعة المستندات"
                 )
             ),
+            hiddenImportedKeys = setOf("WORK_MINUTES\u001f2026-09-20\u001fالدعوى 105\u001f9 صباحًا"),
             updatedAt = 1234L
         )
 
@@ -38,6 +39,7 @@ class AgendaDayCodecTest {
         assertEquals("9 صباحًا", decoded.manualAppointments.single().time)
         assertEquals("المكتب", decoded.manualAppointments.single().location)
         assertEquals("مراجعة المستندات", decoded.manualAppointments.single().details)
+        assertEquals(original.hiddenImportedKeys, decoded.hiddenImportedKeys)
     }
 
     @Test
@@ -60,4 +62,38 @@ class AgendaDayCodecTest {
         assertEquals(1, decoded.strokes.size)
         assertTrue(decoded.manualAppointments.isEmpty())
     }
+
+    @Test
+    fun `hidden imported key with multiline details survives round trip`() {
+        val date = LocalDate.of(2026, 9, 21)
+        val key = "WORK_MINUTES\u001f2026-09-21\u001fجلسة\u001f10:00\u001fالمكتب\u001fسطر أول\nسطر ثان"
+        val original = AgendaDayNote(date = date, hiddenImportedKeys = setOf(key), updatedAt = 55L)
+
+        val decoded = AgendaDayCodec.decode(date, AgendaDayCodec.encode(original))
+
+        assertEquals(setOf(key), decoded?.hiddenImportedKeys)
+    }
+
+
+    @Test
+    fun `early preview multiline hidden key is reconstructed on decode`() {
+        fun b64(value: String): String = Base64.getUrlEncoder().withoutPadding()
+            .encodeToString(value.toByteArray(StandardCharsets.UTF_8))
+
+        val date = LocalDate.of(2026, 9, 22)
+        val key = "WORK_MINUTES\u001f2026-09-22\u001fجلسة\u001f10:00\u001fالمكتب\u001fسطر أول\nسطر ثان"
+        val legacySixColumn = listOf(
+            b64(""),
+            b64(""),
+            b64(""),
+            "77",
+            b64(""),
+            b64(key)
+        ).joinToString("\t")
+
+        val decoded = AgendaDayCodec.decode(date, legacySixColumn)
+
+        assertEquals(setOf(key), decoded?.hiddenImportedKeys)
+    }
+
 }

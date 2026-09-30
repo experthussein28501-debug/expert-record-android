@@ -74,7 +74,7 @@ class WorkMinutesDocxBuilderTest {
         assertTrue(xml.contains("<w:ind w:right=\"0\" w:hanging=\"800\"/>"))
         assertTrue(xml.contains(">س/ </w:t>"))
         assertTrue(xml.contains(">ج/ </w:t>"))
-        assertTrue(xml.contains("<w:tab w:val=\"right\" w:pos=\"0\"/>"))
+        assertTrue(xml.contains("<w:tab w:val=\"right\" w:pos=\"800\"/>"))
         assertTrue(xml.contains("<w:tab/>"))
         assertTrue(xml.contains("ما قولك فيما هو منسوب؟"))
         assertTrue(xml.contains("أقرر بما ورد بالمستندات"))

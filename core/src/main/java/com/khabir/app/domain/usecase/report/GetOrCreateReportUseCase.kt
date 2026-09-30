@@ -43,18 +43,6 @@ class GetOrCreateReportUseCase @Inject constructor(
         return Report()
     }
 
-    private fun composeCaseSubject(explanation: String, finalRequests: String): String {
-        val cleanExplanation = explanation.trim()
-        val cleanRequests = finalRequests.trim()
-        if (cleanExplanation.isBlank() && cleanRequests.isBlank()) return ""
-        return buildString {
-            append("أقام المدعي دعواه بموجب صحيفة أودعت قلم كتاب المحكمة وأعلنت قانونًا")
-            if (cleanRequests.isNotBlank()) {
-                append("، وطلب في ختامها:\n").append(cleanRequests)
-            }
-            if (cleanExplanation.isNotBlank()) {
-                append("\n\nوحيث قال شارحًا دعواه:\n").append(cleanExplanation)
-            }
-        }
-    }
+    private fun composeCaseSubject(explanation: String, finalRequests: String): String =
+        com.khabir.app.domain.model.UnifiedCaseSubject.compose(explanation, finalRequests)
 }

@@ -1,7 +1,7 @@
 package com.khabir.app.presentation.components
 
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.OffsetMapping
+import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
@@ -15,11 +15,9 @@ class ArabicListHangingIndentTransformation(
 ) : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
         if (text.text.isBlank()) return TransformedText(text, OffsetMapping.Identity)
-
         val source = text.text
         val builder = AnnotatedString.Builder(source.length).apply { append(source) }
         var lineStart = 0
-
         while (lineStart <= source.length) {
             val newline = source.indexOf('\n', lineStart)
             val lineEnd = if (newline >= 0) newline else source.length
@@ -31,7 +29,9 @@ class ArabicListHangingIndentTransformation(
                         textIndent = TextIndent(firstLine = 0.sp, restLine = restLineIndent)
                     ),
                     lineStart,
-                    lineEnd
+                    // Include the line break so the paragraph style applies to
+                    // wrapped lines consistently while the user is editing.
+                    (lineEnd + if (newline >= 0) 1 else 0).coerceAtMost(source.length)
                 )
             }
             if (newline < 0) break
@@ -39,7 +39,6 @@ class ArabicListHangingIndentTransformation(
         }
         return TransformedText(builder.toAnnotatedString(), OffsetMapping.Identity)
     }
-
     private companion object {
         val LIST_PREFIX = Regex(
             """^\s*(?:(?:[0-9٠-٩]+)|(?:[أ-ي]))\s*[\-–—ـ\.)/:：]\s+|^\s*[•●▪◦]\s+"""

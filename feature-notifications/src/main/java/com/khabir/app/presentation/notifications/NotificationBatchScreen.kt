@@ -38,6 +38,7 @@ import com.khabir.app.domain.model.Party
 import com.khabir.app.domain.model.PartyRole
 import com.khabir.app.domain.usecase.notification.ExportNotificationBatchToWordUseCase
 import com.khabir.app.presentation.cases.PetitionIntakeParser
+import com.khabir.app.presentation.common.DocumentCameraCapture
 import com.khabir.app.presentation.common.InAppCameraCapture
 import com.khabir.app.presentation.common.ExplicitDialogProperties
 import com.khabir.app.presentation.common.ExplicitDialogTitle
@@ -74,6 +75,7 @@ fun NotificationBatchScreen(onBack: () -> Unit, viewModel: NotificationBatchView
         viewModel.onExportEventConsumed()
     }
     Scaffold(
+        modifier = Modifier.fillMaxSize().imePadding(),
         topBar = {
             TopAppBar(
                 title = { Column { Text("الإخطارات وسركي الإخطارات", fontWeight = FontWeight.Bold); Text("إدخال واحد لكل المخرجات", style = MaterialTheme.typography.labelMedium) } },
@@ -303,7 +305,7 @@ private fun NewBatchSection(state: NotificationScreenUiState, viewModel: Notific
             cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
     }
-    Column(Modifier.fillMaxSize().imePadding().padding(16.dp)) {
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
         LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item {
                 KhabirCard(
@@ -501,19 +503,15 @@ private fun NewBatchSection(state: NotificationScreenUiState, viewModel: Notific
         )
     }
     if (showInAppCamera) {
-        InAppCameraCapture(
+        DocumentCameraCapture(
             onDismiss = { showInAppCamera = false },
-            onCaptured = { bitmap ->
+            onPagesSelected = { pages ->
                 showInAppCamera = false
-                viewModel.onPetitionPhotoCaptured(bitmap)
+                viewModel.onDocumentPagesCaptured(pages, false)
             },
-            onGeminiCaptured = { bitmap ->
+            onPagesAnalyze = { pages ->
                 showInAppCamera = false
-                viewModel.onPetitionPhotoCapturedWithGemini(bitmap)
-            },
-            onPagesCaptured = { pages, useAi ->
-                showInAppCamera = false
-                viewModel.onDocumentPagesCaptured(pages, useAi)
+                viewModel.onDocumentPagesCaptured(pages, true)
             },
             onError = viewModel::onCameraError
         )

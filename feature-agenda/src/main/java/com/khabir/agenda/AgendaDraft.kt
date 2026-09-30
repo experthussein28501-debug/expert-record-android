@@ -9,6 +9,7 @@ internal class AgendaDraft(note: AgendaDayNote?) {
     val strokes = mutableStateListOf<AgendaStroke>().apply { addAll(note?.strokes.orEmpty()) }
     val images = mutableStateListOf<String>().apply { addAll(note?.imagePaths.orEmpty()) }
     val appointments = mutableStateListOf<AgendaManualAppointment>().apply { addAll(note?.manualAppointments.orEmpty()) }
+    val hiddenImportedKeys = mutableStateListOf<String>().apply { addAll(note?.hiddenImportedKeys.orEmpty()) }
     val manualTitle = mutableStateOf("")
     val manualTime = mutableStateOf("")
     val manualLocation = mutableStateOf("")

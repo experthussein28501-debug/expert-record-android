@@ -101,7 +101,9 @@ class AgendaViewModel @Inject constructor(
                     )
                 }
             }
-        }.distinctBy { listOf(it.date.toString(), it.title, it.time, it.location, it.source.name).joinToString("|") }
+        }.filterNot { event -> event.source != AgendaEventSource.MANUAL &&
+            event.importKey() in manualNotes[event.date.toEpochDay()]?.hiddenImportedKeys.orEmpty() }
+            .distinctBy { listOf(it.date.toString(), it.title, it.time, it.location, it.source.name).joinToString("|") }
             .groupBy { it.date }
 
         val first = currentMonth.atDay(1)
@@ -142,6 +144,7 @@ class AgendaViewModel @Inject constructor(
     ) {
         if (isSaving.value) return
         isSaving.value = true
+        val hiddenImported = draft?.hiddenImportedKeys?.toSet().orEmpty()
         viewModelScope.launch {
         try {
         withContext(Dispatchers.IO) { store.save(
@@ -151,6 +154,7 @@ class AgendaViewModel @Inject constructor(
                 strokes = strokes,
                 imagePaths = imagePaths,
                 manualAppointments = manualAppointments,
+                hiddenImportedKeys = hiddenImported,
                 updatedAt = System.currentTimeMillis()
             )
         )

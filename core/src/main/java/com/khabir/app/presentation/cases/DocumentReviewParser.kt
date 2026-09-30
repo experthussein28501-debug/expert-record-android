@@ -172,13 +172,18 @@ object DocumentReviewParser {
         val addressScore = overlap(primaryAddresses, otherAddresses)
         val confidence = (nameScore * 0.8 + addressScore * 0.2).toInt().coerceIn(0, 100)
         return when {
+            primaryAddresses.isNotEmpty() && otherAddresses.isNotEmpty() && addressScore == 0 ->
+                DocumentMatchStatus.UNCERTAIN to "الأسماء متشابهة لكن العناوين مختلفة؛ راجع يدويًا"
             confidence >= 70 -> DocumentMatchStatus.MATCHED to "تطابق الخصوم والعناوين بنسبة $confidence% رغم عدم اكتمال رقم الدعوى"
             nameScore > 0 -> DocumentMatchStatus.UNCERTAIN to "يوجد تشابه في الخصوم بنسبة $confidence%؛ راجع المستندين قبل الدمج"
             else -> DocumentMatchStatus.UNCERTAIN to "البيانات غير كافية لإثبات المطابقة؛ يلزم قرار المستخدم"
         }
     }
 
-    private fun normalize(value: String): String = value.toWesternDigits().trim().lowercase().replace(Regex("\\s+"), " ")
+    private fun normalize(value: String): String = value.toWesternDigits().trim().lowercase()
+        .replace(Regex("[\\u064B-\\u065F\\u0670]"), "")
+        .replace(Regex("[أإآ]"), "ا").replace('ى', 'ي').replace('ة', 'ه')
+        .replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim().replace(Regex("\\s+"), " ")
 
     private fun String.toWesternDigits(): String = map { char ->
         when (char) {

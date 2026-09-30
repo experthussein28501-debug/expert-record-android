@@ -124,7 +124,7 @@ class LegalReportDocxBuilder {
                 } else if (isExpertSignature && line.trimStart().startsWith("الخبير")) {
                     body.append(endAligned(line, bold = true, size = 24))
                 } else {
-                    body.append(normal(line))
+                    body.append(normal(line, com.khabir.app.domain.model.ReportTextFormat.decode(fields[com.khabir.app.domain.model.ReportTextFormat.KEY])))
                 }
             }
             body.append(compactSpacer())
@@ -180,15 +180,10 @@ class LegalReportDocxBuilder {
         keepNext = true
     )
 
-    private fun normal(text: String): String = paragraph(
-        text = text,
-        align = "both",
-        bold = false,
-        size = 24,
-        after = 8,
-        line = 360,
-        keepNext = false,
-        firstLineIndent = 300
+    private fun normal(text: String, format: com.khabir.app.domain.model.ReportTextFormat): String = paragraph(
+        text = text, align = format.alignment, bold = format.bold,
+        size = format.size * 2, after = 80, line = format.linePercent * 240 / 100,
+        font = format.font
     )
 
     private fun endAligned(text: String, bold: Boolean, size: Int): String = paragraph(
@@ -210,7 +205,7 @@ class LegalReportDocxBuilder {
         }
         val right = listOf(ministry, sector, department)
         val left = if (incoming.isBlank()) emptyList() else listOf("وارد $incoming")
-        return """<w:tbl><w:tblPr><w:tblW w:w="10000" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:bidiVisual/><w:tblBorders><w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="nil"/><w:right w:val="nil"/><w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tblBorders></w:tblPr><w:tblGrid><w:gridCol w:w="5000"/><w:gridCol w:w="5000"/></w:tblGrid><w:tr>${cell(left, "end")}${cell(right, "start")}</w:tr></w:tbl>"""
+        return """<w:tbl><w:tblPr><w:tblW w:w="10000" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:bidiVisual/><w:tblBorders><w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="nil"/><w:right w:val="nil"/><w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tblBorders></w:tblPr><w:tblGrid><w:gridCol w:w="5000"/><w:gridCol w:w="5000"/></w:tblGrid><w:tr>${cell(right, "right")}${cell(left, "left")}</w:tr></w:tbl>"""
     }
 
     private fun compactSpacer(): String =
@@ -230,12 +225,13 @@ class LegalReportDocxBuilder {
         after: Int,
         line: Int,
         keepNext: Boolean = false,
-        firstLineIndent: Int = 0
+        firstLineIndent: Int = 0,
+        font: String = "Arial"
     ): String {
-        val boldXml = if (bold) "<w:b/>" else ""
+        val boldXml = if (bold) "<w:b/><w:bCs/>" else ""
         val keepNextXml = if (keepNext) "<w:keepNext/>" else ""
         val indentXml = if (firstLineIndent > 0) "<w:ind w:firstLine=\"$firstLineIndent\"/>" else ""
-        return "<w:p><w:pPr><w:bidi/><w:widowControl/>$keepNextXml<w:jc w:val=\"$align\"/>$indentXml<w:spacing w:before=\"0\" w:after=\"$after\" w:line=\"$line\" w:lineRule=\"auto\"/></w:pPr><w:r><w:rPr><w:rtl/><w:lang w:val=\"ar-EG\" w:bidi=\"ar-EG\"/><w:rFonts w:ascii=\"Traditional Arabic\" w:hAnsi=\"Traditional Arabic\" w:cs=\"Traditional Arabic\"/>$boldXml<w:sz w:val=\"$size\"/><w:szCs w:val=\"$size\"/></w:rPr><w:t xml:space=\"preserve\">${escape(text.toArabicIndicDigits())}</w:t></w:r></w:p>"
+        return "<w:p><w:pPr><w:bidi/><w:widowControl/>$keepNextXml<w:jc w:val=\"$align\"/>$indentXml<w:spacing w:before=\"0\" w:after=\"$after\" w:line=\"$line\" w:lineRule=\"auto\"/></w:pPr><w:r><w:rPr><w:rtl/><w:lang w:val=\"ar-EG\" w:bidi=\"ar-EG\"/><w:rFonts w:ascii=\"${escape(font)}\" w:hAnsi=\"${escape(font)}\" w:cs=\"${escape(font)}\"/>$boldXml<w:sz w:val=\"$size\"/><w:szCs w:val=\"$size\"/></w:rPr><w:t xml:space=\"preserve\">${escape(text.toArabicIndicDigits())}</w:t></w:r></w:p>"
     }
 
     private fun headerXml(text: String): String =

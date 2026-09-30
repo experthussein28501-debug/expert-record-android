@@ -17,6 +17,44 @@ class AgendaWritingFlowTest {
     @get:Rule val compose = createComposeRule()
     private val date = LocalDate.of(2026, 9, 20)
 
+    @Test fun exportIncludesCurrentDraftAndPendingAppointment() {
+        val draft = AgendaDraft(null).apply { text.value = "ملاحظة جديدة"; manualTitle.value = "جلسة"; manualTime.value = "11:15" }
+        var exported: AgendaDaySummary? = null
+        compose.setContent { MaterialTheme { AgendaDayDialog(AgendaDaySummary(date), {}, { _, _, _, _ -> }, draft = draft, onExportPdf = { exported = it }) } }
+        compose.onNodeWithText("PDF").performClick()
+        compose.runOnIdle {
+            assertEquals("ملاحظة جديدة", exported?.note?.text)
+            assertEquals("11:15", exported?.events?.single()?.time)
+        }
+    }
+
+    @Test fun movingImportedAppointmentKeepsTimeInEditableNotes() {
+        val event = AgendaEvent(date, "جلسة الدعوى", "10:30", "المحكمة", "مراجعة المستندات", AgendaEventSource.CASE_HEARING)
+        val draft = AgendaDraft(null)
+        var saved = ""
+        compose.setContent { MaterialTheme { AgendaDayDialog(AgendaDaySummary(date, events = listOf(event)), {}, { text, _, _, _ -> saved = text }, draft = draft) } }
+        compose.onNodeWithText("↓ لليوم").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(event.toAgendaNoteText(), draft.text.value) }
+        compose.onNodeWithTag("agenda-save").assertIsDisplayed().performClick()
+        compose.runOnIdle {
+            assertEquals(event.toAgendaNoteText(), saved)
+            assertEquals(listOf(event.importKey()), draft.hiddenImportedKeys.toList())
+        }
+    }
+
+    @Test fun editingImportedAppointmentPreservesPendingManualAppointment() {
+        val event = AgendaEvent(date, "جلسة جديدة", "12:00", source = AgendaEventSource.CASE_HEARING)
+        val draft = AgendaDraft(null).apply { manualTitle.value = "موعد لم يحفظ"; manualTime.value = "09:00" }
+        var saved = emptyList<AgendaManualAppointment>()
+        compose.setContent { MaterialTheme { AgendaDayDialog(AgendaDaySummary(date, events = listOf(event)), {}, { _, _, _, appointments -> saved = appointments }, draft = draft) } }
+        compose.onNodeWithText("تعديل").performClick()
+        compose.onNodeWithTag("agenda-save").performClick()
+        compose.runOnIdle {
+            assertEquals(listOf("موعد لم يحفظ", "جلسة جديدة"), saved.map { it.title })
+            assertEquals(listOf("09:00", "12:00"), saved.map { it.time })
+        }
+    }
+
     @Test fun tappingPenBoardSavesASingleDot() {
         var saved = emptyList<AgendaStroke>()
         compose.setContent { MaterialTheme { AgendaDayDialog(AgendaDaySummary(date), {}, { _, strokes, _, _ -> saved = strokes }) } }

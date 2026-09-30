@@ -1,5 +1,6 @@
 package com.khabir.app.presentation.reports
 
+import com.khabir.app.domain.model.ReportTextFormat
 import android.Manifest
 import android.app.Activity
 import android.content.Context
@@ -33,6 +34,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -46,7 +48,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.khabir.app.presentation.common.InAppCameraCapture
+import com.khabir.app.presentation.common.DocumentCameraCapture
 import com.khabir.app.presentation.common.ExplicitDialogProperties
 import com.khabir.app.presentation.common.ExplicitDialogTitle
 import com.khabir.app.presentation.components.KhabirCard
@@ -90,13 +92,15 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
     var showDepositDatePicker by remember { mutableStateOf(false) }
     var showTemplateEditor by remember { mutableStateOf(false) }
     var captureTarget by remember { mutableStateOf<ReportCaptureField?>(null) }
-    var captureCustomSectionId by remember { mutableStateOf<String?>(null) }
+    var captureCustomSectionId by rememberSaveable { mutableStateOf<String?>(null) }
     var newSectionTitle by remember { mutableStateOf("") }
     var quickInputText by remember { mutableStateOf("") }
     var fileMenuExpanded by remember { mutableStateOf(false) }
     var pendingAction by remember { mutableStateOf(FileAction.OPEN) }
     var pendingSourceUri by remember { mutableStateOf<android.net.Uri?>(null) }
-    var importedTarget by remember { mutableStateOf(ReportCaptureField.DOCUMENTS) }
+    var importedTarget by rememberSaveable { mutableStateOf(ReportCaptureField.DOCUMENTS) }
+    var reportDocumentDefaultTask by rememberSaveable { mutableStateOf(ReportDocumentTask.SUMMARY) }
+    var reportCaptureDestination by rememberSaveable { mutableStateOf<String?>(null) }
     var showInAppCamera by remember { mutableStateOf(false) }
     var voiceChoiceTarget by remember { mutableStateOf<ReportCaptureField?>(null) }
     var activeVoiceTarget by remember { mutableStateOf<ReportCaptureField?>(null) }
@@ -156,6 +160,9 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
     val reportImagesLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
         if (uris.isNotEmpty()) {
             importedTarget = ReportCaptureField.DOCUMENTS
+            captureCustomSectionId = null
+            reportCaptureDestination = null
+            reportDocumentDefaultTask = ReportDocumentTask.SUMMARY
             viewModel.prepareImportedReportImages(uris)
         }
     }
@@ -223,6 +230,14 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
 
     fun startReportCamera(target: ReportCaptureField, customSectionId: String? = null) {
         importedTarget = target
+        reportCaptureDestination = target.name
+        reportDocumentDefaultTask = when (target) {
+            ReportCaptureField.SUBJECT -> ReportDocumentTask.SUBJECT
+            ReportCaptureField.ASSIGNMENT -> ReportDocumentTask.ASSIGNMENT
+            ReportCaptureField.DOCUMENTS, ReportCaptureField.RESEARCH -> ReportDocumentTask.RESEARCH
+            ReportCaptureField.CONCLUSION -> ReportDocumentTask.CONCLUSION
+            else -> ReportDocumentTask.SUMMARY
+        }
         captureCustomSectionId = customSectionId
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             showInAppCamera = true
@@ -254,6 +269,7 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
     }
 
     Scaffold(
+        modifier = Modifier.fillMaxSize().imePadding(),
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = { TopAppBar(title = { Column { Text("تقرير الخبرة", fontWeight = FontWeight.Bold); Text(if (state.isIndependent) "تقرير مستقل" else "مرتبط بقضية مسجلة", style = MaterialTheme.typography.labelMedium) } }, actions = { if (!state.isIndependent) TextButton(enabled = !state.isLoading, onClick = viewModel::reviewCaseUpdates) { Text("تحديثات القضية") } }, navigationIcon = { IconButton(onClick = { viewModel.saveAndClose(onBack) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") } }) },
         bottomBar = {
@@ -303,6 +319,8 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                 }
             }
             Spacer(Modifier.height(12.dp))
+            ReportFormattingToolbar(ReportTextFormat.decode(state.customSectionContents[ReportTextFormat.KEY]), viewModel::onTextFormatChanged)
+            Spacer(Modifier.height(12.dp))
             KhabirCard(contentPadding = PaddingValues(14.dp)) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Link, null); Spacer(Modifier.width(8.dp)); Text("بيانات الدعوى للتقرير", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold) }
@@ -321,6 +339,7 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                         )
                         com.khabir.app.presentation.components.InlineHelp("مساعدة", "مثال: تقرير في الدعوى رقم ... — اتركه فارغًا إذا لم ترغب في رأس صفحة")
                         ReportSectionField(
+                            ReportTextFormat.decode(state.customSectionContents[ReportTextFormat.KEY]),
                             "الخصوم والصفات",
                             state.partiesSummary,
                             viewModel::onPartiesSummaryChanged,
@@ -683,10 +702,14 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
 
     if (state.pendingReportPages.isNotEmpty()) ReportDocumentRequestDialog(
         pages = state.pendingReportPages,
+        defaultTask = reportDocumentDefaultTask,
+        defaultDestination = reportCaptureDestination,
         busy = state.isOcrProcessing,
         error = state.errorMessage,
         onCancel = viewModel::cancelReportDocuments,
-        onAnalyze = viewModel::analyzeRequestedDocuments
+        onAnalyze = { documents -> viewModel.analyzeRequestedDocuments(documents.map { request ->
+            request.copy(customSectionId = if (request.destinationField == ReportCaptureField.CUSTOM.name) captureCustomSectionId else null)
+        }) }
     )
 
     state.pendingImageReviews.firstOrNull()?.let { review ->
@@ -698,15 +721,11 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
     }
 
     if (showInAppCamera) {
-        InAppCameraCapture(
+        DocumentCameraCapture(
             onDismiss = { showInAppCamera = false },
-            onCaptured = { bitmap ->
+            onPagesAnalyze = { pages ->
                 showInAppCamera = false
-                viewModel.onReportPhotoCaptured(bitmap)
-            },
-            onGeminiCaptured = { bitmap ->
-                showInAppCamera = false
-                viewModel.onReportPhotoCapturedWithGemini(bitmap)
+                viewModel.prepareReportDocuments(pages)
             },
             onPagesSelected = { pages ->
                 showInAppCamera = false
@@ -992,16 +1011,18 @@ private fun ReportImageResultReviewDialog(
     viewModel: ReportViewModel
 ) {
     val defaultTarget = remember(review.id) {
-        when (defaultReviewDestination(review.task)) {
+        ReportCaptureField.entries.firstOrNull {
+            it.name == review.destinationField && (it != ReportCaptureField.CUSTOM || review.customSectionId != null)
+        } ?: when (defaultReviewDestination(review.task)) {
             ReportReviewDestination.SUBJECT -> ReportCaptureField.SUBJECT
             ReportReviewDestination.ASSIGNMENT -> ReportCaptureField.ASSIGNMENT
             ReportReviewDestination.DOCUMENTS -> ReportCaptureField.DOCUMENTS
             ReportReviewDestination.CONCLUSION -> ReportCaptureField.CONCLUSION
         }
     }
-    var chosenTarget by remember(review.id) { mutableStateOf(defaultTarget) }
-    var reviewedText by remember(review.id) { mutableStateOf(review.text) }
-    var replaceExisting by remember(review.id) { mutableStateOf(false) }
+    var chosenTarget by rememberSaveable(review.id) { mutableStateOf(defaultTarget) }
+    var reviewedText by rememberSaveable(review.id) { mutableStateOf(review.text) }
+    var replaceExisting by rememberSaveable(review.id) { mutableStateOf(false) }
 
     val taskLabel = when (review.task) {
         ReportDocumentTask.SUBJECT -> "موضوع"
@@ -1035,7 +1056,7 @@ private fun ReportImageResultReviewDialog(
                     Text("استبدال النص القديم بالكامل")
                 }
                 ReportCaptureField.entries
-                    .filter { it != ReportCaptureField.CUSTOM }
+                    .filter { it != ReportCaptureField.CUSTOM || review.customSectionId != null }
                     .forEach { field ->
                         FilterChip(
                             selected = chosenTarget == field,
@@ -1056,7 +1077,13 @@ private fun ReportImageResultReviewDialog(
             Button(
                 enabled = reviewedText.isNotBlank(),
                 onClick = {
-                    chosenTarget.write(viewModel, reviewedText, replaceExisting)
+                    if (chosenTarget == ReportCaptureField.CUSTOM) {
+                        review.customSectionId?.let { sectionId ->
+                            viewModel.onCustomSectionChanged(sectionId, mergeReportInput(
+                                state.customSectionContents[sectionId].orEmpty(), reviewedText, replaceExisting
+                            ))
+                        }
+                    } else chosenTarget.write(viewModel, reviewedText, replaceExisting)
                     viewModel.onImageReviewApproved(review.id)
                 }
             ) { Text("اعتماد ثم التالي") }
@@ -1132,6 +1159,7 @@ private fun ReportTemplateSection(
             section.headingLines.filter(String::isNotBlank).forEach { Text(it, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium) }
             if (section.id == "subject") {
                 ReportSectionField(
+                            ReportTextFormat.decode(state.customSectionContents[ReportTextFormat.KEY]),
                     section.title,
                     mapping.first,
                     mapping.second,
@@ -1149,6 +1177,7 @@ private fun ReportTemplateSection(
             } else if (section.id == "statements") {
                 val statements = splitPartyStatements(state.partyStatements)
                 ReportSectionField(
+                            ReportTextFormat.decode(state.customSectionContents[ReportTextFormat.KEY]),
                     "أقوال المدعي",
                     statements.first,
                     { plaintiff -> viewModel.onPartyStatementsChanged(joinPartyStatements(plaintiff, statements.second)) },
@@ -1161,6 +1190,7 @@ private fun ReportTemplateSection(
                 )
                 Spacer(Modifier.height(8.dp))
                 ReportSectionField(
+                            ReportTextFormat.decode(state.customSectionContents[ReportTextFormat.KEY]),
                     "أقوال المدعى عليه",
                     statements.second,
                     { defendant -> viewModel.onPartyStatementsChanged(joinPartyStatements(statements.first, defendant)) },
@@ -1173,6 +1203,7 @@ private fun ReportTemplateSection(
                 )
             } else {
                 ReportSectionField(
+                            ReportTextFormat.decode(state.customSectionContents[ReportTextFormat.KEY]),
                     section.title, mapping.first, mapping.second,
                     if (section.id in setOf("witnesses", "inspection", "documents", "research")) 5 else 4,
                     { onCamera(mapping.third, null) }, { onMic(mapping.third, null) },
@@ -1183,6 +1214,7 @@ private fun ReportTemplateSection(
         }
     } else {
         ReportSectionField(
+                            ReportTextFormat.decode(state.customSectionContents[ReportTextFormat.KEY]),
             section.title,
             state.customSectionContents[section.id].orEmpty(),
             { viewModel.onCustomSectionChanged(section.id, it) },
@@ -1216,20 +1248,24 @@ private fun joinPartyStatements(plaintiff: String, defendant: String): String = 
     append(defendant.trim())
 }.trim()
 
-private enum class ReportCaptureField(val label: String) {
-    PARTIES("الخصوم والصفات"), SUBJECT("الموضوع"), ASSIGNMENT("المأمورية"), PROCEEDINGS("مباشرة المأمورية"), STATEMENTS("أقوال طرفي التداعي"), WITNESSES("سماع الشهود"), INSPECTION("المعاينة على الطبيعة"), DOCUMENTS("بحث المستندات"), FACTS("الوقائع والملاحظات"), RESEARCH("البحث"), CALCULATIONS("الحسابات والجداول"), CONCLUSION("النتيجة النهائية"), ATTACHMENTS("ملاحظات المرفقات"), CUSTOM("البند المضاف");
+internal enum class ReportCaptureField(val label: String) {
+    PARTIES("الخصوم والصفات"), SUBJECT("الموضوع"), ASSIGNMENT("المأمورية"), PROCEEDINGS("مباشرة المأمورية"), STATEMENTS("أقوال طرفي التداعي"), WITNESSES("سماع الشهود"), INSPECTION("المعاينة على الطبيعة"), DOCUMENTS("بحث المستندات"), PLAINTIFF_DOCUMENTS("مستندات المدعين"), DEFENDANT_DOCUMENTS("مستندات المدعى عليهم"), FACTS("الوقائع والملاحظات"), RESEARCH("البحث"), CALCULATIONS("الحسابات والجداول"), CONCLUSION("النتيجة النهائية"), ATTACHMENTS("ملاحظات المرفقات"), CUSTOM("البند المضاف");
     fun write(vm: ReportViewModel, incoming: String, replace: Boolean = false) {
         val state = vm.uiState.value
         val old = when (this) {
             PARTIES -> state.partiesSummary; SUBJECT -> state.subjectOfCase; ASSIGNMENT -> state.assignment
             PROCEEDINGS -> state.proceedings; STATEMENTS -> state.partyStatements; WITNESSES -> state.witnessStatements
-            INSPECTION -> state.inspection; DOCUMENTS -> state.documentsSubmitted; FACTS -> state.facts
+            INSPECTION -> state.inspection; DOCUMENTS, PLAINTIFF_DOCUMENTS, DEFENDANT_DOCUMENTS -> state.documentsSubmitted; FACTS -> state.facts
             RESEARCH -> state.research; CALCULATIONS -> state.calculationsTable; CONCLUSION -> state.conclusion
             ATTACHMENTS -> state.attachmentsNote; CUSTOM -> ""
         }
-        val value = mergeReportInput(old, incoming, replace)
+        val labeled = when (this) {
+            PLAINTIFF_DOCUMENTS, DEFENDANT_DOCUMENTS -> "$label:\n$incoming"
+            else -> incoming
+        }
+        val value = mergeReportInput(old, labeled, replace)
         when (this) {
-        PARTIES -> vm.onPartiesSummaryChanged(value); SUBJECT -> vm.onSubjectChanged(value); ASSIGNMENT -> vm.onAssignmentChanged(value); PROCEEDINGS -> vm.onProceedingsChanged(value); STATEMENTS -> vm.onPartyStatementsChanged(value); WITNESSES -> vm.onWitnessStatementsChanged(value); INSPECTION -> vm.onInspectionChanged(value); DOCUMENTS -> vm.onDocumentsChanged(value); FACTS -> vm.onFactsChanged(value); RESEARCH -> vm.onResearchChanged(value); CALCULATIONS -> vm.onCalculationsChanged(value); CONCLUSION -> vm.onConclusionChanged(value); ATTACHMENTS -> vm.onAttachmentsNoteChanged(value); CUSTOM -> Unit
+        PARTIES -> vm.onPartiesSummaryChanged(value); SUBJECT -> vm.onSubjectChanged(value); ASSIGNMENT -> vm.onAssignmentChanged(value); PROCEEDINGS -> vm.onProceedingsChanged(value); STATEMENTS -> vm.onPartyStatementsChanged(value); WITNESSES -> vm.onWitnessStatementsChanged(value); INSPECTION -> vm.onInspectionChanged(value); DOCUMENTS, PLAINTIFF_DOCUMENTS, DEFENDANT_DOCUMENTS -> vm.onDocumentsChanged(value); FACTS -> vm.onFactsChanged(value); RESEARCH -> vm.onResearchChanged(value); CALCULATIONS -> vm.onCalculationsChanged(value); CONCLUSION -> vm.onConclusionChanged(value); ATTACHMENTS -> vm.onAttachmentsNoteChanged(value); CUSTOM -> Unit
         }
     }
 }
@@ -1288,6 +1324,7 @@ private fun reportArabicLetter(index: Int): String {
 
 @Composable
 private fun ReportSectionField(
+    textFormat: ReportTextFormat,
     label: String,
     value: String,
     onChange: (String) -> Unit,
@@ -1364,6 +1401,7 @@ private fun ReportSectionField(
                 minLines = minLines,
                 maxLines = if (isExpanded) Int.MAX_VALUE else minLines,
                 visualTransformation = listIndentTransformation,
+                textStyle = reportEditorTextStyle(textFormat),
                 placeholder = { Text("اكتب هنا أو استخدم الكاميرا أو الإملاء الصوتي") }
             )
         }

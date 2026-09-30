@@ -6,6 +6,34 @@ import org.junit.Test
 
 class DocumentReviewParserTest {
     @Test
+    fun `three sources form one case with unique parties and complementary subject and mission`() {
+        val documents = DocumentReviewParser.parse("""
+            [[DOCUMENT 1]]
+            الصفحات: 1
+            نوع المستند: عريضة دعوى
+            الخصم: أحمد محمد علي | العنوان: أسوان | الصفة: مدعي | الدعوى: أصلية
+            موضوع الدعوى: المطالبة بملكية الأرض
+            [[END DOCUMENT]]
+            [[DOCUMENT 2]]
+            الصفحات: 2
+            نوع المستند: حكم تمهيدي
+            الدعوى رقم 105 لسنة 2025 مدني كلي أسوان
+            الخصم: أحمد محمد علي | العنوان: أسوان | الصفة: مدعي | الدعوى: أصلية
+            مأمورية الحكم التمهيدي: معاينة الأرض
+            [[END DOCUMENT]]
+            [[DOCUMENT 3]]
+            الصفحات: 3
+            نوع المستند: مستند إضافي
+            الخصم: أحمد محمد علي | العنوان: أسوان | الصفة: مدعي | الدعوى: أصلية
+            [[END DOCUMENT]]
+        """.trimIndent())
+        val combined = DocumentReviewParser.combinedText(documents)
+        assertTrue(combined.contains("رقم الدعوى: 105"))
+        assertTrue(combined.contains("المطالبة بملكية الأرض"))
+        assertTrue(combined.contains("معاينة الأرض"))
+        assertEquals(1, Regex("الخصم: أحمد محمد علي").findAll(combined).count())
+    }
+    @Test
     fun `matches petition and judgment and isolates different judgment`() {
         val documents = DocumentReviewParser.parse(
             """
