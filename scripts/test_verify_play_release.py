@@ -23,7 +23,7 @@ def manifest_with_reviewed_exported_components():
     )
 
 
-def manifest_xml(package="com.khabir.app.combined", version_code="105", version_name="0.9.14",
+def manifest_xml(package="com.khabir.app.combined", version_code="106", version_name="0.9.15",
                  target="36", label="سجل الخبير", extra_permission=""):
     extra = f'<uses-permission android:name="{extra_permission}" />' if extra_permission else ""
     return f'''<?xml version="1.0" encoding="utf-8"?>
