@@ -49,7 +49,15 @@ internal fun ReportDocumentRequestDialog(pages: List<File>, busy: Boolean, error
                                     DropdownMenu(expanded = groupMenu, onDismissRequest = { groupMenu = false }) {
                                         pages.indices.forEach { group ->
                                             DropdownMenuItem(text = { Text("المجموعة ${group + 1}") }, onClick = {
-                                                groupIds = groupIds.toMutableList().also { it[index] = group }
+                                                val next = reassignReportPageGroup(
+                                                    ReportPageGroupingState(groupIds, requests, tasks, destinations),
+                                                    index,
+                                                    group
+                                                )
+                                                groupIds = next.groupIds
+                                                requests = next.instructions
+                                                tasks = next.tasks
+                                                destinations = next.destinations
                                                 groupMenu = false
                                             })
                                         }
