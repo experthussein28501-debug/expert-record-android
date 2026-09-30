@@ -99,4 +99,42 @@ class ReportDocumentRequestTest {
         assertEquals(ReportReviewDestination.CONCLUSION, defaultReviewDestination(ReportDocumentTask.CONCLUSION))
     }
 
+
+    @Test
+    fun earlierPageJoiningExistingGroupKeepsExistingGroupConfiguration() {
+        val state = ReportPageGroupingState(
+            groupIds = listOf(0, 1, 2),
+            instructions = listOf("ملخص", "استخرج المأمورية", "نتيجة"),
+            tasks = listOf(ReportDocumentTask.SUMMARY, ReportDocumentTask.ASSIGNMENT, ReportDocumentTask.CONCLUSION),
+            destinations = listOf("DOCUMENTS", "ASSIGNMENT", "CONCLUSION")
+        )
+
+        val moved = reassignReportPageGroup(state, pageIndex = 0, newGroupId = 1)
+
+        assertEquals(listOf(1, 1, 2), moved.groupIds)
+        assertEquals("استخرج المأمورية", moved.instructions[0])
+        assertEquals(ReportDocumentTask.ASSIGNMENT, moved.tasks[0])
+        assertEquals("ASSIGNMENT", moved.destinations[0])
+    }
+
+    @Test
+    fun movingGroupLeaderPreservesOldGroupConfigurationOnReplacementLeader() {
+        val state = ReportPageGroupingState(
+            groupIds = listOf(0, 0, 2),
+            instructions = listOf("موضوع", "", "نتيجة"),
+            tasks = listOf(ReportDocumentTask.SUBJECT, ReportDocumentTask.CUSTOM, ReportDocumentTask.CONCLUSION),
+            destinations = listOf("SUBJECT", "DOCUMENTS", "CONCLUSION")
+        )
+
+        val moved = reassignReportPageGroup(state, pageIndex = 0, newGroupId = 2)
+
+        assertEquals(listOf(2, 0, 2), moved.groupIds)
+        assertEquals("موضوع", moved.instructions[1])
+        assertEquals(ReportDocumentTask.SUBJECT, moved.tasks[1])
+        assertEquals("SUBJECT", moved.destinations[1])
+        assertEquals("نتيجة", moved.instructions[0])
+        assertEquals(ReportDocumentTask.CONCLUSION, moved.tasks[0])
+        assertEquals("CONCLUSION", moved.destinations[0])
+    }
+
 }
