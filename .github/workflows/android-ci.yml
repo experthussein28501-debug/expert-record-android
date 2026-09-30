@@ -166,7 +166,7 @@ jobs:
 
       - name: Export exact source and evidence
         run: |
-          git archive --format=zip --prefix=expert-record-0.9.14/ --output=expert-record-0.9.14-source.zip HEAD
+          git archive --format=zip --prefix=expert-record-0.9.15/ --output=expert-record-0.9.15-source.zip HEAD
           cp /tmp/khabir-manifest.xml release-manifest.xml
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$(find app/build/outputs/apk/combined/hardened -name '*.apk' | head -n 1)" > signing-fingerprint.txt
 
@@ -176,15 +176,15 @@ jobs:
           set -euo pipefail
           APK="$(find app/build/outputs/apk -type f -name '*.apk' | head -n 1)"
           test -n "$APK"
-          cp "$APK" expert-record-0.9.14-hardened.apk
+          cp "$APK" expert-record-0.9.15-hardened.apk
 
       - name: Upload APK for chat transfer
         uses: actions/upload-artifact@v4
         with:
           name: expert-record-chat-download
           path: |
-            expert-record-0.9.14-hardened.apk
-            expert-record-0.9.14-source.zip
+            expert-record-0.9.15-hardened.apk
+            expert-record-0.9.15-source.zip
             release-manifest.xml
             signing-fingerprint.txt
           if-no-files-found: error
