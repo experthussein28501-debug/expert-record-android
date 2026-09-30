@@ -51,8 +51,8 @@ class AgendaStore @Inject constructor(@ApplicationContext context: Context) {
 }
 
 /**
- * ترميز مستقل قابل للاختبار. العمود الخامس أضيف للمواعيد اليدوية فقط؛
- * السجلات القديمة ذات 4 أعمدة تظل قابلة للقراءة كما هي.
+ * ترميز مستقل قابل للاختبار. العمود الخامس للمواعيد اليدوية والسادس
+ * للمواعيد المستوردة المخفية؛ السجلات القديمة ذات 4 أو 5 أعمدة تظل قابلة للقراءة.
  */
 internal object AgendaDayCodec {
     fun encode(record: AgendaDayNote): String = listOf(
@@ -143,8 +143,19 @@ internal object AgendaDayCodec {
                 runCatching { unb64(encoded) }.getOrNull()?.takeIf(String::isNotBlank)
             }.toSet()
         } else {
-            // Backward compatibility with 0.9.14 preview records.
-            spec.split("\n").filter(String::isNotBlank).toSet()
+            // Backward compatibility with early 0.9.14 preview records where
+            // raw keys were joined by newlines. Details themselves may contain
+            // newlines, so continuation lines are reattached to the preceding key.
+            val rebuilt = mutableListOf<String>()
+            spec.split("\n").forEach { line ->
+                if (line.isBlank()) return@forEach
+                if (line.count { it == '\u001f' } >= 5 || rebuilt.isEmpty()) {
+                    rebuilt += line
+                } else {
+                    rebuilt[rebuilt.lastIndex] = rebuilt.last() + "\n" + line
+                }
+            }
+            rebuilt.filter(String::isNotBlank).toSet()
         }
     }
 
