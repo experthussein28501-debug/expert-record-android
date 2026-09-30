@@ -95,6 +95,8 @@ jobs:
           mkdir -p document-evidence
           libreoffice -env:UserInstallation=file:///tmp/expert-word-render --headless --convert-to pdf --outdir document-evidence core/build/visual-evidence/work-minutes-long.docx
           libreoffice -env:UserInstallation=file:///tmp/expert-report-render --headless --convert-to pdf --outdir document-evidence core/build/report-fixtures/civil-report-rtl.docx core/build/report-fixtures/formatted-report.docx core/build/notice-fixtures/ordinary-notices.docx
+          NOTICE_PAGES="$(pdfinfo document-evidence/ordinary-notices.pdf | awk '/^Pages:/ {print $2}')"
+          test "$NOTICE_PAGES" = "1"
           for pdf in document-evidence/*.pdf; do pdftoppm -scale-to 1400 -png "$pdf" "${pdf%.pdf}"; done
       - name: Upload functional and document evidence
         if: always()
