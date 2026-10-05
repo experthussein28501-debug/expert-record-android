@@ -1028,7 +1028,7 @@ private fun CaptureReviewDialog(
         Column(Modifier.heightIn(max = 450.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("اختر القسم ثم راجع أو عدّل النص قبل اعتماده")
             KhabirCard(contentPadding = PaddingValues(8.dp), containerColor = MaterialTheme.colorScheme.primaryContainer) {
-                Text("سيتم الإدراج في: ${if(review.examination!=null && chosenTarget==ReportCaptureField.DOCUMENTS) examSide.label(viewModel.documentCaseType()) else chosenTarget.displayLabel(viewModel.documentCaseType())}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                Text("سيتم الإدراج في: ${chosenTarget.displayLabel(viewModel.documentCaseType())}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
             }
             Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(replaceExisting, { replaceExisting = it }); Text("استبدال النص القديم بالكامل (بدل الإضافة)") }
             ReportCaptureField.entries.filter { it != ReportCaptureField.CUSTOM || captureCustomSectionId != null }.forEach { field -> FilterChip(selected = chosenTarget == field, onClick = { chosenTarget = field }, label = { Text(field.displayLabel(viewModel.documentCaseType())) }) }
