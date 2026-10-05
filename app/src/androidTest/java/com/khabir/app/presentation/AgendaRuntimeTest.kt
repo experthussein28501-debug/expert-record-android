@@ -21,9 +21,11 @@ class AgendaRuntimeTest {
         compose.onNodeWithText("كود التفعيل").assertDoesNotExist()
         snapshot("01-login")
         // Exercise the editor directly: this test does not authenticate or bypass the production gate.
-        compose.activity.setContent {
-            com.khabir.app.presentation.theme.KhabirTheme {
-                com.khabir.agenda.AgendaScreen(onBack = {})
+        compose.activityRule.scenario.onActivity { activity ->
+            activity.setContent {
+                com.khabir.app.presentation.theme.KhabirTheme {
+                    com.khabir.agenda.AgendaScreen(onBack = {})
+                }
             }
         }
         compose.onNodeWithContentDescription("اليوم").performClick()
@@ -33,9 +35,11 @@ class AgendaRuntimeTest {
         compose.onNodeWithTag("agenda-save").assertIsDisplayed()
         snapshot("03-agenda-keyboard")
         compose.activityRule.scenario.recreate()
-        compose.activity.setContent {
-            com.khabir.app.presentation.theme.KhabirTheme {
-                com.khabir.agenda.AgendaScreen(onBack = {})
+        compose.activityRule.scenario.onActivity { activity ->
+            activity.setContent {
+                com.khabir.app.presentation.theme.KhabirTheme {
+                    com.khabir.agenda.AgendaScreen(onBack = {})
+                }
             }
         }
         compose.onNodeWithTag("agenda-ruled-editor").assertTextContains("مراجعة المستندات", substring = true)
