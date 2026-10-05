@@ -1,0 +1,10 @@
+test_core_does_not_depend_on_features (__main__.ModuleBoundaries.test_core_does_not_depend_on_features) ... ok
+test_features_only_depend_on_core (__main__.ModuleBoundaries.test_features_only_depend_on_core) ... ok
+test_no_sibling_ui_imports (__main__.ModuleBoundaries.test_no_sibling_ui_imports) ... ok
+test_notification_app_excludes_other_feature_modules (__main__.ModuleBoundaries.test_notification_app_excludes_other_feature_modules) ... ok
+test_report_app_excludes_other_feature_modules (__main__.ModuleBoundaries.test_report_app_excludes_other_feature_modules) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.007s
+
+OK

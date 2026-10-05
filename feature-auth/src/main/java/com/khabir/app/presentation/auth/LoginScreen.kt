@@ -32,11 +32,13 @@ import kotlinx.coroutines.tasks.await
 private val LoginGold = Color(0xFFD6B45A)
 
 @Composable
-fun LoginScreen(logoRes: Int, onGoogleSuccess: () -> Unit, onPreview: (() -> Unit)? = null) {
+fun LoginScreen(logoRes: Int, onGoogleSuccess: () -> Unit, onGuestTrial: (() -> Unit)? = null,
+    trialExpired: Boolean = false, onReturnToTrial: (() -> Unit)? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var message by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    var confirmTrial by remember { mutableStateOf(false) }
     Column(
         Modifier.fillMaxSize().background(Color.Black).safeDrawingPadding().imePadding()
             .verticalScroll(rememberScrollState()).padding(28.dp),
@@ -68,11 +70,18 @@ fun LoginScreen(logoRes: Int, onGoogleSuccess: () -> Unit, onPreview: (() -> Uni
             else Text("تسجيل الدخول باستخدام Google", fontWeight = FontWeight.Medium)
         }
         message?.let { Text(it, color = Color(0xFFFFB4AB), modifier = Modifier.padding(top = 16.dp)) }
-        InlineHelp("تسجيل الدخول", "اختر حساب Google لحفظ حالة اشتراكك ومكافآتك. المستندات تبقى على جهازك، ولا يرفعها تسجيل الدخول.")
-        onPreview?.let { action ->
-            TextButton(onClick = action, enabled = !busy) { Text("فتح النسخة التجريبية", color = LoginGold) }
+        InlineHelp("تسجيل الدخول", "سجل بحساب Google للاستمرار. بيانات العمل تبقى على الجهاز؛ تسجيل الدخول وحده لا ينشئ نسخة سحابية منها.")
+        if (trialExpired) Text("انتهت تجربة الأسبوع وحُجبت بياناتها. سجل الدخول بحساب Google للاستمرار.", color = LoginGold)
+        onGuestTrial?.let {
+            TextButton(onClick = { confirmTrial = true }, enabled = !busy) { Text("تجربة بدون حساب — ٧ أيام", color = LoginGold) }
         }
+        onReturnToTrial?.let { action -> TextButton(onClick = action) { Text("العودة للتجربة الحالية", color = LoginGold) } }
     }
+    if (confirmTrial) AlertDialog(onDismissRequest = { confirmTrial = false },
+        title = { Text("تجربة مؤقتة لمدة أسبوع") },
+        text = { Text("ستُحذف بيانات الخبير والقضايا والتقارير والمحاضر والأجندة ومرفقات التجربة من التطبيق بعد ٧ أيام. بعدها يلزم تسجيل Google وإدخال بيانات العمل من جديد. التجربة لا تتكرر على هذا التثبيت، ولا تنتقل بياناتها تلقائيًا للحساب. الملفات التي تصدّرها خارج التطبيق تبقى عندك.") },
+        confirmButton = { Button(onClick = { confirmTrial = false; onGuestTrial?.invoke() }) { Text("أوافق — ابدأ التجربة") } },
+        dismissButton = { TextButton(onClick = { confirmTrial = false }) { Text("إلغاء") } })
 }
 
 internal fun isGoogleSignInConfigured(googleWebClientId: String, firebaseApiKey: String, firebaseAppId: String, firebaseProjectId: String): Boolean =
@@ -87,4 +96,6 @@ private suspend fun signInWithGoogle(context: Context) {
     require(credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL)
     val token = GoogleIdTokenCredential.createFrom(credential.data).idToken
     auth.signInWithCredential(GoogleAuthProvider.getCredential(token, null)).await()
+    val user = auth.currentUser
+    check(com.khabir.app.data.auth.GoogleAccountGate.allows(user != null, user?.isAnonymous != false, user?.providerData?.map { it.providerId }.orEmpty()))
 }

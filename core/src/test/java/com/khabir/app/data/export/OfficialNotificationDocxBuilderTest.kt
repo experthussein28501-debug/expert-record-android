@@ -40,12 +40,13 @@ class OfficialNotificationDocxBuilderTest {
         assertTrue(xml.replace(Regex("<[^>]+>"), "").contains("الدعوى رقم ١٠٥ لسنة ٢٠٢٥"))
         assertTrue(xml.contains("في حالة عدم حضوركم سيتم مباشرة المأمورية غيابياً"))
         assertTrue(xml.contains("w:jc w:val=\"right\""))
-        assertTrue(xml.contains("w:sz w:val=\"22\""))
-        assertTrue(xml.contains("w:line=\"220\""))
+        assertTrue(xml.contains("w:sz w:val=\"26\""))
+        assertTrue(xml.contains("w:line=\"240\""))
         assertTrue(xml.contains("w:u w:val=\"single\""))
         // Main 2x2 sheet plus the eight header/footer tables must all use visual RTL.
         assertEquals(9, Regex("<w:bidiVisual/>").findAll(xml).count())
         assertFalse(xml.contains("w:textDirection"))
+        assertFalse(xml.contains("w:hRule=\"exact\""))
         listOf("١", "٢", "٣", "٤").forEach { assertTrue(xml.contains(">$it<")) }
         assertFalse(xml.contains("w:type=\"page\""))
         assertFalse(xml.contains("${'$'}{card"))

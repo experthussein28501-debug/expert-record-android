@@ -65,6 +65,7 @@ jobs:
           ORG_GRADLE_PROJECT_KHABIR_ADMOB_INTERSTITIAL_ID: ${{ secrets.KHABIR_ADMOB_INTERSTITIAL_ID }}
           ORG_GRADLE_PROJECT_KHABIR_ADMOB_REWARDED_ID: ${{ secrets.KHABIR_ADMOB_REWARDED_ID }}
         run: |
+          python3 scripts/verify_release_config.py
           ./gradlew --no-daemon             :app:lintCombinedRelease             :app:assembleCombinedRelease             :app:bundleCombinedRelease
 
       - name: Verify release binary and certificate

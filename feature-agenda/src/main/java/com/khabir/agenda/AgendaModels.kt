@@ -29,6 +29,7 @@ data class AgendaDayNote(
     val strokes: List<AgendaStroke> = emptyList(),
     val imagePaths: List<String> = emptyList(),
     val manualAppointments: List<AgendaManualAppointment> = emptyList(),
+    val hiddenImportedKeys: Set<String> = emptySet(),
     val updatedAt: Long = System.currentTimeMillis()
 )
 
@@ -38,8 +39,18 @@ data class AgendaEvent(
     val time: String = "",
     val location: String = "",
     val details: String = "",
-    val source: AgendaEventSource
+    val source: AgendaEventSource,
+    val sourceId: String = ""
 )
+
+internal fun AgendaEvent.importKey(): String = if(sourceId.isNotBlank()) "source:$sourceId" else legacyImportKey()
+internal fun AgendaEvent.isHidden(keys:Collection<String>):Boolean = importKey() in keys || legacyImportKey() in keys
+internal fun AgendaEvent.legacyImportKey(): String = listOf(source.name, date.toString(), title, time, location, details).joinToString("\u001f")
+
+internal fun AgendaEvent.toAgendaNoteText(): String = listOf(
+    title, time.takeIf(String::isNotBlank)?.let { "الساعة: $it" },
+    location.takeIf(String::isNotBlank)?.let { "المكان: $it" }, details
+).filterNotNull().filter(String::isNotBlank).joinToString("\n")
 
 data class AgendaHoliday(val date: LocalDate, val name: String)
 
@@ -47,5 +58,6 @@ data class AgendaDaySummary(
     val date: LocalDate,
     val holiday: AgendaHoliday? = null,
     val events: List<AgendaEvent> = emptyList(),
-    val note: AgendaDayNote? = null
+    val note: AgendaDayNote? = null,
+    val hiddenEvents: List<AgendaEvent> = emptyList()
 )

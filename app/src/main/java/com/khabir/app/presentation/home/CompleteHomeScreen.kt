@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mail
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.TableChart
@@ -45,7 +46,6 @@ fun CompleteHomeScreen(
     onOpenReports: () -> Unit,
     onOpenRegisters: () -> Unit,
     onOpenWorkMinutes: () -> Unit,
-    onOpenBenefits: () -> Unit,
     onOpenAgenda: () -> Unit,
     onOpenExpertProfile: () -> Unit,
     onOpenBackup: () -> Unit,
@@ -93,7 +93,7 @@ fun CompleteHomeScreen(
                 HomeModuleCard("بيانات الخبير", "بيانات المكتب والذكاء الاصطناعي", Icons.Filled.Person, onOpenExpertProfile, Modifier.weight(1f))
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                HomeModuleCard("الاشتراك والمكافآت", "الوقت بدون إعلانات وخطط الاشتراك", Icons.Filled.Person, onOpenBenefits, Modifier.weight(1f))
+                HomeModuleCard("المهام", "غير مفعلة حاليًا", Icons.Filled.Lock, {}, Modifier.weight(1f), enabled = false)
                 HomeModuleCard("النسخ الاحتياطي", "نسخة مشفرة واستعادة", Icons.Filled.Backup, onOpenBackup, Modifier.weight(1f))
             }
 

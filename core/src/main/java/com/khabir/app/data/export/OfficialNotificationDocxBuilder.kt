@@ -60,7 +60,7 @@ class OfficialNotificationDocxBuilder {
         "<w:tbl><w:tblPr><w:tblW w:w=\"16320\" w:type=\"dxa\"/><w:tblLayout w:type=\"fixed\"/><w:bidiVisual/><w:jc w:val=\"right\"/><w:tblBorders><w:top w:val=\"single\" w:sz=\"8\" w:color=\"000000\"/><w:left w:val=\"single\" w:sz=\"8\" w:color=\"000000\"/><w:bottom w:val=\"single\" w:sz=\"8\" w:color=\"000000\"/><w:right w:val=\"single\" w:sz=\"8\" w:color=\"000000\"/><w:insideH w:val=\"single\" w:sz=\"8\" w:color=\"000000\"/><w:insideV w:val=\"single\" w:sz=\"8\" w:color=\"000000\"/></w:tblBorders></w:tblPr><w:tblGrid><w:gridCol w:w=\"8160\"/><w:gridCol w:w=\"8160\"/></w:tblGrid>${row(cards[0], cards[1], startIndex + 1, startIndex + 2)}${row(cards[2], cards[3], startIndex + 3, startIndex + 4)}</w:tbl>"
 
     private fun row(left: OfficialNotificationCard?, right: OfficialNotificationCard?, leftNumber: Int, rightNumber: Int): String =
-        "<w:tr><w:trPr><w:trHeight w:val=\"5600\" w:hRule=\"exact\"/><w:cantSplit/></w:trPr>${cell(left, leftNumber)}${cell(right, rightNumber)}</w:tr>"
+        "<w:tr><w:trPr><w:trHeight w:val=\"5600\" w:hRule=\"atLeast\"/><w:cantSplit/></w:trPr>${cell(left, leftNumber)}${cell(right, rightNumber)}</w:tr>"
 
     private fun cell(card: OfficialNotificationCard?, number: Int): String {
         if (card == null) return "<w:tc><w:tcPr><w:tcW w:w=\"8160\" w:type=\"dxa\"/><w:vAlign w:val=\"top\"/></w:tcPr><w:p><w:pPr><w:bidi/><w:jc w:val=\"right\"/></w:pPr></w:p></w:tc>"
@@ -104,7 +104,7 @@ class OfficialNotificationDocxBuilder {
             append(twoColumnFooter(card.issueDate))
             append("<w:p/>")
         }
-        return "<w:tbl><w:tblPr><w:tblW w:w=\"16320\" w:type=\"dxa\"/><w:tblLayout w:type=\"fixed\"/><w:bidiVisual/><w:tblBorders><w:top w:val=\"single\" w:sz=\"8\"/><w:left w:val=\"single\" w:sz=\"8\"/><w:bottom w:val=\"single\" w:sz=\"8\"/><w:right w:val=\"single\" w:sz=\"8\"/></w:tblBorders></w:tblPr><w:tblGrid><w:gridCol w:w=\"8160\"/><w:gridCol w:w=\"8160\"/></w:tblGrid><w:tr><w:trPr><w:trHeight w:val=\"11200\" w:hRule=\"exact\"/></w:trPr><w:tc><w:tcPr><w:tcW w:w=\"8160\" w:type=\"dxa\"/></w:tcPr>" + content + "</w:tc><w:tc><w:tcPr><w:tcW w:w=\"8160\" w:type=\"dxa\"/></w:tcPr><w:p/></w:tc></w:tr></w:tbl>"
+        return "<w:tbl><w:tblPr><w:tblW w:w=\"16320\" w:type=\"dxa\"/><w:tblLayout w:type=\"fixed\"/><w:bidiVisual/><w:tblBorders><w:top w:val=\"single\" w:sz=\"8\"/><w:left w:val=\"single\" w:sz=\"8\"/><w:bottom w:val=\"single\" w:sz=\"8\"/><w:right w:val=\"single\" w:sz=\"8\"/></w:tblBorders></w:tblPr><w:tblGrid><w:gridCol w:w=\"8160\"/><w:gridCol w:w=\"8160\"/></w:tblGrid><w:tr><w:trPr><w:trHeight w:val=\"11200\" w:hRule=\"atLeast\"/></w:trPr><w:tc><w:tcPr><w:tcW w:w=\"8160\" w:type=\"dxa\"/></w:tcPr>" + content + "</w:tc><w:tc><w:tcPr><w:tcW w:w=\"8160\" w:type=\"dxa\"/></w:tcPr><w:p/></w:tc></w:tr></w:tbl>"
     }
 
     private fun cardHeader(card: OfficialNotificationCard): String {
@@ -143,9 +143,10 @@ class OfficialNotificationDocxBuilder {
     private fun line(text: String, bold: Boolean = false, size: Int = 18, underline: Boolean = false): String = paragraph(text, "start", bold, size, underline)
 
     private fun paragraph(text: String, align: String, bold: Boolean, size: Int, underline: Boolean): String {
-        val b = if (bold) "<w:b/>" else ""
+        val displaySize = size + 4
+        val b = if (bold) "<w:b/><w:bCs/>" else ""
         val u = if (underline) "<w:u w:val=\"single\"/>" else ""
-        return "<w:p><w:pPr><w:bidi/><w:jc w:val=\"$align\"/><w:spacing w:before=\"0\" w:after=\"0\" w:line=\"220\" w:lineRule=\"auto\"/></w:pPr><w:r><w:rPr><w:rtl/><w:lang w:val=\"ar-EG\" w:bidi=\"ar-EG\"/><w:rFonts w:ascii=\"Arial\" w:hAnsi=\"Arial\" w:cs=\"Arial\"/>$b$u<w:sz w:val=\"$size\"/><w:szCs w:val=\"$size\"/></w:rPr><w:t xml:space=\"preserve\">${escape(arabicDigits(text))}</w:t></w:r></w:p>"
+        return "<w:p><w:pPr><w:bidi/><w:jc w:val=\"$align\"/><w:spacing w:before=\"0\" w:after=\"0\" w:line=\"240\" w:lineRule=\"auto\"/></w:pPr><w:r><w:rPr><w:rtl/><w:lang w:val=\"ar-EG\" w:bidi=\"ar-EG\"/><w:rFonts w:ascii=\"Arial\" w:hAnsi=\"Arial\" w:cs=\"Arial\"/>$b$u<w:sz w:val=\"$displaySize\"/><w:szCs w:val=\"$displaySize\"/></w:rPr><w:t xml:space=\"preserve\">${escape(arabicDigits(text))}</w:t></w:r></w:p>"
     }
 
     private fun arabicDigits(text: String): String = buildString(text.length) {

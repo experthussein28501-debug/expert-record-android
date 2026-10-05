@@ -3,8 +3,8 @@
 ## هوية نسخة Play الحالية
 
 - الحزمة: `com.khabir.app.combined`
-- Version Name: `1.0.0`
-- Version Code: `101`
+- Version Name: `0.9.17`
+- Version Code: `107`
 - Min SDK: 26
 - Target SDK: 36
 - صيغة النشر: Android App Bundle (AAB)
@@ -13,7 +13,9 @@
 - Debuggable: مغلق
 - Android Backup: مغلق
 - Cleartext HTTP: مغلق
-- 16KB native page alignment: مفحوص آليًا
+- 16KB native page alignment: بوابة تحقق آلية مطلوبة قبل التسليم
+
+> حالة 0.9.17: هذه إعدادات ومتطلبات الفحص، وليست شهادة بنجاح البناء. نسخة Preview منفصلة عن نسخة Play؛ يلزم توقيع إنتاج ثابت وإعداد الخدمات والروابط الحقيقية قبل إصدار AAB صالح للنشر.
 
 ## ما يفحصه CI قبل السماح بالنسخة
 

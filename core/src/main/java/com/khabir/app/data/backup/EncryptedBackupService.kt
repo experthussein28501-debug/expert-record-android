@@ -125,6 +125,8 @@ class EncryptedBackupService @Inject constructor(
             }
             zip.putText("manifest.txt", manifest)
             zip.putFile("database/${AppDatabase.DB_NAME}", databaseFile)
+            zip.putDirectory("files/case-source-pages", File(context.filesDir,"case-source-pages"))
+            zip.putDirectory("files/report-source-pages", File(context.filesDir,"report-source-pages"))
             zip.putDirectory("files/report_sketches", File(context.filesDir, "report_sketches"))
             zip.putDirectory("files/report_sketch_drafts", File(context.filesDir, "report_sketch_drafts"))
             zip.putText("settings/portable.txt", portableSettings())
@@ -139,6 +141,7 @@ class EncryptedBackupService @Inject constructor(
             appendLine("provider=${personalAiKeyStore.readProvider().name}")
             appendLine("instructions=${packed(personalAiKeyStore.readInstructions())}")
             appendLine("style=${packed(personalAiKeyStore.readReportStyleMemory())}")
+            appendLine("styleHistory=${packed(com.khabir.app.domain.model.ApprovedStyleRules.encode(personalAiKeyStore.readReportStyleHistory()))}")
         }
     }
 
@@ -153,7 +156,7 @@ class EncryptedBackupService @Inject constructor(
                 val safeName = entry.name.replace('\\', '/')
                 val allowed = safeName == "manifest.txt" || safeName == "settings/portable.txt" || safeName == "settings/agenda.json" || safeName.startsWith("files/agenda-media/") ||
                     safeName == "database/${AppDatabase.DB_NAME}" ||
-                    safeName.startsWith("files/report_sketches/") || safeName.startsWith("files/report_sketch_drafts/")
+                    safeName.startsWith("files/report-source-pages/") || safeName.startsWith("files/case-source-pages/") || safeName.startsWith("files/report_sketches/") || safeName.startsWith("files/report_sketch_drafts/")
                 if (!allowed || safeName.contains("../")) {
                     throw IllegalArgumentException("ملف أو مسار غير مسموح داخل النسخة")
                 }
@@ -230,6 +233,10 @@ object PendingBackupRestore {
             val temporary = File(targetDb.parentFile, targetDb.name + ".restore")
             sourceDb.copyTo(temporary, overwrite = true)
             java.nio.file.Files.move(temporary.toPath(), targetDb.toPath(), java.nio.file.StandardCopyOption.ATOMIC_MOVE, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            if (File(staging,"files/case-source-pages").exists()) replaceDirectory(File(staging,"files/case-source-pages"),File(context.filesDir,"case-source-pages"))
+            else File(context.filesDir,"case-source-pages").deleteRecursively()
+            if (File(staging,"files/report-source-pages").exists()) replaceDirectory(File(staging,"files/report-source-pages"),File(context.filesDir,"report-source-pages"))
+            else File(context.filesDir,"report-source-pages").deleteRecursively()
             replaceDirectory(File(staging, "files/report_sketches"), File(context.filesDir, "report_sketches"))
             replaceDirectory(File(staging, "files/report_sketch_drafts"), File(context.filesDir, "report_sketch_drafts"))
             restorePortableSettings(context, File(staging, "settings/portable.txt"))
@@ -280,6 +287,7 @@ object PendingBackupRestore {
             .putString("personal_ai_provider", values["provider"] ?: "GEMINI")
             .putString("personal_ai_instructions", unpack("instructions"))
             .putString("approved_style_rules_v2", unpack("style"))
+            .putString("approved_style_history_v3",unpack("styleHistory"))
             .apply()
     }
 }

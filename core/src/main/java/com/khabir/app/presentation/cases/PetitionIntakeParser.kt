@@ -31,7 +31,9 @@ object PetitionIntakeParser {
         val preliminaryMission: String? = null,
         val parties: List<ParsedParty> = emptyList(),
         val lawyerContact: String? = null,
-        val notes: String? = null
+        val notes: String? = null,
+        val subjectWarnings: List<String> = emptyList(),
+        val sourceAudit: String = ""
     )
 
     private data class CaseHeading(
@@ -67,21 +69,14 @@ object PetitionIntakeParser {
         val incomingDate = captureDate(text, "تاريخ الوارد", "تاريخ الإحالة", "تاريخ الاحالة", "أحيلت بتاريخ", "احيلت بتاريخ")
         val receiptDate = captureDate(text, "تاريخ الاستلام", "استلمت بتاريخ", "تاريخ استلام", "تاريخ استلام القضية")
         val preliminaryDate = captureDate(text, "تاريخ الحكم التمهيدي", "الحكم التمهيدي بتاريخ", "جلسة الحكم التمهيدي", "حكم الإحالة بجلسة", "بجلسة")
-        val subjectOfCase = captureLegalSection(
-            text = text,
-            starts = listOf("موضوع الدعوى", "موضوع القضية", "الموضوع", "وأعلنته بالآتي", "واعلنته بالاتي"),
-            stops = listOf("الطلبات الختامية", "الطلبات", "بناء عليه", "بناءً عليه", "المأمورية", "مأمورية الحكم التمهيدي")
-        )
-        val finalRequests = captureLegalSection(
-            text = text,
-            starts = listOf("الطلبات الختامية", "الطلبات", "لذلك يلتمس", "بناء عليه", "بناءً عليه"),
-            stops = listOf("مأمورية الحكم التمهيدي", "المأمورية", "وتفضلوا", "تحريراً", "تحريرا")
-        )
+        val subjectParts = com.khabir.app.domain.model.PetitionSubjectExtraction.extract(raw)
+        val subjectOfCase = subjectParts.explanation.takeIf(String::isNotBlank)
+        val finalRequests = subjectParts.requests.takeIf(String::isNotBlank)
         val preliminaryMission = captureLegalSection(
-            text = text,
+            text = raw.replace("\r\n","\n"),
             starts = listOf("مأمورية الحكم التمهيدي", "المأمورية", "تكون مهمته", "تكون مهمتها"),
             stops = listOf("مباشرة المأمورية", "النتيجة النهائية")
-        )?.let { if (it.startsWith("يقضي حكم الإحالة") || it.startsWith("قضى حكم الإحالة")) it else IntakeNarrative.missionBody(it) ?: it } ?: IntakeNarrative.missionBody(text) ?: captureJudgmentMission(text)
+        )?.let { if (it.startsWith("يقضي حكم الإحالة") || it.startsWith("قضى حكم الإحالة")) it else IntakeNarrative.missionBody(it) ?: it } ?: IntakeNarrative.missionBody(raw) ?: captureJudgmentMission(raw)
 
         val plaintiffLabels = listOf(
             "المرفوعة من", "المرفوعه من", "المقامة من", "المقامه من", "مقامة من", "مرفوعة من",
@@ -146,7 +141,9 @@ object PetitionIntakeParser {
             preliminaryMission = preliminaryMission,
             parties = parties,
             lawyerContact = lawyerContact ?: captureValue(text, "مخاطبة المحامي"),
-            notes = captureValue(text, "ملاحظات", "ملاحظة")?.cleanField()
+            notes = captureValue(text, "ملاحظات", "ملاحظة")?.cleanField(),
+            subjectWarnings = subjectParts.warnings,
+            sourceAudit = captureValue(raw, com.khabir.app.domain.model.LegalSourceAudit.LABEL).orEmpty()
         )
     }
 
@@ -314,7 +311,7 @@ object PetitionIntakeParser {
             .find(text) ?: return null
         val tail = text.substring(start.range.last + 1)
         if (tail.isBlank()) return null
-        val stopPattern = (stops + listOf("الخصم:", "المدعي:", "المدعى عليه:", "ملاحظات:", "مخاطبة المحامي:", "تاريخ الحكم التمهيدي:", "رقم الدعوى:", "نوع المستند:", "دليل إعادة الدعوى:", "دليل التقرير السابق:", "دليل تداول الدعوى:")).joinToString("|") { Regex.escape(it) }
+        val stopPattern = (stops + listOf("الخصم:", "المدعي:", "المدعى عليه:", "ملاحظات:", "مخاطبة المحامي:", "تاريخ الحكم التمهيدي:", "رقم الدعوى:", "نوع المستند:", "دليل إعادة الدعوى:", "دليل التقرير السابق:", "دليل تداول الدعوى:", "مرجع المأمورية:", "مرجع الموضوع:", "مرجع الطلبات:", "سجل مصادر الاستخراج:", "تاريخ الإجراء:", "تاريخ الإعلان:", "تاريخ الحكم:", "منطوق الحكم:", "دليل الإحالة:")).joinToString("|") { Regex.escape(it) }
         val stop = Regex("(?:^|\\n)(?:$stopPattern)\\s*[:：/\\-]?", setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE))
             .find(tail)
         return (if (stop == null) tail else tail.substring(0, stop.range.first))

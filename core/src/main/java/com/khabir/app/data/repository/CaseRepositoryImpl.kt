@@ -16,9 +16,13 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import java.time.LocalDate
 import javax.inject.Inject
+import androidx.room.withTransaction
+import com.khabir.app.data.local.AppDatabase
+import com.khabir.app.domain.repository.WorkMinutesRepository
+import com.khabir.app.domain.model.AutomaticWorkMinutes
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class CaseRepositoryImpl @Inject constructor(private val caseDao: CaseDao, private val partyDao: PartyDao) : CaseRepository {
+class CaseRepositoryImpl @Inject constructor(private val caseDao: CaseDao, private val partyDao: PartyDao, private val database: AppDatabase, private val workMinutes: WorkMinutesRepository) : CaseRepository {
     override fun search(query: String): Flow<List<Case>> {
         val byFields = caseDao.search(query)
         val byPartyName = if (query.isBlank()) caseDao.search("") else caseDao.searchByPartyName(query)
@@ -38,7 +42,7 @@ class CaseRepositoryImpl @Inject constructor(private val caseDao: CaseDao, priva
         return entity.toDomain(partyDao.getForCase(caseId).map { it.toDomain() })
     }
 
-    override suspend fun save(case: Case): Long {
+    override suspend fun save(case: Case): Long = database.withTransaction {
         val now = System.currentTimeMillis()
         val caseId = if (case.id == 0L) caseDao.insert(case.toEntity(now, now)) else {
             val existing = caseDao.getById(case.id)
@@ -47,7 +51,10 @@ class CaseRepositoryImpl @Inject constructor(private val caseDao: CaseDao, priva
         }
         partyDao.deleteAllForCase(caseId)
         if (case.parties.isNotEmpty()) partyDao.insertAll(case.parties.mapIndexed { i, p -> p.toEntity(caseId, i) })
-        return caseId
+        val existingMinutes=workMinutes.getForCase(caseId)
+        val generated=AutomaticWorkMinutes.receipt(case.copy(id=caseId),existingMinutes)
+        if((existingMinutes!=null || generated.entries.isNotEmpty()) && generated!=existingMinutes) workMinutes.save(generated)
+        caseId
     }
 
     override suspend fun moveToTrash(caseId: Long) = caseDao.moveToTrash(caseId, System.currentTimeMillis())

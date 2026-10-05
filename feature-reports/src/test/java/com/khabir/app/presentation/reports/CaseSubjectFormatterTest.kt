@@ -17,7 +17,7 @@ class CaseSubjectFormatterTest {
     @Test
     fun `places final requests at start when selected`() {
         val result = CaseSubjectFormatter.format(extracted, FinalRequestsPlacement.START)
-        assertTrue(result.startsWith("أقام المدعي دعواه بموجب صحيفة أودعت قلم المحكمة ومعلنة قانونًا، وطلب في ختامها:"))
+        assertTrue(result.startsWith("أقام المدعي دعواه بموجب صحيفة معلنة قانونًا، وطلب في ختامها:"))
         assertTrue(result.indexOf("وطلب في ختامها:") < result.indexOf("وحيث قال شارحًا دعواه:"))
     }
 
@@ -80,9 +80,20 @@ class CaseSubjectFormatterTest {
     }
 
     @Test
-    fun `adds agreed closing phrase once`() {
+    fun `does not invent a closing fact absent from the source`() {
         val result = CaseSubjectFormatter.format(extracted)
-        assertEquals(1, Regex("مما حدا به إلى إقامة الدعوى الماثلة").findAll(result).count())
+        assertFalse(result.contains("مما حدا به إلى إقامة الدعوى الماثلة"))
     }
 
+
+    @Test fun `reviewed subject still honors the old placement setting`() {
+        val current=CaseSubjectFormatter.format(extracted)
+        val wrapped="موضوع الدعوى: $current\nالطلبات الختامية:\nمأمورية الحكم التمهيدي: المعاينة"
+        val result=CaseSubjectFormatter.format(wrapped,FinalRequestsPlacement.END)
+        assertTrue(result.indexOf("وحيث قال") < result.indexOf("طلب في ختامها"))
+    }
+    @Test fun `criminal reviewed subject does not acquire a civil opening`() {
+        val result=CaseSubjectFormatter.format("موضوع الدعوى: النيابة العامة ضد أحمد وآخرين\nالطلبات الختامية:")
+        assertEquals("النيابة العامة ضد أحمد وآخرين",result)
+    }
 }

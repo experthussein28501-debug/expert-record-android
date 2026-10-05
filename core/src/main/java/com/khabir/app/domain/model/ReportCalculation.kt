@@ -25,10 +25,12 @@ object ReportCalculationCodec {
             .filter { it.isNotBlank() }
             .mapIndexed { index, line ->
                 val parts = line.split(SEPARATOR)
-                val hasStoredId = parts.firstOrNull()?.toLongOrNull() != null
+                // Current rows have an ID plus five fields. Legacy rows have only
+                // five fields, and their label can itself be numeric (e.g. a year).
+                val hasStoredId = parts.size >= 6 && parts.firstOrNull()?.toLongOrNull() != null
                 val offset = if (hasStoredId) 1 else 0
                 ReportCalculationRow(
-                    id = parts.firstOrNull()?.toLongOrNull() ?: (System.nanoTime() + index),
+                    id = if (hasStoredId) parts.first().toLong() else (System.nanoTime() + index),
                     label = parts.getOrNull(offset).orEmpty(),
                     quantity = parts.getOrNull(offset + 1).orEmpty(),
                     unitValue = parts.getOrNull(offset + 2).orEmpty(),
@@ -78,4 +80,3 @@ object ReportCalculationCodec {
     private fun clean(value: String): String =
         value.replace("\t", " ").replace("\n", " ").replace("\r", " ")
 }
-

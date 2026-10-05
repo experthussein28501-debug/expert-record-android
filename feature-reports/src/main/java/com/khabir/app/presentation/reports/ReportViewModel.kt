@@ -35,6 +35,18 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.khabir.app.domain.model.ReportAiKind
+import com.khabir.app.domain.model.ReportAiWorkflow
+import com.khabir.app.domain.model.ReportAiProposal
+import com.khabir.app.domain.model.ReportListStyle
+import com.khabir.app.domain.model.ReportLists
+import com.khabir.app.domain.model.DocumentPartyLinks
+import com.khabir.app.domain.model.DocumentPartyLink
+import com.khabir.app.domain.model.DocumentExamination
+import com.khabir.app.domain.model.ExaminedDocument
+import com.khabir.app.domain.model.DocumentSide
+import com.khabir.app.domain.model.DocumentCopyKind
+import com.khabir.app.domain.model.ExamDocumentKind
 import java.time.LocalDate
 import java.io.File
 import javax.inject.Inject
@@ -43,7 +55,11 @@ data class ReportImageReview(
     val id: String,
     val text: String,
     val source: String,
-    val task: ReportDocumentTask
+    val task: ReportDocumentTask,
+    val destinationField: String? = null,
+    val customSectionId: String? = null,
+    val examination: ExaminedDocument? = null,
+    val pages: List<File> = emptyList()
 )
 
 data class ReportUiState(
@@ -52,6 +68,7 @@ data class ReportUiState(
     val caseNo: String = "",
     val caseYear: String = "",
     val court: String = "",
+    val documentCaseType: String = "",
     val manualHeader: String = "",
     val template: ReportTemplate = ReportTemplateCatalog.civil,
     val customSectionContents: Map<String, String> = emptyMap(),
@@ -89,7 +106,14 @@ data class ReportUiState(
     val importedOfficeText: String? = null,
     val importedOfficeSource: String? = null,
     val pendingExcelImport: Map<String, String> = emptyMap(),
+    val pendingReportAiKind: ReportAiKind? = null,
+    val pendingReportAiContext: String = "",
+    val reportAiProposal: ReportAiProposal? = null,
     val assistantReply: String = "",
+    val assistantIsResearch: Boolean = false,
+    val researchProposalFingerprint: String = "",
+    val researchPreviousProposal: String = "",
+    val sourceUpdateMessage: String = "",
     val isAssistantWorking: Boolean = false,
     val learningStatus: String = "",
     val pendingLearningText: String = "",
@@ -99,6 +123,7 @@ data class ReportUiState(
     val templateParagraphs: List<String> = emptyList()
 ) {
     val isIndependent: Boolean get() = caseId == null
+    val researchNeedsReview: Boolean get() = com.khabir.app.domain.model.ReportResearch.needsReview(toReport())
 }
 
 @HiltViewModel
@@ -169,15 +194,21 @@ class ReportViewModel @Inject constructor(
         viewModelScope.launch {
             val loaded = getOrCreateReport(reportId, caseId)
             val linkedCase = loaded.caseId?.let { caseRepository.getById(it) }
-            val metadata = ReportCustomSectionCodec.decode(loaded.customSectionContentsSpec)
+            val metadata = ReportCustomSectionCodec.decode(loaded.customSectionContentsSpec) + if(linkedCase!=null) mapOf(DocumentPartyLinks.KEY to DocumentPartyLinks.encode(DocumentPartyLinks.fromParties(linkedCase.parties))) else emptyMap()
             val report = if (linkedCase != null && !metadata.containsKey(com.khabir.app.domain.model.ReportCaseSnapshot.PLAINTIFFS))
-                loaded.copy(customSectionContentsSpec = ReportCustomSectionCodec.encode(metadata + com.khabir.app.domain.model.ReportCaseSnapshot.parties(linkedCase))) else loaded
+                loaded.copy(customSectionContentsSpec = ReportCustomSectionCodec.encode(metadata + com.khabir.app.domain.model.ReportCaseSnapshot.parties(linkedCase))) else loaded.copy(customSectionContentsSpec=ReportCustomSectionCodec.encode(metadata))
             personalAiKeyStore.migrateLegacyReportTemplate(report.templateId)
             _uiState.update {
                 it.fromReport(report).copy(
                     isLoading = false,
+                    documentCaseType = linkedCase?.caseType.orEmpty(),
                     savedWordTemplateUri = personalAiKeyStore.readReportTemplateUri(report.templateId)
                 )
+            }
+            loaded.caseId?.let { id ->
+                caseRepository.observeById(id).collect { updatedCase ->
+                    if(updatedCase != null) reviewCaseUpdates()
+                }
             }
         }
         viewModelScope.launch {
@@ -215,7 +246,7 @@ class ReportViewModel @Inject constructor(
                 val updates = proposed.mapNotNull { (key, value) ->
                     if (current[key] == value) null else com.khabir.app.domain.model.CaseFieldUpdate(key, current[key].orEmpty(), value)
                 }
-                _uiState.update { it.copy(caseUpdates = updates, autoSaveStatus = if (updates.isEmpty()) "بيانات القضية مطابقة للمحفوظ" else it.autoSaveStatus) }
+                _uiState.update { it.copy(caseUpdates = updates, sourceUpdateMessage = if(updates.isEmpty()) "" else "تغيرت بيانات القضية؛ راجع الفروق قبل استيرادها. نصك الحالي محفوظ.", autoSaveStatus = if (updates.isEmpty()) "بيانات القضية مطابقة للمحفوظ" else it.autoSaveStatus) }
             }.onFailure { e -> _uiState.update { it.copy(errorMessage = e.message ?: "تعذر مراجعة القضية") } }
         }
     }
@@ -230,7 +261,7 @@ class ReportViewModel @Inject constructor(
                     changes["المدعون في الغلاف"]?.let { put(com.khabir.app.domain.model.ReportCaseSnapshot.PLAINTIFFS, it) }
                     changes["المدعى عليهم في الغلاف"]?.let { put(com.khabir.app.domain.model.ReportCaseSnapshot.DEFENDANTS, it) }
                 },
-                caseUpdates = emptyList())
+                caseUpdates = emptyList(), sourceUpdateMessage = "")
         }
     }
 
@@ -261,6 +292,10 @@ class ReportViewModel @Inject constructor(
             customSectionContents = state.customSectionContents - sectionId
         )
     }
+    fun onTextFormatChanged(format: com.khabir.app.domain.model.ReportTextFormat) = edit { state ->
+        state.copy(customSectionContents = state.customSectionContents + (com.khabir.app.domain.model.ReportTextFormat.KEY to format.encode()))
+    }
+
     fun onCustomSectionChanged(sectionId: String, value: String) = edit { state ->
         state.copy(customSectionContents = state.customSectionContents + (sectionId to value))
     }
@@ -277,10 +312,87 @@ class ReportViewModel @Inject constructor(
     fun onPartyStatementsChanged(v: String) = edit { it.copy(partyStatements = v) }
     fun onWitnessStatementsChanged(v: String) = edit { it.copy(witnessStatements = v) }
     fun onInspectionChanged(v: String) = edit { it.copy(inspection = v) }
+    fun documentCaseType(): String = _uiState.value.documentCaseType.ifBlank {
+        when(_uiState.value.template.kind) {
+            com.khabir.app.domain.model.ReportTemplateKind.MISDEMEANOR -> "جنح"
+            com.khabir.app.domain.model.ReportTemplateKind.HIGH_APPEAL,com.khabir.app.domain.model.ReportTemplateKind.APPEAL -> "استئناف"
+            else -> _uiState.value.template.name
+        }
+    }
+    fun onListStyleChanged(section: String, style: ReportListStyle) = edit { state ->
+        val metadata = state.customSectionContents + (ReportListStyle.key(section) to style.name)
+        when(section) {
+            "documents" -> {
+                val docs = DocumentExamination.decode(metadata[DocumentExamination.KEY])
+                val synced = metadata[DocumentExamination.SNAPSHOT] == com.khabir.app.domain.model.legalFingerprint(state.documentsSubmitted)
+                val text = if(docs.isNotEmpty() && synced) DocumentExamination.renderAll(docs,documentCaseType(),style) else ReportLists.apply(state.documentsSubmitted,style)
+                state.copy(documentsSubmitted=text,customSectionContents=metadata + if(synced) mapOf(DocumentExamination.SNAPSHOT to com.khabir.app.domain.model.legalFingerprint(text)) else emptyMap())
+            }
+            "research" -> state.copy(research=ReportLists.apply(state.research,style),customSectionContents=metadata)
+            "conclusion" -> state.copy(conclusion=ReportLists.apply(state.conclusion,style),customSectionContents=metadata)
+            else -> state.copy(customSectionContents=metadata + (section to ReportLists.apply(state.customSectionContents[section].orEmpty(),style)))
+        }
+    }
+    fun linkedExamination(document:ExaminedDocument):ExaminedDocument = DocumentPartyLinks.link(document,DocumentPartyLinks.decode(_uiState.value.customSectionContents[DocumentPartyLinks.KEY]))
+    fun approveExaminedDocument(id:String, reviewedText:String, kind:ExamDocumentKind, copy:DocumentCopyKind, dateText:String, side:DocumentSide, replace:Boolean, onApproved:()->Unit = {}):Boolean {
+        val review=_uiState.value.pendingImageReviews.firstOrNull { it.id==id } ?: return false
+        val source=review.examination ?: return false
+        val date=DocumentExamination.date(dateText)
+        if(dateText.isNotBlank() && date==null) {
+            _uiState.update { it.copy(errorMessage="تاريخ المستند غير صالح؛ صححه أو اتركه فارغًا") };return false
+        }
+        if(copy==DocumentCopyKind.UNKNOWN) {
+            _uiState.update { it.copy(errorMessage="أكد صفة النسخة قبل الاعتماد") };return false
+        }
+        val approved=source.copy(kind=kind,copyKind=copy,date=date,side=side,approvedText=DocumentExamination.confirmCopyPrefix(reviewedText,copy))
+        if(_uiState.value.isOcrProcessing) return false
+        viewModelScope.launch {
+          _uiState.update { it.copy(isOcrProcessing=true,errorMessage=null) }
+          try {
+            val reportId=draftSaver.flush()
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                com.khabir.app.domain.model.ReportDocumentSourceArchive(File(context.filesDir,"report-source-pages")).archive(reportId,approved,review.pages)
+            }
+        edit { state ->
+            val metadata=state.customSectionContents
+            val prior=if(replace) emptyList() else DocumentExamination.decode(metadata[DocumentExamination.KEY])
+            val docs=prior.filterNot { it.id==approved.id }+approved
+            val synced=metadata[DocumentExamination.SNAPSHOT]==com.khabir.app.domain.model.legalFingerprint(state.documentsSubmitted)
+            val generated=DocumentExamination.renderAll(docs,documentCaseType(),ReportListStyle.decode(metadata[ReportListStyle.key("documents")]))
+            // A hand-edited narrative is preserved and detached from automatic reordering.
+            val keepManual=!replace && state.documentsSubmitted.isNotBlank() && !synced
+            val text=if(keepManual && prior.any { it.id==approved.id }) state.documentsSubmitted else if(keepManual) state.documentsSubmitted+"\n\n"+DocumentExamination.renderAll(listOf(approved),documentCaseType(),ReportListStyle.decode(metadata[ReportListStyle.key("documents")])) else generated
+            state.copy(documentsSubmitted=text,customSectionContents=metadata + mapOf(DocumentExamination.KEY to DocumentExamination.encode(docs),DocumentExamination.SNAPSHOT to if(keepManual) "manual" else com.khabir.app.domain.model.legalFingerprint(text)),errorMessage=if(keepManual) "حُفظ نص بحث المستندات المعدل؛ المستند الجديد أُضيف بعده دون إعادة ترتيب تحريرك" else null)
+        }
+        val links=DocumentPartyLinks.fromExamination(approved,_uiState.value.caseNo,_uiState.value.caseYear,_uiState.value.court)
+        if(links.isNotEmpty()) edit { state -> state.copy(customSectionContents=state.customSectionContents + (DocumentPartyLinks.KEY to DocumentPartyLinks.encode(DocumentPartyLinks.decode(state.customSectionContents[DocumentPartyLinks.KEY])+links))) }
+        onImageReviewApproved(id)
+        onApproved()
+          } catch(cancelled:kotlinx.coroutines.CancellationException) { throw cancelled
+          } catch(error:Exception) {
+            _uiState.update { it.copy(errorMessage="تعذر حفظ مصدر المستند؛ المراجعة والصور باقية لإعادة المحاولة: ${error.message}") }
+          } finally { _uiState.update { it.copy(isOcrProcessing=false) } }
+        }
+        return true
+    }
+
     fun onDocumentsChanged(v: String) = edit { it.copy(documentsSubmitted = v) }
     fun onFactsChanged(v: String) = edit { it.copy(facts = v) }
     fun onResearchChanged(v: String) = edit { it.copy(research = v) }
     fun onOpinionChanged(v: String) = edit { it.copy(technicalOpinion = v) }
+    fun approveRentAssessment(input:com.khabir.app.domain.model.RentAssessmentInput):String? = try {
+        val result=com.khabir.app.domain.model.RentAssessment.calculate(input)
+        val row=com.khabir.app.domain.model.ReportCalculationRow(System.nanoTime(),"ريع الفترة المثبتة","1",result.amount.toPlainString(),"جنيه",result.explanation)
+        onCalculationsChanged(com.khabir.app.domain.model.ReportCalculationCodec.encode(com.khabir.app.domain.model.ReportCalculationCodec.decode(_uiState.value.calculationsTable)+row))
+        null
+    } catch(error:Exception) { error.message ?: "بيانات الريع غير صالحة" }
+    fun approveAccountingAssessment(input:com.khabir.app.domain.model.AccountingInput):String? = try {
+        val result=com.khabir.app.domain.model.AccountingAssessment.calculate(input)
+        val row=com.khabir.app.domain.model.ReportCalculationRow(System.nanoTime(),"${input.person} — ${input.benefit}","1",result.amount.toPlainString(),"",result.explanation)
+        onCalculationsChanged(com.khabir.app.domain.model.ReportCalculationCodec.encode(com.khabir.app.domain.model.ReportCalculationCodec.decode(_uiState.value.calculationsTable)+row))
+        edit { it.copy(template=it.template.setSectionEnabled("calculations",true)) }
+        null
+    } catch(error:Exception) {error.message ?: "راجع بيانات الحساب"}
     fun onCalculationsChanged(v: String) = edit { it.copy(calculationsTable = v) }
     fun onSiteSketchSaved(bitmap: Bitmap) {
         viewModelScope.launch {
@@ -355,7 +467,8 @@ class ReportViewModel @Inject constructor(
         }
     }
 
-    private val documentResults = mutableMapOf<String, String>()
+    private data class AnalyzedDocument(val text: String, val identity: PendingImportedCaseIdentity?)
+    private val documentResults = mutableMapOf<String, AnalyzedDocument>()
 
     fun prepareReportDocuments(pages: List<File>) {
         if (_uiState.value.isOcrProcessing) return
@@ -412,6 +525,7 @@ class ReportViewModel @Inject constructor(
     fun cancelReportDocuments() {
         if (_uiState.value.isOcrProcessing) return
         _uiState.value.pendingReportPages.forEach { it.delete() }
+        _uiState.value.pendingImageReviews.flatMap { it.pages }.forEach { it.delete() }
         documentResults.clear()
         pendingImageIdentities.clear()
         _uiState.update { it.copy(pendingReportPages = emptyList(), pendingImageReviews = emptyList(), errorMessage = null) }
@@ -419,6 +533,7 @@ class ReportViewModel @Inject constructor(
     }
 
     fun onImageReviewApproved(id: String) {
+        _uiState.value.pendingImageReviews.firstOrNull { it.id==id }?.pages?.forEach { it.delete() }
         pendingImageIdentities.remove(id)?.let { pending ->
             applyIndependentCaseIdentity(pending.parsed, pending.plaintiffs, pending.defendants)
         }
@@ -426,6 +541,7 @@ class ReportViewModel @Inject constructor(
     }
 
     fun onImageReviewConsumed(id: String) {
+        _uiState.value.pendingImageReviews.firstOrNull { it.id==id }?.pages?.forEach { it.delete() }
         pendingImageIdentities.remove(id)
         removeImageReview(id)
     }
@@ -442,7 +558,9 @@ class ReportViewModel @Inject constructor(
     fun analyzeRequestedDocuments(documents: List<ReportDocumentRequest>) {
         if (_uiState.value.isOcrProcessing) return
         val expected = _uiState.value.pendingReportPages
-        if (documents.flatMap { it.pages } != expected || expected.isEmpty()) return
+        val requestedPages = documents.flatMap { it.pages }
+        if (expected.isEmpty() || requestedPages.size != expected.size ||
+            requestedPages.toSet() != expected.toSet()) return
         viewModelScope.launch {
             _uiState.update { it.copy(isOcrProcessing = true, errorMessage = null) }
             val stagedIdentities = mutableMapOf<String, PendingImportedCaseIdentity>()
@@ -450,9 +568,12 @@ class ReportViewModel @Inject constructor(
                 val hasPersonalAiKey = personalAiKeyStore.read().trim().isNotBlank()
                 val reviews = documents.mapIndexed { index, document ->
                     var identityForReview: PendingImportedCaseIdentity? = null
-                    val cacheKey = document.pages.joinToString("|") { it.path } +
-                        "\n" + document.task.name + "\n" + document.instruction
-                    val resultText = documentResults[cacheKey] ?: when (document.task) {
+                    val cacheKey = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.khabir.app.domain.model.ExtractionResultCache.key(document.pages.map { it.readBytes() },
+                        document.task.name,document.instruction + "\n" + personalAiKeyStore.readInstructions() + personalAiKeyStore.readReportStyleMemory() + DocumentExamination.VERSION,
+                        personalAiKeyStore.readProvider().name + ":" + com.khabir.app.domain.model.legalFingerprint(personalAiKeyStore.read())) }
+                    val cached = documentResults[cacheKey]
+                    identityForReview = cached?.identity
+                    val resultText = cached?.text ?: when (document.task) {
                         ReportDocumentTask.SUBJECT -> {
                             val read = multiPageReader.read(
                                 document.pages,
@@ -463,17 +584,11 @@ class ReportViewModel @Inject constructor(
                             if (read.text.isBlank()) {
                                 error("المستند ${index + 1}: " + read.warnings.joinToString(" ").ifBlank { "تعذر استخراج موضوع الدعوى" })
                             }
-                            val parsed = PetitionIntakeParser.parse(read.text)
+                            val extractionText = com.khabir.app.presentation.cases.DocumentReviewParser.normalizedExtraction(read.text)
+                            val parsed = PetitionIntakeParser.parse(extractionText)
                             val plaintiffs = summarizeReportParties(parsed, plaintiff = true)
                             val defendants = summarizeReportParties(parsed, plaintiff = false)
-                            val subjectSource = buildString {
-                                parsed.finalRequests?.takeIf(String::isNotBlank)?.let {
-                                    append("الطلبات الختامية:\n").append(it.trim()).append("\n\n")
-                                }
-                                parsed.subjectOfCase?.takeIf(String::isNotBlank)?.let {
-                                    append("شرح الدعوى:\n").append(it.trim())
-                                }
-                            }
+                            val subjectSource = extractionText
                             val formatted = CaseSubjectFormatter.format(subjectSource, _uiState.value.finalRequestsPlacement)
                             if (formatted.isBlank()) error("المستند ${index + 1}: تعذر فصل موضوع الدعوى بأمان")
                             identityForReview = PendingImportedCaseIdentity(parsed, plaintiffs, defendants)
@@ -490,7 +605,8 @@ class ReportViewModel @Inject constructor(
                             if (read.text.isBlank()) {
                                 error("المستند ${index + 1}: " + read.warnings.joinToString(" ").ifBlank { "تعذر استخراج المأمورية" })
                             }
-                            val parsed = PetitionIntakeParser.parse(read.text)
+                            val extractionText = com.khabir.app.presentation.cases.DocumentReviewParser.normalizedExtraction(read.text)
+                            val parsed = PetitionIntakeParser.parse(extractionText)
                             val plaintiffs = summarizeReportParties(parsed, plaintiff = true)
                             val defendants = summarizeReportParties(parsed, plaintiff = false)
                             val assignment = parsed.preliminaryMission?.takeIf(String::isNotBlank)?.let {
@@ -548,20 +664,29 @@ class ReportViewModel @Inject constructor(
                                 formatReportDocumentFallback(local.text, document.task)
                             }
                         }
-                    }.also { documentResults[cacheKey] = it }
+                    }.also { documentResults[cacheKey] = AnalyzedDocument(it, identityForReview) }
                     val reviewId = "report-image-" + java.util.UUID.randomUUID().toString()
                     identityForReview?.let { stagedIdentities[reviewId] = it }
                     ReportImageReview(
                         id = reviewId,
                         text = resultText,
                         source = "المستند ${index + 1}",
-                        task = document.task
+                        task = document.task,
+                        destinationField = document.destinationField,
+                        customSectionId = document.customSectionId,
+                        pages = document.pages,
+                        examination = if(document.task==ReportDocumentTask.RESEARCH) com.khabir.app.presentation.cases.DocumentExaminationLocalParser.parse(resultText,when(document.destinationField) {
+                            "PLAINTIFF_DOCUMENTS" -> DocumentSide.CLAIMANT
+                            "DEFENDANT_DOCUMENTS" -> DocumentSide.RESPONDENT
+                            "CIVIL_CLAIMANT_DOCUMENTS" -> DocumentSide.CIVIL_CLAIMANT
+                            "ACCUSED_DOCUMENTS" -> DocumentSide.ACCUSED
+                            else -> DocumentSide.GENERAL
+                        }).let { com.khabir.app.domain.model.DocumentPartyLinks.link(it,DocumentPartyLinks.decode(_uiState.value.customSectionContents[DocumentPartyLinks.KEY])) } else null
                     )
                 }
 
                 pendingImageIdentities.clear()
                 pendingImageIdentities.putAll(stagedIdentities)
-                expected.forEach { it.delete() }
                 documentResults.clear()
                 _uiState.update {
                     it.copy(
@@ -588,7 +713,7 @@ class ReportViewModel @Inject constructor(
         val text = raw.trim()
         if (text.isBlank()) return ""
         return when (task) {
-            ReportDocumentTask.RESEARCH -> formatResearchDocumentLocally(text)
+            ReportDocumentTask.RESEARCH -> text
             ReportDocumentTask.CONCLUSION -> {
                 val result = Regex(
                     "(?ims)(?:النتيجة\\s+النهائية|النتيجة|وانتهى(?:\\s+التقرير)?\\s+إلى|انتهى(?:\\s+التقرير)?\\s+إلى)\\s*[:：-]?\\s*(.+)$"
@@ -640,13 +765,11 @@ class ReportViewModel @Inject constructor(
                     ) }
                     return@launch
                 }
-                val parsed = PetitionIntakeParser.parse(result.text)
+                val extractionText = com.khabir.app.presentation.cases.DocumentReviewParser.normalizedExtraction(result.text)
+                val parsed = PetitionIntakeParser.parse(extractionText)
                 val plaintiffs = summarizeReportParties(parsed, plaintiff = true)
                 val defendants = summarizeReportParties(parsed, plaintiff = false)
-                val subjectSource = buildString {
-                    parsed.finalRequests?.takeIf(String::isNotBlank)?.let { append("الطلبات الختامية:\n").append(it.trim()).append("\n\n") }
-                    parsed.subjectOfCase?.takeIf(String::isNotBlank)?.let { append("شرح الدعوى:\n").append(it.trim()) }
-                }
+                val subjectSource = extractionText
                 val formatted = CaseSubjectFormatter.format(subjectSource, _uiState.value.finalRequestsPlacement)
                 if (formatted.isBlank()) {
                     pendingImportedCaseIdentity = null
@@ -686,7 +809,8 @@ class ReportViewModel @Inject constructor(
                     _uiState.update { it.copy(isOcrProcessing = false, errorMessage = "لم يتم استخراج بيانات الحكم التمهيدي") }
                     return@launch
                 }
-                val parsed = PetitionIntakeParser.parse(result.text)
+                val extractionText = com.khabir.app.presentation.cases.DocumentReviewParser.normalizedExtraction(result.text)
+                val parsed = PetitionIntakeParser.parse(extractionText)
                 val plaintiffs = summarizeReportParties(parsed, plaintiff = true)
                 val defendants = summarizeReportParties(parsed, plaintiff = false)
                 val assignment = parsed.preliminaryMission?.takeIf(String::isNotBlank)?.let {
@@ -758,11 +882,8 @@ class ReportViewModel @Inject constructor(
             .map { it.name.replace(Regex("\\s+"), " ").trim() }
             .filter(String::isNotBlank)
             .distinct()
-        return when (names.size) {
-            0 -> ""
-            1 -> names.first()
-            else -> names.first() + " وآخرين"
-        }
+        if(plaintiff && com.khabir.app.domain.model.PartySummaries.misdemeanor(parsed.caseType.orEmpty())) return "النيابة العامة"
+        return com.khabir.app.domain.model.PartySummaries.names(names)
     }
 
     private fun applyIndependentCaseIdentity(
@@ -788,6 +909,9 @@ class ReportViewModel @Inject constructor(
                 customSectionContents = state.customSectionContents + buildMap {
                     if (plaintiffs.isNotBlank()) put(com.khabir.app.domain.model.ReportCaseSnapshot.PLAINTIFFS, plaintiffs)
                     if (defendants.isNotBlank()) put(com.khabir.app.domain.model.ReportCaseSnapshot.DEFENDANTS, defendants)
+                    if (parsed.sourceAudit.isNotBlank()) put("_reviewed_legal_sources",parsed.sourceAudit)
+                    val fullNames=parsed.parties.map { DocumentPartyLink(it.name,it.role.arabicLabel) }
+                    put(DocumentPartyLinks.KEY,DocumentPartyLinks.encode(DocumentPartyLinks.decode(state.customSectionContents[DocumentPartyLinks.KEY])+fullNames))
                 }
             )
         }
@@ -876,7 +1000,8 @@ class ReportViewModel @Inject constructor(
         }
     }
 
-    fun assistantContext(): String = _uiState.value.toReport().let { report ->
+    fun assistantContext(request: String = ""): String = _uiState.value.toReport().let { report ->
+        if(com.khabir.app.domain.model.ReportResearch.isResearchCommand(request)) return@let com.khabir.app.domain.model.ReportResearch.context(report)
         buildString {
             append("القضية: ").append(report.caseNo).append(" لسنة ").append(report.caseYear).append(" — ").append(report.court)
             append("\nالخصوم:\n").append(report.partiesSummary)
@@ -886,6 +1011,7 @@ class ReportViewModel @Inject constructor(
         }
     }
 
+    private var pendingStyleSensitiveValues: List<String> = emptyList()
     fun learnedRules(): String = personalAiKeyStore.readReportStyleMemory()
     fun expertInstructions(): String = personalAiKeyStore.readInstructions()
 
@@ -914,26 +1040,118 @@ class ReportViewModel @Inject constructor(
     fun onLearningTextChanged(value: String) = _uiState.update { it.copy(pendingLearningText = value) }
     fun onLearningImportConsumed() = _uiState.update { it.copy(pendingLearningText = "") }
 
-    fun onAskAssistant(request: String, approvedContext: String, approvedRules: String) {
-        if (request.isBlank() || _uiState.value.isAssistantWorking) return
-        viewModelScope.launch {
-            _uiState.update { it.copy(isAssistantWorking = true, assistantReply = "", errorMessage = null) }
-            when (val result = geminiVision.assistReport(request, approvedContext, approvedRules)) {
-                is GeminiDocumentVisionService.Result.Success -> _uiState.update {
-                    it.copy(isAssistantWorking = false, assistantReply = result.text)
+    fun confirmManualResearch() {
+        runCatching { ReportAiWorkflow.confirmManualResearch(_uiState.value.toReport()) }
+          .onSuccess { report -> edit { it.copy(customSectionContents=ReportCustomSectionCodec.decode(report.customSectionContentsSpec),autoSaveStatus="تم تأكيد مراجعة البحث اليدوي") } }
+          .onFailure { error -> _uiState.update { it.copy(errorMessage=error.message) } }
+    }
+    fun conclusionNeedsReview():Boolean = ReportAiWorkflow.conclusionNeedsReview(_uiState.value.toReport())
+    fun prepareSectionAi(kind:ReportAiKind) {
+        val report=_uiState.value.toReport()
+        if(_uiState.value.isAssistantWorking) return
+        if(report.assignment.isBlank()) { _uiState.update { it.copy(errorMessage="المأمورية غير موجودة؛ أضف نص الحكم التمهيدي أولًا") };return }
+        if(kind==ReportAiKind.CONCLUSION && com.khabir.app.domain.model.ReportResearch.needsReview(report)) { _uiState.update { it.copy(errorMessage="تغيرت المصادر؛ راجع البحث ثم أكد مراجعته أو اعتمد بحثًا جديدًا قبل إعداد النتيجة") };return }
+        if(kind==ReportAiKind.CONCLUSION && report.research.isBlank()) { _uiState.update { it.copy(errorMessage="اكتب أو اعتمد البحث أولًا قبل إعداد النتيجة") };return }
+        _uiState.update { it.copy(pendingReportAiKind=kind,pendingReportAiContext=ReportAiWorkflow.context(report,kind),errorMessage=null) }
+    }
+    fun onSectionAiContextChanged(value:String) = _uiState.update { it.copy(pendingReportAiContext=value) }
+    fun dismissSectionAiContext() = _uiState.update { it.copy(pendingReportAiKind=null,pendingReportAiContext="") }
+    fun generateSectionAi() {
+        val kind=_uiState.value.pendingReportAiKind ?: return
+        if(_uiState.value.isAssistantWorking) return
+        val report=_uiState.value.toReport();val text=_uiState.value.pendingReportAiContext
+        if(kind==ReportAiKind.CONCLUSION && com.khabir.app.domain.model.ReportResearch.needsReview(report)) { _uiState.update { it.copy(errorMessage="تغيرت المصادر بعد فتح شاشة الإرسال؛ راجع البحث أولًا") };return }
+        val approved=com.khabir.app.domain.model.ReportResearch.parseContext(text)
+        val full=com.khabir.app.domain.model.ReportResearch.parseContext(ReportAiWorkflow.context(report,kind))
+        if(approved.tasks!=full.tasks || approved.evidence.any { it !in full.evidence }) {
+            _uiState.update { it.copy(errorMessage="احتفظ بكل بنود المأمورية وبالنص الأصلي للأدلة؛ يمكن استبعاد دليل لا تريد إرساله") };return
+        }
+        val fingerprint=ReportAiWorkflow.fingerprint(report,kind)
+        dismissSectionAiContext()
+        assistantJob=viewModelScope.launch {
+            _uiState.update { it.copy(isAssistantWorking=true,errorMessage=null) }
+            try {
+                val contract=if(kind==ReportAiKind.RESEARCH) com.khabir.app.domain.model.ReportResearch.contract(approved) else ReportAiWorkflow.conclusionContract(report)
+                when(val result=geminiVision.assistReport(kind.label,text,learnedRules(),contract)) {
+                    is GeminiDocumentVisionService.Result.Success -> {
+                        val proposal=if(kind==ReportAiKind.RESEARCH) {
+                            val reviewed=com.khabir.app.domain.model.ReportResearch.review(result.text,approved)
+                            require(reviewed.valid) { reviewed.errors.joinToString("؛ ") }
+                            ReportAiProposal(kind,reviewed.reportText(approved.tasks),reviewed.render(approved.tasks,approved.evidence)+"\n\nالمصادر الأصلية:\n"+text,fingerprint,reviewed.answers.associate { it.taskId to it.status.name })
+                        } else ReportAiWorkflow.reviewConclusion(result.text,report,approved)
+                        _uiState.update { it.copy(reportAiProposal=proposal) }
+                    }
+                    is GeminiDocumentVisionService.Result.Failure -> _uiState.update { it.copy(errorMessage=result.message) }
+                    is GeminiDocumentVisionService.Result.Unavailable -> _uiState.update { it.copy(errorMessage=result.message) }
                 }
-                is GeminiDocumentVisionService.Result.Unavailable -> _uiState.update {
-                    it.copy(isAssistantWorking = false, errorMessage = result.message)
-                }
-                is GeminiDocumentVisionService.Result.Failure -> _uiState.update {
-                    it.copy(isAssistantWorking = false, errorMessage = result.message)
-                }
-            }
+            } catch(cancelled:kotlinx.coroutines.CancellationException) { throw cancelled
+            } catch(error:Exception) { _uiState.update { it.copy(errorMessage="الاقتراح غير مكتمل؛ النص المحفوظ لم يتغير: ${error.message}") }
+            } finally { _uiState.update { it.copy(isAssistantWorking=false) } }
         }
     }
+    fun onSectionAiProposalChanged(value:String) = _uiState.update { it.copy(reportAiProposal=it.reportAiProposal?.copy(text=value)) }
+    fun dismissSectionAiProposal() = _uiState.update { it.copy(reportAiProposal=null) }
+    fun approveSectionAiProposal(replace:Boolean, learn:Boolean = true) {
+        val state=_uiState.value;val proposal=state.reportAiProposal ?: return
+        runCatching { ReportAiWorkflow.apply(state.toReport(),proposal,proposal.text,replace) }
+            .onSuccess { updated -> edit { it.copy(research=updated.research,conclusion=updated.conclusion,customSectionContents=ReportCustomSectionCodec.decode(updated.customSectionContentsSpec),reportAiProposal=null) }; if(learn && proposal.text!=proposal.originalText) onDeriveStyleRulesFromApprovedReport("النص المقترح في ${proposal.kind.label}:\n${proposal.originalText}\nتصحيح الخبير المعتمد:\n${proposal.text}") { rules -> onLearnFromCurrentReport(rules) } }
+            .onFailure { error -> _uiState.update { it.copy(errorMessage=error.message) } }
+    }
 
+    private var assistantJob: kotlinx.coroutines.Job? = null
+    fun cancelAssistant() {
+        assistantJob?.cancel()
+        _uiState.update { it.copy(isAssistantWorking = false, autoSaveStatus = "تم الإلغاء؛ المراجعة السابقة محفوظة") }
+    }
+    fun onAskAssistant(request: String, approvedContext: String, approvedRules: String) {
+        if (request.isBlank() || _uiState.value.isAssistantWorking) return
+        val research = com.khabir.app.domain.model.ReportResearch.isResearchCommand(request)
+        val report = _uiState.value.toReport()
+        val expectedFingerprint = com.khabir.app.domain.model.ReportResearch.fingerprint(report)
+        val approved = com.khabir.app.domain.model.ReportResearch.parseContext(approvedContext)
+        if(research && approved.tasks != com.khabir.app.domain.model.ReportResearch.tasks(report.assignment)) {
+            _uiState.update { it.copy(errorMessage = "نص المأمورية ناقص أو تغير في شاشة الإرسال؛ يجب الاحتفاظ بكل بنود التكليف عند البحث") }; return
+        }
+        if(com.khabir.app.domain.model.ApprovedStyleRules.validate(approvedRules,emptyList()).isNotEmpty() && approvedRules.isNotBlank()) {
+            _uiState.update { it.copy(errorMessage = "قواعد الأسلوب تحتوي بيانات خاصة؛ راجعها قبل الإرسال") }; return
+        }
+        assistantJob = viewModelScope.launch {
+            _uiState.update { it.copy(isAssistantWorking = true,errorMessage = null) }
+            try {
+                val contract = if(research) com.khabir.app.domain.model.ReportResearch.contract(approved) else ""
+                when (val result = geminiVision.assistReport(request,approvedContext,approvedRules,contract)) {
+                    is GeminiDocumentVisionService.Result.Success -> {
+                        if(research) {
+                            val reviewed = com.khabir.app.domain.model.ReportResearch.review(result.text,approved)
+                            if(!reviewed.valid) {
+                                _uiState.update { it.copy(errorMessage = "اقتراح البحث يحتاج إعادة محاولة: " + reviewed.errors.joinToString("؛ ")) }
+                            } else {
+                                val rendered = reviewed.render(approved.tasks,approved.evidence)
+                                _uiState.update { it.copy(assistantReply = rendered,assistantIsResearch = true,
+                                    researchPreviousProposal = it.assistantReply.takeIf { old -> old != rendered }.orEmpty(),
+                                    researchProposalFingerprint = expectedFingerprint) }
+                            }
+                        } else _uiState.update { it.copy(assistantReply = result.text,assistantIsResearch = false) }
+                    }
+                    is GeminiDocumentVisionService.Result.Unavailable -> _uiState.update { it.copy(errorMessage = result.message) }
+                    is GeminiDocumentVisionService.Result.Failure -> _uiState.update { it.copy(errorMessage = result.message) }
+                }
+            } catch(cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch(error: Exception) { _uiState.update { it.copy(errorMessage = error.message ?: "تعذر إعداد الاقتراح؛ النص السابق محفوظ") } }
+            finally { _uiState.update { it.copy(isAssistantWorking = false) } }
+        }
+    }
+    fun approveResearchProposal() {
+        val state = _uiState.value
+        if(!state.assistantIsResearch || state.assistantReply.isBlank()) return
+        runCatching { com.khabir.app.domain.model.ReportResearch.appendApproved(state.toReport(),state.assistantReply,state.researchProposalFingerprint) }
+            .onSuccess { report -> edit { it.copy(research = report.research,
+                customSectionContents = ReportCustomSectionCodec.decode(report.customSectionContentsSpec),
+                assistantReply = "",researchPreviousProposal = "",assistantIsResearch = false) } }
+            .onFailure { error -> _uiState.update { it.copy(errorMessage = error.message) } }
+    }
     fun onAssistantReplyChanged(value: String) = _uiState.update { it.copy(assistantReply = value) }
-    fun onAssistantReplyConsumed() = _uiState.update { it.copy(assistantReply = "") }
+    fun onAssistantReplyConsumed() = _uiState.update { it.copy(assistantReply = "",assistantIsResearch = false,researchPreviousProposal = "") }
 
     /** Saves only rules the expert has reviewed and explicitly approved. */
     fun onLearnFromCurrentReport(approvedRules: String) {
@@ -941,8 +1159,26 @@ class ReportViewModel @Inject constructor(
             _uiState.update { it.copy(learningStatus = "لا توجد قواعد لاعتمادها") }
             return
         }
-        personalAiKeyStore.writeReportStyleMemory(approvedRules)
-        _uiState.update { it.copy(learningStatus = "تم اعتماد قواعد الصياغة فقط؛ لم يُحفظ نص القضية") }
+        viewModelScope.launch {
+            val case = _uiState.value.caseId?.let { caseRepository.getById(it) }
+            val caseValues = case?.parties?.flatMap { listOf(it.fullName,it.address) }.orEmpty() +
+                listOfNotNull(case?.court,case?.caseNo) + listOf(_uiState.value.court,_uiState.value.caseNo) + DocumentPartyLinks.decode(_uiState.value.customSectionContents[DocumentPartyLinks.KEY]).map { it.name } + pendingStyleSensitiveValues
+            val errors = com.khabir.app.domain.model.ApprovedStyleRules.validate(approvedRules,caseValues)
+            if(errors.isNotEmpty()) {
+                _uiState.update { it.copy(learningStatus = errors.joinToString("؛ ")) }; return@launch
+            }
+            val combined=(personalAiKeyStore.readReportStyleMemory().lines()+approvedRules.lines()).map(String::trim).filter(String::isNotBlank).distinct().joinToString("\n")
+            val combinedErrors=com.khabir.app.domain.model.ApprovedStyleRules.validate(combined,caseValues)
+            if(combinedErrors.isNotEmpty()) { _uiState.update { it.copy(learningStatus=combinedErrors.joinToString("؛ ")) };return@launch }
+            personalAiKeyStore.writeReportStyleMemory(combined)
+            pendingStyleSensitiveValues = emptyList()
+            _uiState.update { it.copy(learningStatus = "تم اعتماد قواعد الأسلوب بتاريخها؛ لم تُحفظ وقائع القضية كذاكرة عامة") }
+        }
+    }
+
+    fun onLearnDocumentCorrection(document:ExaminedDocument, text:String) {
+        pendingStyleSensitiveValues = document.fields.filterKeys { it in setOf("البائع","المشتري","المدعون","المدعى عليهم","المورث","قيود الملاك","أنصبة الورثة","أطراف القسمة","اختصاصات القسمة") }.values.flatMap { it.split(Regex("[،,;؛|\\n]+")) }.map(String::trim).filter(String::isNotBlank)
+        onDeriveStyleRulesFromApprovedReport("النص المقترح:\n${document.render()}\nتصحيح الخبير المعتمد:\n$text") { rules -> onLearnFromCurrentReport(rules) }
     }
 
     fun onDeriveStyleRulesFromApprovedReport(approvedSample: String, onReady: (String) -> Unit) {
@@ -950,6 +1186,9 @@ class ReportViewModel @Inject constructor(
             _uiState.update { it.copy(learningStatus = "لا يوجد نص تقرير لاستخراج الأسلوب منه") }
             return
         }
+        val parsedStyleSample = PetitionIntakeParser.parse(approvedSample)
+        pendingStyleSensitiveValues = pendingStyleSensitiveValues + parsedStyleSample.parties.flatMap { listOf(it.name,it.address) } +
+            Regex("(?:السيد|المرحوم|الأستاذ)\\s+([^،.\\n]+)").findAll(approvedSample).map { it.groupValues[1].trim() }.toList()
         viewModelScope.launch {
             _uiState.update { it.copy(learningStatus = "جارٍ استخراج قواعد الصياغة دون حفظ بيانات القضية…") }
             when (val result = geminiVision.deriveReportStyleRules(approvedSample)) {

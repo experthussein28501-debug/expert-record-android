@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+import re
 import zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
@@ -64,7 +65,9 @@ def verify_manifest(path: Path) -> None:
     version_code = _android_int(root.get(ANDROID + "versionCode"))
     version_name = root.get(ANDROID + "versionName", "")
     assert version_code >= 101, f"Play versionCode must be >= 101, got {version_code}"
-    assert version_name == "1.0.0", f"Play versionName must be 1.0.0, got {version_name!r}"
+    assert re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version_name), (
+        f"Play versionName must be a numeric semantic version, got {version_name!r}"
+    )
 
     uses_sdk = root.find("uses-sdk")
     assert uses_sdk is not None, "Merged manifest has no uses-sdk"

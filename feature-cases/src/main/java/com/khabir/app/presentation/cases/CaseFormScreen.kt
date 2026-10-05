@@ -32,12 +32,14 @@ import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.khabir.app.domain.model.PartyRole
+import com.khabir.app.presentation.common.DocumentCameraCapture
 import com.khabir.app.presentation.common.InAppCameraCapture
 import com.khabir.app.presentation.common.ExplicitDialogProperties
 import com.khabir.app.presentation.common.ExplicitDialogTitle
@@ -70,6 +72,7 @@ fun CaseFormScreen(
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    var showArchivedSources by remember { mutableStateOf(false) }
     var voiceReviewDraft by remember { mutableStateOf("") }
     var reviewedParties by remember { mutableStateOf<List<PetitionIntakeParser.ParsedParty>>(emptyList()) }
     var showIncomingDatePicker by remember { mutableStateOf(false) }
@@ -162,11 +165,12 @@ fun CaseFormScreen(
     }
 
     Scaffold(
+        modifier = Modifier.fillMaxSize().imePadding(),
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = { TopAppBar(title = { Text(if (state.caseId == 0L) "تسجيل قضية" else "تعديل القضية المسجلة") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") } }) }
     ) { padding ->
         Column(
-            modifier = Modifier.padding(padding).imePadding().padding(16.dp).verticalScroll(rememberScrollState()),
+            modifier = Modifier.padding(padding).padding(16.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             KhabirCard(
@@ -175,6 +179,7 @@ fun CaseFormScreen(
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("استيراد بيانات القضية والخصوم", style = MaterialTheme.typography.titleMedium)
+                    if(state.archivedSourcePages.isNotEmpty()) TextButton(onClick = { showArchivedSources = true }) { Text("مصادر الاستخراج المحفوظة") }
                     com.khabir.app.presentation.components.InlineHelp("مساعدة", "أضف حتى 10 صور. يفحص التطبيق الصور ويجمع صفحات كل مستند ثم يعزل أي مستند مختلف قبل تعبئة القضية.")
                     FilledTonalButton(
                         onClick = {
@@ -366,19 +371,11 @@ fun CaseFormScreen(
             }
 
             KhabirTextField(
-                value = state.subjectOfCase,
+                value = com.khabir.app.domain.model.UnifiedCaseSubject.compose(state.subjectOfCase, state.finalRequests),
                 onValueChange = viewModel::onSubjectOfCaseChanged,
-                label = { Text("موضوع الدعوى المستخرج") },
+                label = { Text("موضوع الدعوى — الطلبات ثم الشرح") },
                 supportingText = { Text("يُنقل تلقائيًا إلى بند الموضوع في التقرير") },
                 minLines = 4,
-                modifier = Modifier.fillMaxWidth()
-            )
-            KhabirTextField(
-                value = state.finalRequests,
-                onValueChange = viewModel::onFinalRequestsChanged,
-                label = { Text("الطلبات الختامية") },
-                supportingText = { Text("تُستخرج من خاتمة العريضة وتظل قابلة للتعديل قبل الحفظ") },
-                minLines = 3,
                 modifier = Modifier.fillMaxWidth()
             )
             KhabirTextField(
@@ -483,7 +480,7 @@ fun CaseFormScreen(
                     com.khabir.app.presentation.components.InlineHelp("مساعدة", "بعد الحفظ يُمسح الاسم الأول فقط، وتبقى بقية الاسم والجهة و«بصفته» والعنوان للطرف التالي.")
                 }
             }
-            KhabirTextField(state.adminNotes, viewModel::onAdminNotesChanged, label = { Text("ملاحظات إدارية") }, minLines = 3, modifier = Modifier.fillMaxWidth())
+            KhabirTextField(com.khabir.app.domain.model.LegalSourceAudit.userNotes(state.adminNotes), viewModel::onAdminNotesChanged, label = { Text("ملاحظات إدارية") }, minLines = 3, modifier = Modifier.fillMaxWidth())
             if (state.validationErrors.isNotEmpty()) Text("أكمل رقم الدعوى والسنة والمحكمة", color = MaterialTheme.colorScheme.error)
             Button(onClick = { viewModel.onSave {} }, enabled = !state.isSaving, modifier = Modifier.fillMaxWidth()) { Text(if (state.isSaving) "جارٍ الحفظ..." else "حفظ القضية في سجل القضايا") }
             if (showReportAction && state.caseId != 0L) OutlinedButton(onClick = { onOpenReport(state.caseId) }, modifier = Modifier.fillMaxWidth()) { Text("فتح تقرير من بيانات القضية") }
@@ -539,24 +536,27 @@ fun CaseFormScreen(
         )
     }
 
+    if(showArchivedSources) AlertDialog(onDismissRequest = { showArchivedSources = false },
+        title = { Text("مصادر هذه القضية") },
+        text = { Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
+            state.archivedSourcePages.forEach { TemporaryPagePreview(it,Modifier.fillMaxWidth().height(240.dp)) }
+            Text(state.archivedSourceText)
+        } },confirmButton = { TextButton(onClick = { showArchivedSources = false }) { Text("إغلاق") } })
     if (state.documentReview.isNotEmpty() && state.voiceReviewText == null && state.selectedDocumentIds.isEmpty()) {
         DocumentGroupsReviewDialog(
             documents = state.documentReview,
             pagePaths = state.pendingPagePaths,
             onEdit = viewModel::editReviewedDocument,
             onUse = viewModel::useReviewedDocument,
+            onUseSelected = viewModel::useReviewedDocuments,
             onExclude = viewModel::excludeReviewedDocument,
             onBack = viewModel::dismissDocumentReview
         )
     }
 
     if (showInAppCamera) {
-        InAppCameraCapture(
+        DocumentCameraCapture(
             onDismiss = { showInAppCamera = false },
-            onCaptured = { bitmap ->
-                showInAppCamera = false
-                viewModel.onPetitionPhotoCaptured(bitmap)
-            },
             onPagesSelected = { pages ->
                 showInAppCamera = false
                 viewModel.onDocumentPagesAdded(pages)
@@ -640,8 +640,13 @@ private fun VoiceReviewDialog(
                 if (basicSummary.isNotBlank()) {
                     Text(basicSummary, style = MaterialTheme.typography.bodySmall)
                 }
-                parsedPreview.subjectOfCase?.let { Text("موضوع الدعوى: $it", style = MaterialTheme.typography.bodySmall) }
-                parsedPreview.finalRequests?.let { Text("الطلبات الختامية: $it", style = MaterialTheme.typography.bodySmall) }
+                parsedPreview.subjectOfCase?.let {
+                    Text("موضوع الدعوى: " + com.khabir.app.presentation.cases.IntakeNarrative.subject(it, parsedPreview.finalRequests),
+                        style = MaterialTheme.typography.bodySmall)
+                }
+                parsedPreview.subjectWarnings.forEach { warning ->
+                    Text(warning, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
                 parsedPreview.preliminaryMission?.let { Text("المأمورية: $it", style = MaterialTheme.typography.bodySmall) }
 
                 HorizontalDivider()
@@ -716,18 +721,35 @@ private fun DocumentGroupsReviewDialog(
     pagePaths: List<String>,
     onEdit: (Int, String) -> Unit,
     onUse: (Int) -> Unit,
+    onUseSelected: (Set<Int>) -> Unit,
     onExclude: (Int) -> Unit,
     onBack: () -> Unit
 ) {
     var editingId by remember { mutableStateOf<Int?>(null) }
     var editedText by remember { mutableStateOf("") }
+    var selectedIds by remember(documents) { mutableStateOf(emptySet<Int>()) }
+    var confirmConflict by remember { mutableStateOf(false) }
+    val selected = documents.filter { it.id in selectedIds }
+    val conflicting = selected.any { first -> selected.any { second ->
+        first.id < second.id && DocumentReviewParser.compare(first, second).first == DocumentMatchStatus.DIFFERENT
+    } }
+    if (confirmConflict) {
+        AlertDialog(
+            onDismissRequest = { confirmConflict = false },
+            title = { Text("أرقام القضايا مختلفة") },
+            text = { Text("المستندات المختارة فيها رقم دعوى أو سنة مختلفة. ضمها رغم ذلك سيجعلها قضية واحدة. راجع الصور قبل الاعتماد.") },
+            confirmButton = { TextButton(onClick = { confirmConflict = false; onUseSelected(selectedIds) }) { Text("ضم بعد المراجعة") } },
+            dismissButton = { TextButton(onClick = { confirmConflict = false }) { Text("رجوع") } }
+        )
+        return
+    }
     if (editingId != null) {
         AlertDialog(
             onDismissRequest = { editingId = null },
-            title = { Text("تعديل بيانات المستند وإضافة رقم الدعوى") },
+            title = { Text("تعديل بيانات المستند والتاريخ والترتيب") },
             text = { KhabirTextField(editedText, { editedText = it },
                 modifier = Modifier.heightIn(max = 480.dp).imePadding(),
-                label = { Text("بيانات المستند") }) },
+                label = { Text("بيانات المستند — يمكن تصحيح تاريخ تقديم الإجراء وإضافة ترتيب الإجراء: 1 ثم 2") }) },
             confirmButton = { TextButton(onClick = { editingId?.let { onEdit(it, editedText) }; editingId = null }) { Text("اعتماد التعديل") } },
             dismissButton = { TextButton(onClick = { editingId = null }) { Text("رجوع") } }
         )
@@ -741,11 +763,22 @@ private fun DocumentGroupsReviewDialog(
                 modifier = Modifier.heightIn(max = 580.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text("تم تقسيم الصور إلى ${documents.size} مستند. راجع سبب المطابقة قبل اختيار المستند المستخدم في القضية.")
+                Text("حدد أي عدد من المستندات لنفس القضية، حتى لو لم يتعرف التطبيق على تطابقها. ستُستخرج بيانات العريضة والحكم معًا في قضية واحدة.")
                 documents.forEach { document ->
                     KhabirCard(contentPadding = PaddingValues(10.dp)) {
                         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                             Text("المستند ${document.id}: ${document.type}", style = MaterialTheme.typography.titleSmall)
+                            document.record?.let { record ->
+                                Text("تاريخ تقديم الإجراء: ${record.procedureDate ?: "غير مؤكد"} — تاريخ الإعلان: ${record.serviceDate ?: "غير مؤكد"}")
+                                record.warnings.forEach { Text(it,color = MaterialTheme.colorScheme.error) }
+                                record.sources.forEach { ref -> Text("${ref.field} — الصفحات ${ref.pages.joinToString()}\n${ref.quote}",style = MaterialTheme.typography.bodySmall) }
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(checked = document.id in selectedIds, onCheckedChange = { checked ->
+                                    selectedIds = if (checked) selectedIds + document.id else selectedIds - document.id
+                                })
+                                Text("ضم هذا المستند للقضية المختارة")
+                            }
                             Text("الصفحات: ${document.pageNumbers.joinToString("، ")}")
                             document.pageNumbers.forEach { page ->
                                 pagePaths.getOrNull(page - 1)?.let { TemporaryPagePreview(it, Modifier.fillMaxWidth().height(180.dp)) }
@@ -777,7 +810,11 @@ private fun DocumentGroupsReviewDialog(
                 }
             }
         },
-        confirmButton = {},
+        confirmButton = {
+            Button(enabled = selectedIds.isNotEmpty(), onClick = {
+                if (conflicting) confirmConflict = true else onUseSelected(selectedIds)
+            }) { Text("مراجعة ${selectedIds.size} مستند في قضية واحدة") }
+        },
         dismissButton = { TextButton(onClick = onBack) { Text("رجوع للصور") } }
     )
 }

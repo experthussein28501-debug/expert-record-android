@@ -82,6 +82,7 @@ fun ExpertProfileScreen(
                 onClick = viewModel::testAndSaveAiKey,
                 enabled = !s.isTestingAiKey
             )
+            Text("تغيير المزود أو كتابة مفتاح جديد لا يُستبدل به المفتاح المحفوظ إلا بعد نجاح الاختبار والحفظ.", style = MaterialTheme.typography.bodySmall)
             val providerCapabilities = when (s.aiProvider) {
                 AiProvider.GEMINI -> "تحليل الصور، الصوت، ومساعد التقرير"
                 AiProvider.OPENAI -> "تحليل الصور، الصوت، ومساعد التقرير"
