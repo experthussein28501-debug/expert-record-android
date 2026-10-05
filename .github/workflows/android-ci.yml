@@ -75,6 +75,10 @@ jobs:
       - name: Security gate regression tests
         run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
 
+      - name: Reproduce review defects on the delivered source
+        if: github.head_ref == 'codex/0.9.17-seven-day-trial'
+        run: python3 scripts/reproduce_review_regressions.py
+
       - name: Functional unit tests
         shell: bash
         run: |
@@ -109,6 +113,7 @@ jobs:
             core/build/report-fixtures/
             core/build/notice-fixtures/
             document-evidence/
+            review-regression-evidence/
           retention-days: 7
 
   apk:
