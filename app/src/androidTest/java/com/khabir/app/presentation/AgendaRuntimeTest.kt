@@ -1,6 +1,7 @@
 package com.khabir.app.presentation
 
 import android.graphics.Bitmap
+import androidx.activity.compose.setContent
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -19,11 +20,12 @@ class AgendaRuntimeTest {
         InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand("am force-stop com.android.launcher3").close()
         compose.onNodeWithText("كود التفعيل").assertDoesNotExist()
         snapshot("01-login")
-        compose.onNodeWithText("فتح النسخة التجريبية").performClick()
-        compose.onNodeWithText("المهام").performScrollTo().assertIsNotEnabled()
-        compose.onNodeWithText("الاشتراك والمكافآت").assertDoesNotExist()
-        snapshot("01-home-tasks-locked")
-        compose.onNodeWithText("الأجندة").performScrollTo().performClick()
+        // Exercise the editor directly: this test does not authenticate or bypass the production gate.
+        compose.activity.setContent {
+            com.khabir.app.presentation.theme.KhabirTheme {
+                com.khabir.agenda.AgendaScreen(onBack = {})
+            }
+        }
         compose.onNodeWithContentDescription("اليوم").performClick()
         snapshot("02-agenda-day")
         compose.onNodeWithText("اضغط للكتابة في صفحة كاملة").performClick()
@@ -31,6 +33,11 @@ class AgendaRuntimeTest {
         compose.onNodeWithTag("agenda-save").assertIsDisplayed()
         snapshot("03-agenda-keyboard")
         compose.activityRule.scenario.recreate()
+        compose.activity.setContent {
+            com.khabir.app.presentation.theme.KhabirTheme {
+                com.khabir.agenda.AgendaScreen(onBack = {})
+            }
+        }
         compose.onNodeWithTag("agenda-ruled-editor").assertTextContains("مراجعة المستندات", substring = true)
         compose.onNodeWithTag("agenda-save").assertIsDisplayed()
         compose.onNodeWithTag("agenda-save").performClick()

@@ -30,7 +30,7 @@ adb pull /sdcard/khabir-ui.xml /tmp/khabir-ui.xml >/dev/null
 python3 - <<'PY' > /tmp/tap.txt
 import re, xml.etree.ElementTree as ET
 root=ET.parse("/tmp/khabir-ui.xml").getroot()
-labels=("فتح النسخة التجريبية","تخطي","تخطي والدخول للتجربة")
+labels=("تجربة بدون حساب — ٧ أيام",)
 for label in labels:
     for n in root.iter("node"):
         if n.attrib.get("text","") == label:
@@ -41,7 +41,20 @@ raise SystemExit("No supported trial entry button found")
 PY
 read -r x y < /tmp/tap.txt
 adb shell input tap "$x" "$y"
-sleep 3
+sleep 1
+adb shell uiautomator dump /sdcard/guest-consent.xml >/dev/null
+adb pull /sdcard/guest-consent.xml /tmp/guest-consent.xml >/dev/null
+python3 - <<'CONSENT' > /tmp/tap-consent.txt
+import re, xml.etree.ElementTree as ET
+for n in ET.parse('/tmp/guest-consent.xml').getroot().iter('node'):
+    if n.attrib.get('text') == 'أوافق — ابدأ التجربة':
+        x1,y1,x2,y2=map(int,re.findall(r'\d+',n.attrib['bounds']))
+        print((x1+x2)//2,(y1+y2)//2);break
+else: raise SystemExit('Trial deletion consent missing')
+CONSENT
+read -r x y < /tmp/tap-consent.txt
+adb shell input tap "$x" "$y"
+sleep 5
 
 adb shell uiautomator dump /sdcard/khabir-home.xml
 adb pull /sdcard/khabir-home.xml "$review_dir/home.xml"

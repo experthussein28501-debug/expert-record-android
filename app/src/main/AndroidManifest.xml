@@ -51,6 +51,10 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+        <activity android:name=".auth.WorkspaceRestartActivity" android:exported="false"
+            android:process=":workspace_restart" android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.NoDisplay" />
+        <receiver android:name=".auth.GuestExpiryReceiver" android:exported="false"
+            android:process=":workspace_restart" />
     </application>
 </manifest>
-
