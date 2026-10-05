@@ -8,6 +8,8 @@ import android.database.sqlite.SQLiteDatabase
 import com.khabir.app.data.local.AppDatabase
 import java.io.File
 
+interface WorkspaceStorageOwner { val storageScope: WorkspaceStorageContext }
+
 /** The scope is immutable for a process; switching scope requires restarting that process. */
 class WorkspaceStorageContext(base: Context, val guest: Boolean) : ContextWrapper(base) {
     private fun directory(root: File): File = if (guest) File(root, GUEST_DIRECTORY).apply { mkdirs() } else root
@@ -40,6 +42,7 @@ class WorkspaceStorageContext(base: Context, val guest: Boolean) : ContextWrappe
         fun isGuest(context: Context): Boolean {
             var current = context
             while (current is ContextWrapper) {
+                if (current is WorkspaceStorageOwner) return current.storageScope.guest
                 if (current is WorkspaceStorageContext) return current.guest
                 if (current.baseContext == null || current.baseContext === current) break
                 current = current.baseContext
