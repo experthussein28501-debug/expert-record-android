@@ -47,6 +47,7 @@ class LegalReportPdfBuilder {
         val firstPartyLabel = fields["تسمية الطرف الأول"].orEmpty().ifBlank { "المقامة من" }
         val secondPartyLabel = fields["تسمية الطرف الثاني"].orEmpty().ifBlank { "ضـــــد" }
         val compactCover = fields["نمط الغلاف"] == "مختصر"
+        val textFormat = com.khabir.app.domain.model.ReportTextFormat.decode(fields[com.khabir.app.domain.model.ReportTextFormat.KEY])
         val runningHeader = fields["رأس التقرير"].orEmpty().trim()
 
         var pageNumber = 0
@@ -59,7 +60,7 @@ class LegalReportPdfBuilder {
             typeface = Typeface.create("sans-serif", Typeface.NORMAL)
         }
 
-        fun buildLayout(text: String, centered: Boolean, justified: Boolean, width: Int = usableWidth, leftAligned: Boolean = false): StaticLayout {
+        fun buildLayout(text: String, centered: Boolean, justified: Boolean, width: Int = usableWidth, leftAligned: Boolean = false, linePercent: Int = 100): StaticLayout {
             val displayText = text.toArabicIndicDigits()
             val alignment = when {
                 centered -> Layout.Alignment.ALIGN_CENTER
@@ -70,7 +71,7 @@ class LegalReportPdfBuilder {
                 .setAlignment(alignment)
                 .setTextDirection(TextDirectionHeuristics.RTL)
                 .setIncludePad(false)
-                .setLineSpacing(2f, 1f)
+                .setLineSpacing(2f, linePercent / 100f)
             if (justified) builder.setJustificationMode(Layout.JUSTIFICATION_MODE_INTER_WORD)
             return builder.build()
         }
@@ -83,6 +84,8 @@ class LegalReportPdfBuilder {
         }
 
         fun newPage() {
+            val savedSize = paint.textSize
+            val savedTypeface = paint.typeface
             page?.let { pdf.finishPage(it) }
             pageNumber += 1
             val newPage = pdf.startPage(PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create())
@@ -97,6 +100,8 @@ class LegalReportPdfBuilder {
                 drawRawLayout(headerLayout, margin)
                 y = margin + headerLayout.height + 8
             }
+            paint.textSize = savedSize
+            paint.typeface = savedTypeface
         }
 
         fun drawLayout(layout: StaticLayout) {
@@ -112,15 +117,17 @@ class LegalReportPdfBuilder {
             justified: Boolean = false,
             after: Int = 8,
             minimumLinesWithBlock: Int = 0,
-            leftAligned: Boolean = false
+            leftAligned: Boolean = false,
+            fontName: String = "sans-serif",
+            linePercent: Int = 100
         ) {
             if (text.isBlank()) return
             paint.textSize = size
-            paint.typeface = Typeface.create("sans-serif", if (bold) Typeface.BOLD else Typeface.NORMAL)
+            paint.typeface = Typeface.create(fontName, if (bold) Typeface.BOLD else Typeface.NORMAL)
 
             var remaining = text.trim()
             while (remaining.isNotEmpty()) {
-                var layout = buildLayout(remaining, centered, justified, leftAligned = leftAligned)
+                var layout = buildLayout(remaining, centered, justified, leftAligned = leftAligned, linePercent = linePercent)
                 var availableHeight = pageBottom - y
 
                 if (minimumLinesWithBlock > 0 && layout.lineCount > 0) {
@@ -160,7 +167,7 @@ class LegalReportPdfBuilder {
                 val splitAt = layout.getLineEnd(lastFittingLine).coerceIn(1, remaining.length)
                 val pageText = remaining.substring(0, splitAt).trimEnd()
                 if (pageText.isNotEmpty()) {
-                    layout = buildLayout(pageText, centered, justified, leftAligned = leftAligned)
+                    layout = buildLayout(pageText, centered, justified, leftAligned = leftAligned, linePercent = linePercent)
                     drawLayout(layout)
                 }
 
@@ -274,12 +281,14 @@ class LegalReportPdfBuilder {
                 if (line.isNotBlank()) {
                     drawBlock(
                         line,
-                        14f,
-                        bold = isExpertSignature && line.trimStart().startsWith("الخبير"),
-                        centered = false,
-                        justified = !isExpertSignature,
+                        textFormat.size.toFloat(),
+                        bold = textFormat.bold || isExpertSignature && line.trimStart().startsWith("الخبير"),
+                        centered = textFormat.alignment == "center",
+                        justified = textFormat.alignment == "both" && !isExpertSignature,
                         after = 4,
-                        leftAligned = isExpertSignature && line.trimStart().startsWith("الخبير")
+                        leftAligned = textFormat.alignment == "left" || isExpertSignature && line.trimStart().startsWith("الخبير"),
+                        fontName = if (textFormat.font == "Arial") "sans-serif" else "serif",
+                        linePercent = textFormat.linePercent
                     )
                 }
             }

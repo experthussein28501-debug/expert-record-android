@@ -20,7 +20,7 @@ class GetOrCreateReportUseCase @Inject constructor(
             val case = caseRepository.getById(caseId)
             if (case != null) {
                 val template = ReportTemplateCatalog.suggestFor(case.caseType, case.court)
-                val composedSubject = composeCaseSubject(case.subjectOfCase, case.finalRequests)
+                val composedSubject = com.khabir.app.domain.model.PartySummaries.subject(case)
                 return Report(
                     caseId = case.id,
                     caseNo = case.caseNo,
@@ -32,9 +32,8 @@ class GetOrCreateReportUseCase @Inject constructor(
                     templateId = template.id,
                     templateName = template.name,
                     templateSectionsSpec = ReportTemplateCodec.encode(template),
-                    partiesSummary = case.parties.filter { it.role != com.khabir.app.domain.model.PartyRole.LAWYER }
-                        .sortedBy { it.orderIndex }
-                        .joinToString("، ") { it.reportDisplayName },
+                    partiesSummary = com.khabir.app.domain.model.PartySummaries.report(case),
+                    customSectionContentsSpec = com.khabir.app.domain.model.ReportCustomSectionCodec.encode(com.khabir.app.domain.model.ReportCaseSnapshot.parties(case)),
                     subjectOfCase = composedSubject,
                     assignment = case.preliminaryMission
                 )
@@ -43,18 +42,6 @@ class GetOrCreateReportUseCase @Inject constructor(
         return Report()
     }
 
-    private fun composeCaseSubject(explanation: String, finalRequests: String): String {
-        val cleanExplanation = explanation.trim()
-        val cleanRequests = finalRequests.trim()
-        if (cleanExplanation.isBlank() && cleanRequests.isBlank()) return ""
-        return buildString {
-            append("أقام المدعي دعواه بموجب صحيفة أودعت قلم كتاب المحكمة وأعلنت قانونًا")
-            if (cleanRequests.isNotBlank()) {
-                append("، وطلب في ختامها:\n").append(cleanRequests)
-            }
-            if (cleanExplanation.isNotBlank()) {
-                append("\n\nوحيث قال شارحًا دعواه:\n").append(cleanExplanation)
-            }
-        }
-    }
+    private fun composeCaseSubject(explanation: String, finalRequests: String): String =
+        com.khabir.app.domain.model.UnifiedCaseSubject.compose(explanation, finalRequests)
 }

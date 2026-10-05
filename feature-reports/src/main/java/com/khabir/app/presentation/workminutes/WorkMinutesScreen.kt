@@ -40,7 +40,7 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.khabir.app.domain.model.WorkMinutesEntry
 import com.khabir.app.domain.model.WorkMinutesPhrases
-import com.khabir.app.presentation.common.InAppCameraCapture
+import com.khabir.app.presentation.common.DocumentCameraCapture
 import com.khabir.app.presentation.common.ExplicitDialogProperties
 import com.khabir.app.presentation.common.ExplicitDialogTitle
 import com.khabir.app.presentation.components.KhabirCard
@@ -176,6 +176,7 @@ fun WorkMinutesScreen(onBack: () -> Unit, viewModel: WorkMinutesViewModel = hilt
     }
 
     Scaffold(
+        modifier = Modifier.fillMaxSize().imePadding(),
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
@@ -344,13 +345,15 @@ fun WorkMinutesScreen(onBack: () -> Unit, viewModel: WorkMinutesViewModel = hilt
 
     if (showCamera && cameraEntryNumber != null) {
         val target = cameraEntryNumber!!
-        InAppCameraCapture(
+        DocumentCameraCapture(
             onDismiss = { showCamera = false },
-            onCaptured = {},
-            onGeminiCaptured = {},
-            onPagesCaptured = { pages, useAi ->
+            onPagesSelected = { pages ->
                 showCamera = false
-                viewModel.onDocumentPagesCaptured(target, pages, useAi)
+                viewModel.onDocumentPagesCaptured(target, pages, false)
+            },
+            onPagesAnalyze = { pages ->
+                showCamera = false
+                viewModel.onDocumentPagesCaptured(target, pages, true)
             },
             onError = { message -> scope.launch { snackbar.showSnackbar(message) } }
         )

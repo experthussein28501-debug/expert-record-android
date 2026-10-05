@@ -7,10 +7,10 @@ import java.time.LocalDate
 class IntakeNarrativeTest {
     @Test fun subjectKeepsAreaAndBounds() {
         val subject = IntakeNarrative.subject("مساحتها ١٥ قيراطًا، الحد البحري طريق والقبلي ترعة.", "فرز وتجنيب النصيب")
-        assertTrue(subject.startsWith("أقام المدعي دعواه بموجب صحيفة أودعت قلم المحكمة ومعلنة قانونًا"))
+        assertTrue(subject.startsWith("أقام المدعي دعواه بموجب صحيفة معلنة قانونًا"))
         assertTrue(subject.contains("١٥ قيراطًا"))
         assertTrue(subject.indexOf("فرز وتجنيب") < subject.indexOf("وحيث قال"))
-        assertTrue(subject.endsWith("مما حدا به إلى إقامة الدعوى الماثلة."))
+        assertFalse(subject.contains("مما حدا به إلى إقامة الدعوى الماثلة"))
         assertEquals("", IntakeNarrative.subject(null, "طلبات من حكم"))
     }
     @Test fun missionStopsBeforeDepositAndKeepsDate() {

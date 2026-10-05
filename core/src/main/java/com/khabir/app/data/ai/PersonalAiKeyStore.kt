@@ -49,13 +49,19 @@ class PersonalAiKeyStore @Inject constructor(@ApplicationContext context: Contex
     fun readReportStyleMemory(): String {
         // Version 0.7.0 stored case text here. Never reuse it across cases.
         preferences.edit().remove("approved_report_style").apply()
-        return preferences.getString("approved_style_rules_v2", null).orEmpty()
+        val revisions = readReportStyleHistory()
+        return revisions.lastOrNull()?.text ?: preferences.getString("approved_style_rules_v2", null).orEmpty()
     }
-    fun writeReportStyleMemory(value: String) = preferences.edit()
-        .remove("approved_report_style")
-        .putString("approved_style_rules_v2", value.trim())
-        .apply()
-    fun clearReportStyleMemory() = preferences.edit().remove("approved_report_style").remove("approved_style_rules_v2").apply()
+    fun readReportStyleHistory(): List<com.khabir.app.domain.model.ApprovedStyleRules.Revision> =
+        com.khabir.app.domain.model.ApprovedStyleRules.decode(preferences.getString("approved_style_history_v3",null).orEmpty())
+    fun writeReportStyleMemory(value: String) {
+        require(com.khabir.app.domain.model.ApprovedStyleRules.validate(value,emptyList()).isEmpty()) { "قواعد الأسلوب تتضمن بيانات خاصة؛ راجعها قبل الاعتماد" }
+        val revisions = readReportStyleHistory() + com.khabir.app.domain.model.ApprovedStyleRules.Revision(System.currentTimeMillis(),value.trim())
+        preferences.edit().remove("approved_report_style").putString("approved_style_rules_v2",value.trim())
+            .putString("approved_style_history_v3",com.khabir.app.domain.model.ApprovedStyleRules.encode(revisions)).apply()
+    }
+    fun clearReportStyleMemory() = preferences.edit().remove("approved_report_style").remove("approved_style_rules_v2")
+        .remove("approved_style_history_v3").apply()
     private fun reportTemplateStorageSuffix(templateId: String): String =
         Base64.encodeToString(
             templateId.ifBlank { "default" }.toByteArray(StandardCharsets.UTF_8),

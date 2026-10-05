@@ -92,7 +92,7 @@ class ReportCoverFieldsTest {
     }
 
     @Test
-    fun `full case summary can still retain every individual status for notifications and details`() {
+    fun `report summary is compact while individual party statuses remain in the case`() {
         val case = Case(
             incomingNo = "15",
             incomingDate = LocalDate.of(2026, 8, 23),
@@ -109,7 +109,8 @@ class ReportCoverFieldsTest {
         val profile = ExpertProfile(expertName = "خبير", specialization = "هندسي")
         val cover = ReportCoverFields.from(case, profile)
 
-        assertTrue(cover.partiesSummary.contains("محمود بصفته"))
+        assertEquals("أحمد وآخرين ضد محمد بصفته", cover.partiesSummary)
+        assertTrue(case.parties.any { it.reportDisplayName == "محمود بصفته" })
         assertTrue(cover.partiesSummary.contains("محمد بصفته"))
         assertFalse(cover.plaintiffsSummary.contains("محمود بصفته"))
     }

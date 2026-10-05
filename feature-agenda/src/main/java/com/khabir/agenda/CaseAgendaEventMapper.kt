@@ -19,6 +19,7 @@ internal fun Case.toHearingAgendaEventOrNull(): AgendaEvent? {
             "موعد جلسة مثبت ببيانات القضية",
             caseType.takeIf(String::isNotBlank)
         ).filterNotNull().joinToString(" — "),
-        source = AgendaEventSource.CASE_HEARING
+        source = AgendaEventSource.CASE_HEARING,
+        sourceId = "case:${id}:hearing"
     )
 }

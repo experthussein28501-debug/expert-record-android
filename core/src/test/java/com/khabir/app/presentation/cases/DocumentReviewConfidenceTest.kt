@@ -11,7 +11,7 @@ class DocumentReviewConfidenceTest {
         primaryPartyNames = emptyList(), status = DocumentMatchStatus.UNCERTAIN, reason = ""
     )
 
-    @Test fun `unnumbered petition matches judgment at seventy percent or more by parties and addresses`() {
+    @Test fun `party and address similarity requires manual review without case identity`() {
         val petition = doc(1, """
             الخصم: أحمد علي محمود | العنوان: قرية النجاجرة كوم أمبو أسوان | الصفة: مدعي | الدعوى: أصلية
             الخصم: محمد حسن علي | العنوان: قرية النجاجرة كوم أمبو أسوان | الصفة: مدعى عليه | الدعوى: أصلية
@@ -23,8 +23,8 @@ class DocumentReviewConfidenceTest {
         """.trimIndent(), caseNo = "105", caseYear = "2025")
 
         val (status, reason) = DocumentReviewParser.compare(petition, judgment)
-        assertEquals(DocumentMatchStatus.MATCHED, status)
-        assertTrue(reason.contains("70") || reason.contains("100") || reason.contains("نسبة"))
+        assertEquals(DocumentMatchStatus.UNCERTAIN, status)
+        assertTrue(reason.contains("قرار المستخدم"))
     }
 
     @Test fun `weak party overlap stays uncertain`() {

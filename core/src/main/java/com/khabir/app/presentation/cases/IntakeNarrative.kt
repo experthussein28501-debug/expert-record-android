@@ -7,14 +7,13 @@ import java.time.format.DateTimeFormatter
 object IntakeNarrative {
     fun subject(summary: String?, requests: String?): String {
         if (summary.isNullOrBlank()) return ""
-        if (summary.trim().startsWith("أقام المدعي")) return summary.trim()
+        if (summary.trim().startsWith("أقام المدعي") || summary.trim().startsWith("النيابة العامة ضد")) return summary.trim()
         val claims = requests?.takeIf { it.isNotBlank() } ?: "[الطلبات الختامية تحتاج استكمالًا]"
-        return "أقام المدعي دعواه بموجب صحيفة أودعت قلم المحكمة ومعلنة قانونًا، وطلب في ختامها: $claims\n\n" +
-            "وحيث قال شارحًا دعواه: ${summary.trim().trimEnd('،', ' ', '.')}، مما حدا به إلى إقامة الدعوى الماثلة."
+        return com.khabir.app.domain.model.UnifiedCaseSubject.compose(summary, claims)
     }
 
     fun counterclaim(names: List<String>, requests: String?, incidental: Boolean, summary: String? = null): String {
-        val claimant = names.filter(String::isNotBlank).distinct().joinToString(" و").ifBlank { "[اسم مقدم الطلب يحتاج استكمالًا]" }
+        val claimant = com.khabir.app.domain.model.PartySummaries.names(names).ifBlank { "[اسم مقدم الطلب يحتاج استكمالًا]" }
         val action = if (incidental) "بتقديم طلب عارض" else "بإقامة دعوى فرعية"
         val claims = requests?.takeIf(String::isNotBlank) ?: "[الطلبات الختامية تحتاج استكمالًا]"
         val explanation = summary?.takeIf(String::isNotBlank)?.let { " وقال شرحًا لها: ${it.trim()}" }.orEmpty()
