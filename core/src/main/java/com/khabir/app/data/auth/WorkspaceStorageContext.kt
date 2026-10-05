@@ -36,6 +36,12 @@ class WorkspaceStorageContext(base: Context, val guest: Boolean) : ContextWrappe
             return current
         }
         fun forProcess(base: Context): WorkspaceStorageContext {
+            // Every Activity must use the Application's immutable scope, even if
+            // the trial expires or Firebase restores a session during its launch.
+            val existing = (base.applicationContext as? WorkspaceStorageOwner)?.let {
+                runCatching { it.storageScope.guest }.getOrNull()
+            }
+            if (existing != null) return WorkspaceStorageContext(base, existing)
             val store = GuestTrialStore(base)
             return WorkspaceStorageContext(base, store.isActive())
         }

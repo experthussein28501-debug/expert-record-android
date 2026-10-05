@@ -1,6 +1,7 @@
 package com.khabir.app.data.auth
 
 import android.content.Context
+import android.content.ContextWrapper
 import com.khabir.app.data.local.AppDatabase
 import java.io.File
 import org.junit.Assert.*
@@ -97,5 +98,17 @@ class GuestWorkspaceTest {
         cleanup.markExpired()
         assertFalse(ui.canStart)
         assertFalse(ui.isActive())
+    }
+    @Test fun activityScopeStaysWithItsApplicationWhenTheTrialEndsDuringLaunch() {
+        val application = object : ContextWrapper(raw), WorkspaceStorageOwner {
+            override val storageScope = WorkspaceStorageContext(raw, true)
+            override fun getApplicationContext(): Context = this
+        }
+        store().start()
+        now += GuestTrialPolicy.DURATION_MILLIS
+        store().markExpired()
+        assertFalse(store().isActive())
+        assertTrue(WorkspaceStorageContext.forProcess(application).guest)
+        assertTrue(WorkspaceStorageContext.isGuest(application))
     }
 }
