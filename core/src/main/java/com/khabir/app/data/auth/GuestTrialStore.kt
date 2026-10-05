@@ -46,7 +46,8 @@ class GuestTrialStore(context: Context, private val wallClock: () -> Long = Syst
         check(isExpired()) { "لم تنته مدة التجربة" }
         markExpired()
         val database = raw.getDatabasePath(WorkspaceStorageContext.GUEST_DATABASE)
-        val databaseDeleted = !database.exists() || raw.deleteDatabase(WorkspaceStorageContext.GUEST_DATABASE)
+        raw.deleteDatabase(WorkspaceStorageContext.GUEST_DATABASE)
+        val databaseDeleted = listOf("", "-wal", "-shm", "-journal").none { File(database.path + it).exists() }
         val filesDeleted = listOf(raw.filesDir, raw.cacheDir, raw.noBackupFilesDir)
             .map { File(it, WorkspaceStorageContext.GUEST_DIRECTORY) }
             .map { !it.exists() || it.deleteRecursively() }.all { it }
@@ -55,7 +56,7 @@ class GuestTrialStore(context: Context, private val wallClock: () -> Long = Syst
             val guestName = WorkspaceStorageContext.GUEST_PREFIX + name
             // Clear Android's cached SharedPreferences before removing the disk file.
             preferencesDeleted = raw.getSharedPreferences(guestName, Context.MODE_PRIVATE).edit().clear().commit() && preferencesDeleted
-            raw.deleteSharedPreferences(guestName)
+            preferencesDeleted = raw.deleteSharedPreferences(guestName) && preferencesDeleted
         }
         val completed = databaseDeleted && filesDeleted && preferencesDeleted
         check(prefs.edit().putBoolean("cleanup_complete", completed).commit())

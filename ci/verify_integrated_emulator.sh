@@ -210,7 +210,7 @@ assert 'انتهت تجربة الأسبوع' in s
 assert 'تجربة بدون حساب — ٧ أيام' not in s
 assert 'العودة للتجربة الحالية' not in s
 EXPIRED_UI
-adb shell "run-as $pkg sh -c 'test ! -e files/guest_workspace/expiry-marker; test ! -e databases/guest_khabir.db; test -e files/account-marker'"
+adb shell "run-as $pkg sh -c 'set -e; test ! -e files/guest_workspace/expiry-marker; test ! -e databases/guest_khabir.db; test -e files/account-marker'"
 adb exec-out screencap -p > "$review_dir/guest-expired-login.png"
 
 # Finally run the bundled Arabic OCR instrumented test.
@@ -219,4 +219,3 @@ adb exec-out screencap -p > "$review_dir/guest-expired-login.png"
 cmp "$trial_apk" "$review_dir/verified-optimized.apk"
 "$(dirname "$AAPT")/apksigner" verify --verbose "$review_dir/verified-optimized.apk" > "$review_dir/signature-verification.txt"
 echo "Integrated optimized app UI + Arabic OCR verification passed."
-

@@ -71,7 +71,9 @@ fun KhabirNavHost() {
     var showLogin by remember { mutableStateOf(false) }
     var restarting by remember { mutableStateOf(false) }
     fun refresh() {
-        if (trial.isExpired() && WorkspaceStorageContext.isGuest(context) && !restarting) {
+        val google = entryGate.hasGoogleAccount()
+        if ((trial.isExpired() || google) && WorkspaceStorageContext.isGuest(context) && !restarting) {
+            if (google) trial.useGoogleAccount()
             restarting = true
             GuestTrialRuntime.restart(context)
         }
@@ -88,7 +90,10 @@ fun KhabirNavHost() {
     // The entire NavHost stays uncomposed after logout/expiry, including restored back stacks.
     val allowed = remember(revision) { entryGate.hasPassedGate() }
     val guest = remember(revision) { trial.isActive() && !entryGate.hasGoogleAccount() }
-    if (!allowed || showLogin || restarting) {
+    // Firebase can restore a session after a crash before the sign-in callback switched scope.
+    val pendingGoogleScope = WorkspaceStorageContext.isGuest(context) && entryGate.hasGoogleAccount()
+    LaunchedEffect(pendingGoogleScope) { if (pendingGoogleScope) refresh() }
+    if (!allowed || showLogin || restarting || pendingGoogleScope) {
         LoginScreen(logoRes = com.khabir.app.R.drawable.ic_launcher,
             onGoogleSuccess = {
                 entryGate.markGoogleSignedIn()

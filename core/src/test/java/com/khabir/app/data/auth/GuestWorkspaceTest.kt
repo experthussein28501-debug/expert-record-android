@@ -27,6 +27,8 @@ class GuestWorkspaceTest {
         val account = WorkspaceStorageContext(raw, false)
         store().start()
         File(guest.filesDir, "source.jpg").writeText("guest")
+        File(guest.cacheDir, "temporary.jpg").writeText("guest")
+        File(guest.noBackupFilesDir, "draft").writeText("guest")
         File(account.filesDir, "account.jpg").writeText("account")
         guest.openOrCreateDatabase(AppDatabase.DB_NAME, Context.MODE_PRIVATE, null).close()
         account.openOrCreateDatabase(AppDatabase.DB_NAME, Context.MODE_PRIVATE, null).close()
@@ -35,6 +37,8 @@ class GuestWorkspaceTest {
         now += GuestTrialPolicy.DURATION_MILLIS
         assertTrue(store().deleteExpiredData())
         assertFalse(File(raw.filesDir, "guest_workspace/source.jpg").exists())
+        assertFalse(File(raw.cacheDir, "guest_workspace/temporary.jpg").exists())
+        assertFalse(File(raw.noBackupFilesDir, "guest_workspace/draft").exists())
         assertFalse(raw.getDatabasePath(WorkspaceStorageContext.GUEST_DATABASE).exists())
         assertTrue(raw.getDatabasePath(AppDatabase.DB_NAME).exists())
         assertEquals("account", File(account.filesDir, "account.jpg").readText())
