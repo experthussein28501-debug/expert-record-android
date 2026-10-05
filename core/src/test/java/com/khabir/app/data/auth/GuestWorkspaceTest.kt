@@ -18,7 +18,7 @@ class GuestWorkspaceTest {
     private var now = 1_700_000_000_000L
     @Before fun prepare() {
         raw = WorkspaceStorageContext.raw(RuntimeEnvironment.getApplication())
-        raw.getSharedPreferences("khabir_guest_trial_control", Context.MODE_PRIVATE).edit().clear().commit()
+        raw.deleteDatabase(GuestTrialStore.CONTROL_DATABASE)
         now = 1_700_000_000_000L
     }
     private fun store() = GuestTrialStore(raw) { now }
@@ -83,5 +83,19 @@ class GuestWorkspaceTest {
         val observed = store().effectiveNow()
         now -= 500_000
         assertTrue(store().effectiveNow() >= observed)
+    }
+    @Test fun separateStoreInstancesObserveModeAndTerminalExpiryWithoutCachedPreferences() {
+        val ui = store()
+        val cleanup = store()
+        ui.start()
+        ui.recordGuestProcess(123)
+        assertEquals(123, cleanup.guestProcess())
+        ui.useGoogleAccount()
+        assertEquals(-1, cleanup.guestProcess())
+        assertFalse(cleanup.inGuestMode)
+        now += GuestTrialPolicy.DURATION_MILLIS
+        cleanup.markExpired()
+        assertFalse(ui.canStart)
+        assertFalse(ui.isActive())
     }
 }

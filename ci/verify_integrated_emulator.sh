@@ -191,13 +191,18 @@ grep -q 'الإخطارات وسركي الإخطارات' "$review_dir/notifica
 # Cold-start expiry regression: expired guest data disappears and account files survive.
 adb shell am force-stop "$pkg"
 adb shell "run-as $pkg sh -c 'mkdir -p files/guest_workspace; echo guest > files/guest_workspace/expiry-marker; echo account > files/account-marker'"
-python3 - <<'EXPIRY' > /tmp/guest-expired.xml
-import time
+python3 - <<'EXPIRY'
+import time, sqlite3
+from pathlib import Path
+path=Path('/tmp/guest-expired.db')
+path.unlink(missing_ok=True)
 now=int(time.time()*1000)
-print(f'<map><long name="started" value="{now-7*24*60*60*1000-1000}"/><long name="last_seen" value="{now}"/><int name="boot" value="-2"/><boolean name="guest_mode" value="true"/></map>')
+with sqlite3.connect(path) as db:
+    db.execute('CREATE TABLE trial_state (name TEXT PRIMARY KEY, value INTEGER NOT NULL)')
+    db.executemany('INSERT INTO trial_state VALUES (?, ?)', [('started',now-7*24*60*60*1000-1000),('last_seen',now),('boot',-2),('guest_mode',1)])
 EXPIRY
-adb push /tmp/guest-expired.xml /data/local/tmp/guest-expired.xml >/dev/null
-adb shell "run-as $pkg sh -c 'cat /data/local/tmp/guest-expired.xml > shared_prefs/khabir_guest_trial_control.xml'"
+adb push /tmp/guest-expired.db /data/local/tmp/guest-expired.db >/dev/null
+adb shell "run-as $pkg sh -c 'cat /data/local/tmp/guest-expired.db > databases/khabir_guest_trial_control.db'"
 adb shell am start -W -n "$pkg/com.khabir.app.MainActivity"
 sleep 3
 adb shell uiautomator dump /sdcard/guest-expired-ui.xml >/dev/null
