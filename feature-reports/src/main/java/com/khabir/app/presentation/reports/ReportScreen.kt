@@ -1,5 +1,14 @@
 package com.khabir.app.presentation.reports
 
+import com.khabir.app.domain.model.ReportTextFormat
+import com.khabir.app.domain.model.ReportAiKind
+import com.khabir.app.domain.model.ReportAiWorkflow
+import com.khabir.app.domain.model.ReportListStyle
+import com.khabir.app.domain.model.ReportLists
+import com.khabir.app.domain.model.DocumentSide
+import com.khabir.app.domain.model.DocumentCopyKind
+import com.khabir.app.domain.model.ExamDocumentKind
+import com.khabir.app.domain.model.DocumentExamination
 import android.Manifest
 import android.app.Activity
 import android.content.Context
@@ -33,6 +42,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -46,7 +56,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.khabir.app.presentation.common.InAppCameraCapture
+import com.khabir.app.presentation.common.DocumentCameraCapture
 import com.khabir.app.presentation.common.ExplicitDialogProperties
 import com.khabir.app.presentation.common.ExplicitDialogTitle
 import com.khabir.app.presentation.components.KhabirCard
@@ -90,13 +100,15 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
     var showDepositDatePicker by remember { mutableStateOf(false) }
     var showTemplateEditor by remember { mutableStateOf(false) }
     var captureTarget by remember { mutableStateOf<ReportCaptureField?>(null) }
-    var captureCustomSectionId by remember { mutableStateOf<String?>(null) }
+    var captureCustomSectionId by rememberSaveable { mutableStateOf<String?>(null) }
     var newSectionTitle by remember { mutableStateOf("") }
     var quickInputText by remember { mutableStateOf("") }
     var fileMenuExpanded by remember { mutableStateOf(false) }
     var pendingAction by remember { mutableStateOf(FileAction.OPEN) }
     var pendingSourceUri by remember { mutableStateOf<android.net.Uri?>(null) }
-    var importedTarget by remember { mutableStateOf(ReportCaptureField.DOCUMENTS) }
+    var importedTarget by rememberSaveable { mutableStateOf(ReportCaptureField.DOCUMENTS) }
+    var reportDocumentDefaultTask by rememberSaveable { mutableStateOf(ReportDocumentTask.SUMMARY) }
+    var reportCaptureDestination by rememberSaveable { mutableStateOf<String?>(null) }
     var showInAppCamera by remember { mutableStateOf(false) }
     var voiceChoiceTarget by remember { mutableStateOf<ReportCaptureField?>(null) }
     var activeVoiceTarget by remember { mutableStateOf<ReportCaptureField?>(null) }
@@ -113,6 +125,7 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
     var rulesEditor by remember { mutableStateOf<String?>(null) }
     var styleLearningPreview by remember { mutableStateOf<String?>(null) }
     var expandedSectionId by remember { mutableStateOf<String?>(null) }
+    var showAccounting by remember { mutableStateOf(false) }
     var editingSectionHeaderId by remember { mutableStateOf<String?>(null) }
     var showReportTools by remember { mutableStateOf(false) }
     com.khabir.app.data.monetization.BlockWorkAds(showInAppCamera || state.isOcrProcessing || state.pendingReportPages.isNotEmpty() || state.pendingImageReviews.isNotEmpty() || state.importedOfficeText != null || state.isSaving || state.isLoading || showAiRecording || showContinuousDictation)
@@ -156,6 +169,9 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
     val reportImagesLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
         if (uris.isNotEmpty()) {
             importedTarget = ReportCaptureField.DOCUMENTS
+            captureCustomSectionId = null
+            reportCaptureDestination = null
+            reportDocumentDefaultTask = ReportDocumentTask.SUMMARY
             viewModel.prepareImportedReportImages(uris)
         }
     }
@@ -223,6 +239,14 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
 
     fun startReportCamera(target: ReportCaptureField, customSectionId: String? = null) {
         importedTarget = target
+        reportCaptureDestination = target.name
+        reportDocumentDefaultTask = when (target) {
+            ReportCaptureField.SUBJECT -> ReportDocumentTask.SUBJECT
+            ReportCaptureField.ASSIGNMENT -> ReportDocumentTask.ASSIGNMENT
+            ReportCaptureField.DOCUMENTS, ReportCaptureField.PLAINTIFF_DOCUMENTS, ReportCaptureField.DEFENDANT_DOCUMENTS, ReportCaptureField.CIVIL_CLAIMANT_DOCUMENTS, ReportCaptureField.ACCUSED_DOCUMENTS, ReportCaptureField.RESEARCH -> ReportDocumentTask.RESEARCH
+            ReportCaptureField.CONCLUSION -> ReportDocumentTask.CONCLUSION
+            else -> ReportDocumentTask.SUMMARY
+        }
         captureCustomSectionId = customSectionId
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             showInAppCamera = true
@@ -254,8 +278,9 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
     }
 
     Scaffold(
+        modifier = Modifier.fillMaxSize().imePadding(),
         snackbarHost = { SnackbarHost(snackbar) },
-        topBar = { TopAppBar(title = { Column { Text("تقرير الخبرة", fontWeight = FontWeight.Bold); Text(if (state.isIndependent) "تقرير مستقل" else "مرتبط بقضية مسجلة", style = MaterialTheme.typography.labelMedium) } }, actions = { if (!state.isIndependent) TextButton(enabled = !state.isLoading, onClick = viewModel::reviewCaseUpdates) { Text("تحديثات القضية") } }, navigationIcon = { IconButton(onClick = { viewModel.saveAndClose(onBack) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") } }) },
+        topBar = { TopAppBar(title = { Column { Text("تقرير الخبرة", fontWeight = FontWeight.Bold); Text("${state.caseNo.ifBlank { "بدون رقم" }}/${state.caseYear} — ${state.court}", style = MaterialTheme.typography.labelMedium) } }, actions = { TextButton(onClick={showAccounting=true}) {Text("قضايا حسابية")}; if (!state.isIndependent) TextButton(enabled = !state.isLoading, onClick = viewModel::reviewCaseUpdates) { Text("تحديثات القضية") } }, navigationIcon = { IconButton(onClick = { viewModel.saveAndClose(onBack) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") } }) },
         bottomBar = {
             BottomAppBar {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -303,6 +328,8 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                 }
             }
             Spacer(Modifier.height(12.dp))
+            ReportFormattingToolbar(ReportTextFormat.decode(state.customSectionContents[ReportTextFormat.KEY]), viewModel::onTextFormatChanged)
+            Spacer(Modifier.height(12.dp))
             KhabirCard(contentPadding = PaddingValues(14.dp)) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Link, null); Spacer(Modifier.width(8.dp)); Text("بيانات الدعوى للتقرير", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold) }
@@ -321,6 +348,7 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                         )
                         com.khabir.app.presentation.components.InlineHelp("مساعدة", "مثال: تقرير في الدعوى رقم ... — اتركه فارغًا إذا لم ترغب في رأس صفحة")
                         ReportSectionField(
+                            ReportTextFormat.decode(state.customSectionContents[ReportTextFormat.KEY]),
                             "الخصوم والصفات",
                             state.partiesSummary,
                             viewModel::onPartiesSummaryChanged,
@@ -387,10 +415,15 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                     )
                     KhabirPrimaryButton(
                         text = if (state.isAssistantWorking) "جارٍ إعداد الاقتراح..." else "إعداد اقتراح",
-                        onClick = { assistantPreview = viewModel.assistantContext() },
+                        onClick = { assistantPreview = viewModel.assistantContext(assistantRequest) },
                         enabled = assistantRequest.isNotBlank() && !state.isAssistantWorking
                     )
+                    if (state.isAssistantWorking) TextButton(onClick = viewModel::cancelAssistant) { Text("إلغاء إعداد الاقتراح") }
+                    if (state.researchNeedsReview) Text("تغيرت المأمورية أو أدلتها بعد اعتماد البحث؛ راجع البحث قبل التسليم.",color = MaterialTheme.colorScheme.error)
+                    if (state.sourceUpdateMessage.isNotBlank()) Text(state.sourceUpdateMessage,color = MaterialTheme.colorScheme.tertiary)
                     if (state.assistantReply.isNotBlank()) {
+                        if(state.assistantIsResearch && state.research.isNotBlank()) Text("البحث المحفوظ للمقارنة:\n" + state.research)
+                        if(state.researchPreviousProposal.isNotBlank()) Text("الاقتراح السابق للمقارنة:\n" + state.researchPreviousProposal)
                         KhabirTextField(
                             value = state.assistantReply,
                             onValueChange = viewModel::onAssistantReplyChanged,
@@ -399,9 +432,9 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                         )
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Button(onClick = {
-                                quickInputText = state.assistantReply
-                                captureTarget = ReportCaptureField.SUBJECT
-                            }, modifier = Modifier.weight(1f)) { Text("إدراج") }
+                                if(state.assistantIsResearch) viewModel.approveResearchProposal()
+                                else { quickInputText = state.assistantReply; captureTarget = ReportCaptureField.SUBJECT }
+                            }, modifier = Modifier.weight(1f)) { Text(if(state.assistantIsResearch) "اعتماد وإضافة للبحث" else "إدراج") }
                             OutlinedButton(onClick = {
                                 clipboardManager.setText(AnnotatedString(state.assistantReply))
                                 scope.launch { snackbar.showSnackbar("تم نسخ الاقتراح") }
@@ -461,7 +494,7 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
                 Spacer(Modifier.height(12.dp))
                 val sectionPagerState = rememberPagerState(pageCount = { enabledSections.size })
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    val currentSection = enabledSections[sectionPagerState.currentPage]
+                    val currentSection = enabledSections[sectionPagerState.currentPage.coerceAtMost(enabledSections.lastIndex)]
                     Text(
                         "${sectionPagerState.currentPage + 1} / ${enabledSections.size} — ${currentSection.title}",
                         style = MaterialTheme.typography.titleSmall,
@@ -533,6 +566,47 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
         }
     }
 
+    if(showAccounting) AccountingAssessmentDialog(state,viewModel,{showAccounting=false},{ learningReportLauncher.launch(arrayOf(ReportViewModel.WORD_MIME)) })
+    expandedSectionId?.let { id ->
+        val sections = state.template.orderedSections().filter { it.enabled }
+        val index = sections.indexOfFirst { it.id == id }
+        if (index >= 0) ReportWritingDialog(
+            sections[index], state, viewModel,
+            onDismiss = { expandedSectionId = null },
+            onAccounting = { expandedSectionId = null; showAccounting = true },
+            onPrevious = if(index > 0) ({ expandedSectionId = sections[index-1].id }) else null,
+            onNext = if(index < sections.lastIndex) ({ expandedSectionId = sections[index+1].id }) else null,
+            onCamera = ::startReportCamera, onMic = ::startArabicDictation
+        )
+    }
+
+    state.pendingReportAiKind?.let { kind ->
+        AlertDialog(onDismissRequest=viewModel::dismissSectionAiContext,title={Text(kind.label)},text={
+            Column(Modifier.heightIn(max=480.dp).verticalScroll(rememberScrollState())) {
+                Text("راجع بيانات الإرسال. تُجمع المصادر من هذه القضية فقط، مع أقوال الشهود كما كتبتها. يمكن استبعاد دليل، مع بقاء كل بنود المأمورية ونص الأدلة دون تغيير.")
+                KhabirTextField(state.pendingReportAiContext,viewModel::onSectionAiContextChanged,minLines=8,modifier=Modifier.fillMaxWidth())
+                state.errorMessage?.let {Text(it,color=MaterialTheme.colorScheme.error)}
+            }
+        },confirmButton={Button(onClick=viewModel::generateSectionAi) {Text("إرسال وإعداد اقتراح")}},dismissButton={TextButton(onClick=viewModel::dismissSectionAiContext) {Text("إلغاء")}})
+    }
+    state.reportAiProposal?.let { proposal ->
+        var replace by remember(proposal.fingerprint) { mutableStateOf(false) }
+        var showAudit by remember(proposal.fingerprint) { mutableStateOf(false) }
+        var learn by remember(proposal.fingerprint) { mutableStateOf(true) }
+        AlertDialog(onDismissRequest=viewModel::dismissSectionAiProposal,title={Text("مراجعة ${proposal.kind.label}\n${state.caseNo}/${state.caseYear} — ${state.court}")},text={
+            Column(Modifier.heightIn(max=500.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                Text("النص المحفوظ للمقارنة:")
+                Text(if(proposal.kind==ReportAiKind.RESEARCH) state.research else state.conclusion)
+                KhabirTextField(proposal.text,viewModel::onSectionAiProposalChanged,minLines=8,modifier=Modifier.fillMaxWidth())
+                Row(verticalAlignment=Alignment.CenterVertically) { Checkbox(replace,{replace=it});Text("استبدال النص المحفوظ بدل الإضافة إليه") }
+                Row(verticalAlignment=Alignment.CenterVertically) { Checkbox(learn,{learn=it});Text("حفظ أسلوب تصحيحاتي للمراجعات التالية") }
+                state.learningStatus.takeIf { it.isNotBlank() }?.let { Text(it) }
+                TextButton(onClick={showAudit=!showAudit}) {Text(if(showAudit) "إخفاء أدلة المراجعة" else "عرض المصادر والحالات والاقتباسات")}
+                if(showAudit) Text(proposal.audit)
+                state.errorMessage?.let {Text(it,color=MaterialTheme.colorScheme.error)}
+            }
+        },confirmButton={Button(onClick={viewModel.approveSectionAiProposal(replace,learn)}) {Text("اعتماد النص")}},dismissButton={TextButton(onClick=viewModel::dismissSectionAiProposal) {Text("رفض الاقتراح")}})
+    }
     state.pendingTemplateUri?.let {
         TemplateMappingDialog(uriKey = it, state = state, viewModel = viewModel)
     }
@@ -683,10 +757,15 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
 
     if (state.pendingReportPages.isNotEmpty()) ReportDocumentRequestDialog(
         pages = state.pendingReportPages,
+        defaultTask = reportDocumentDefaultTask,
+        defaultDestination = reportCaptureDestination,
         busy = state.isOcrProcessing,
         error = state.errorMessage,
+        caseType = viewModel.documentCaseType(),
         onCancel = viewModel::cancelReportDocuments,
-        onAnalyze = viewModel::analyzeRequestedDocuments
+        onAnalyze = { documents -> viewModel.analyzeRequestedDocuments(documents.map { request ->
+            request.copy(customSectionId = if (request.destinationField == ReportCaptureField.CUSTOM.name) captureCustomSectionId else null)
+        }) }
     )
 
     state.pendingImageReviews.firstOrNull()?.let { review ->
@@ -698,15 +777,11 @@ fun ReportScreen(onBack: () -> Unit, viewModel: ReportViewModel = hiltViewModel(
     }
 
     if (showInAppCamera) {
-        InAppCameraCapture(
+        DocumentCameraCapture(
             onDismiss = { showInAppCamera = false },
-            onCaptured = { bitmap ->
+            onPagesAnalyze = { pages ->
                 showInAppCamera = false
-                viewModel.onReportPhotoCaptured(bitmap)
-            },
-            onGeminiCaptured = { bitmap ->
-                showInAppCamera = false
-                viewModel.onReportPhotoCapturedWithGemini(bitmap)
+                viewModel.prepareReportDocuments(pages)
             },
             onPagesSelected = { pages ->
                 showInAppCamera = false
@@ -847,6 +922,7 @@ private fun RulesEditorDialog(rules: String, onRulesChange: (String) -> Unit, on
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TemplateEditorDialog(
     state: ReportUiState,
@@ -861,12 +937,12 @@ private fun TemplateEditorDialog(
         text = {
             Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("اختر قالب البداية، ثم عدّل الاسم والعناوين والترتيب. التعديل يخص هذا التقرير فقط.")
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     ReportTemplateCatalog.all.take(3).forEach { template ->
                         FilterChip(selected = state.template.id == template.id, onClick = { viewModel.onTemplateSelected(template.id) }, label = { Text(template.name) })
                     }
                 }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     ReportTemplateCatalog.all.drop(3).forEach { template ->
                         FilterChip(selected = state.template.id == template.id, onClick = { viewModel.onTemplateSelected(template.id) }, label = { Text(template.name) })
                     }
@@ -952,10 +1028,10 @@ private fun CaptureReviewDialog(
         Column(Modifier.heightIn(max = 450.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("اختر القسم ثم راجع أو عدّل النص قبل اعتماده")
             KhabirCard(contentPadding = PaddingValues(8.dp), containerColor = MaterialTheme.colorScheme.primaryContainer) {
-                Text("سيتم الإدراج في: ${chosenTarget.label}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                Text("سيتم الإدراج في: ${if(review.examination!=null && chosenTarget==ReportCaptureField.DOCUMENTS) examSide.label(viewModel.documentCaseType()) else chosenTarget.displayLabel(viewModel.documentCaseType())}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
             }
             Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(replaceExisting, { replaceExisting = it }); Text("استبدال النص القديم بالكامل (بدل الإضافة)") }
-            ReportCaptureField.entries.filter { it != ReportCaptureField.CUSTOM || captureCustomSectionId != null }.forEach { field -> FilterChip(selected = chosenTarget == field, onClick = { chosenTarget = field }, label = { Text(field.label) }) }
+            ReportCaptureField.entries.filter { it != ReportCaptureField.CUSTOM || captureCustomSectionId != null }.forEach { field -> FilterChip(selected = chosenTarget == field, onClick = { chosenTarget = field }, label = { Text(field.displayLabel(viewModel.documentCaseType())) }) }
             KhabirTextField(quickInputText, onQuickInputTextChange, label = { Text("النص المستخرج / المملى") }, minLines = 5, modifier = Modifier.fillMaxWidth())
         }
     }, confirmButton = { Button(onClick = {
@@ -992,16 +1068,25 @@ private fun ReportImageResultReviewDialog(
     viewModel: ReportViewModel
 ) {
     val defaultTarget = remember(review.id) {
-        when (defaultReviewDestination(review.task)) {
+        ReportCaptureField.entries.firstOrNull {
+            it.name == review.destinationField && (it != ReportCaptureField.CUSTOM || review.customSectionId != null)
+        } ?: when (defaultReviewDestination(review.task)) {
             ReportReviewDestination.SUBJECT -> ReportCaptureField.SUBJECT
             ReportReviewDestination.ASSIGNMENT -> ReportCaptureField.ASSIGNMENT
             ReportReviewDestination.DOCUMENTS -> ReportCaptureField.DOCUMENTS
             ReportReviewDestination.CONCLUSION -> ReportCaptureField.CONCLUSION
         }
     }
-    var chosenTarget by remember(review.id) { mutableStateOf(defaultTarget) }
-    var reviewedText by remember(review.id) { mutableStateOf(review.text) }
-    var replaceExisting by remember(review.id) { mutableStateOf(false) }
+    var chosenTarget by rememberSaveable(review.id) { mutableStateOf(defaultTarget) }
+    var reviewedText by rememberSaveable(review.id) { mutableStateOf(review.examination?.let { viewModel.linkedExamination(it).render() } ?: review.text) }
+    var replaceExisting by rememberSaveable(review.id) { mutableStateOf(false) }
+
+    var examKind by rememberSaveable(review.id) { mutableStateOf(review.examination?.kind ?: ExamDocumentKind.OTHER) }
+    var copyKind by rememberSaveable(review.id) { mutableStateOf(review.examination?.copyKind ?: DocumentCopyKind.UNKNOWN) }
+    var examSide by rememberSaveable(review.id) { mutableStateOf(review.examination?.side ?: DocumentSide.GENERAL) }
+    var examDate by rememberSaveable(review.id) { mutableStateOf(review.examination?.date?.toString().orEmpty()) }
+    var styleRule by rememberSaveable(review.id) { mutableStateOf("") }
+    var learnCorrection by rememberSaveable(review.id) { mutableStateOf(true) }
 
     val taskLabel = when (review.task) {
         ReportDocumentTask.SUBJECT -> "موضوع"
@@ -1018,7 +1103,7 @@ private fun ReportImageResultReviewDialog(
         title = {
             ExplicitDialogTitle(
                 "مراجعة ${review.source} — $taskLabel",
-                { viewModel.onImageReviewConsumed(review.id) }
+                { if(!state.isOcrProcessing) viewModel.onImageReviewConsumed(review.id) }
             )
         },
         text = {
@@ -1028,21 +1113,49 @@ private fun ReportImageResultReviewDialog(
             ) {
                 Text("راجع النتيجة ثم اعتمدها في القسم المطلوب. باقي نتائج الصور ستظهر تباعًا بعد هذه المراجعة.")
                 KhabirCard(contentPadding = PaddingValues(8.dp), containerColor = MaterialTheme.colorScheme.primaryContainer) {
-                    Text("سيتم الإدراج في: ${chosenTarget.label}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Text("سيتم الإدراج في: ${if(review.examination!=null && chosenTarget==ReportCaptureField.DOCUMENTS) examSide.label(viewModel.documentCaseType()) else chosenTarget.displayLabel(viewModel.documentCaseType())}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(replaceExisting, { replaceExisting = it })
                     Text("استبدال النص القديم بالكامل")
                 }
                 ReportCaptureField.entries
-                    .filter { it != ReportCaptureField.CUSTOM }
+                    .filter { (it != ReportCaptureField.CUSTOM || review.customSectionId != null) && it.availableFor(viewModel.documentCaseType()) }
                     .forEach { field ->
                         FilterChip(
                             selected = chosenTarget == field,
                             onClick = { chosenTarget = field },
-                            label = { Text(field.label) }
+                            label = { Text(field.displayLabel(viewModel.documentCaseType())) }
                         )
                     }
+                review.examination?.let { exam ->
+                    Text("نوع المستند وصفة النسخة", fontWeight = FontWeight.Bold)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        ExamDocumentKind.entries.forEach { kind -> FilterChip(selected=examKind==kind,onClick={examKind=kind},label={Text(kind.label)}) }
+                    }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        DocumentCopyKind.entries.forEach { copy -> FilterChip(selected=copyKind==copy,onClick={copyKind=copy},label={Text(copy.label)}) }
+                    }
+                    if(exam.visualEvidence.isNotBlank()) Text("قرينة النسخة: ${exam.visualEvidence} — أكدها من المستند")
+                    exam.warnings.forEach { Text(it, color=MaterialTheme.colorScheme.error) }
+                    KhabirTextField(examDate,{examDate=it},label={Text("تاريخ المستند للترتيب — سنة-شهر-يوم أو يوم/شهر/سنة")})
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        DocumentSide.available(viewModel.documentCaseType()).forEach { side ->
+                            FilterChip(selected=examSide==side,onClick={examSide=side;chosenTarget=ReportCaptureField.DOCUMENTS},label={Text(side.label(viewModel.documentCaseType()))})
+                        }
+                    }
+                    Text("المستندات المعتمدة تُرتب من الأقدم؛ غير المؤرخ يأتي أخيرًا مع تنبيه. الاسم والطرف لا يغيران هوية القضية.")
+                    TextButton(onClick={ reviewedText=viewModel.linkedExamination(exam.copy(kind=examKind,copyKind=copyKind,date=DocumentExamination.date(examDate),side=examSide,approvedText="")).render() }) { Text("إعادة الصياغة بالاختيارات — يستبدل نص المراجعة") }
+                    exam.fields["مراجع الصفحات"]?.let { Text("مراجع المصدر: $it") }
+                    var showSource by remember(review.id) { mutableStateOf(false) }
+                    TextButton(onClick={showSource=!showSource}) { Text(if(showSource) "إخفاء النص المصدر" else "عرض النص المصدر للمطابقة") }
+                    if(showSource) Text(exam.rawSource)
+
+                    Row(verticalAlignment=Alignment.CenterVertically) {
+                        Checkbox(learnCorrection,{learnCorrection=it});Text("استخلص قواعد أسلوبي من التصحيح بعد الاعتماد")
+                    }
+                    KhabirTextField(styleRule,{styleRule=it},label={Text("قاعدة أسلوب عامة تُحفظ للمستندات التالية — دون أسماء أو أرقام")},minLines=2)
+                }
                 KhabirTextField(
                     value = reviewedText,
                     onValueChange = { reviewedText = it },
@@ -1054,15 +1167,35 @@ private fun ReportImageResultReviewDialog(
         },
         confirmButton = {
             Button(
-                enabled = reviewedText.isNotBlank(),
+                enabled = reviewedText.isNotBlank() && !state.isOcrProcessing,
                 onClick = {
-                    chosenTarget.write(viewModel, reviewedText, replaceExisting)
-                    viewModel.onImageReviewApproved(review.id)
+                    val exam=review.examination
+                    val documentTargets=setOf(ReportCaptureField.DOCUMENTS,ReportCaptureField.PLAINTIFF_DOCUMENTS,ReportCaptureField.DEFENDANT_DOCUMENTS,ReportCaptureField.CIVIL_CLAIMANT_DOCUMENTS,ReportCaptureField.ACCUSED_DOCUMENTS)
+                    val side=when(chosenTarget) {
+                        ReportCaptureField.PLAINTIFF_DOCUMENTS -> DocumentSide.CLAIMANT
+                        ReportCaptureField.DEFENDANT_DOCUMENTS -> DocumentSide.RESPONDENT
+                        ReportCaptureField.CIVIL_CLAIMANT_DOCUMENTS -> DocumentSide.CIVIL_CLAIMANT
+                        ReportCaptureField.ACCUSED_DOCUMENTS -> DocumentSide.ACCUSED
+                        else -> examSide
+                    }
+                    if(exam!=null && chosenTarget in documentTargets) {
+                        viewModel.approveExaminedDocument(review.id,reviewedText,examKind,copyKind,examDate,side,replaceExisting) {
+                            if(styleRule.isNotBlank()) viewModel.onLearnFromCurrentReport(styleRule)
+                            if(learnCorrection && reviewedText!=exam.render()) viewModel.onLearnDocumentCorrection(exam,reviewedText)
+                        }
+                    } else if (chosenTarget == ReportCaptureField.CUSTOM) {
+                        review.customSectionId?.let { sectionId ->
+                            viewModel.onCustomSectionChanged(sectionId, mergeReportInput(
+                                state.customSectionContents[sectionId].orEmpty(), reviewedText, replaceExisting
+                            ))
+                        }
+                    } else chosenTarget.write(viewModel, reviewedText, replaceExisting)
+                    if(exam==null || chosenTarget !in documentTargets) viewModel.onImageReviewApproved(review.id)
                 }
             ) { Text("اعتماد ثم التالي") }
         },
         dismissButton = {
-            TextButton(onClick = { viewModel.onImageReviewConsumed(review.id) }) {
+            TextButton(onClick = { if(!state.isOcrProcessing) viewModel.onImageReviewConsumed(review.id) }) {
                 Text("تجاهل هذه النتيجة")
             }
         }
@@ -1088,7 +1221,7 @@ private fun OfficeImportReviewDialog(
                 Text("سيتم الإدراج في: ${importedTarget.label}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
             }
             Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(replaceExisting, { replaceExisting = it }); Text("استبدال النص القديم بالكامل") }
-            ReportCaptureField.entries.filter { it != ReportCaptureField.CUSTOM || captureCustomSectionId != null }.forEach { field -> FilterChip(selected = importedTarget == field, onClick = { onImportedTargetChange(field) }, label = { Text(field.label) }) }
+            ReportCaptureField.entries.filter { it != ReportCaptureField.CUSTOM || captureCustomSectionId != null }.forEach { field -> FilterChip(selected = importedTarget == field, onClick = { onImportedTargetChange(field) }, label = { Text(field.displayLabel(viewModel.documentCaseType())) }) }
             KhabirTextField(value = reviewedText, onValueChange = { reviewedText = it }, minLines = 6, maxLines = 12, modifier = Modifier.fillMaxWidth())
         }
     }, confirmButton = { Button(onClick = {
@@ -1126,12 +1259,28 @@ private fun ReportTemplateSection(
         else -> null
     }
     if (section.id == "calculations") {
-        ReportCalculationsEditor(state.calculationsTable, viewModel::onCalculationsChanged, { onCamera(ReportCaptureField.CALCULATIONS, null) }, { onMic(ReportCaptureField.CALCULATIONS, null) })
+        var showRent by remember { mutableStateOf(false) }
+        Column {
+            FilledTonalButton(onClick={showRent=true}) {Text("تقدير الريع — الفترة الفعلية ونصيب المستحق")}
+            ReportCalculationsEditor(state.calculationsTable, viewModel::onCalculationsChanged, { onCamera(ReportCaptureField.CALCULATIONS, null) }, { onMic(ReportCaptureField.CALCULATIONS, null) })
+        }
+        if(showRent) RentAssessmentDialog(onDismiss={showRent=false},onApprove=viewModel::approveRentAssessment)
     } else if (mapping != null) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             section.headingLines.filter(String::isNotBlank).forEach { Text(it, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium) }
+            if(section.id in setOf("research","conclusion")) {
+                val kind=if(section.id=="research") ReportAiKind.RESEARCH else ReportAiKind.CONCLUSION
+                FilledTonalButton(enabled=!state.isAssistantWorking,onClick={viewModel.prepareSectionAi(kind)},modifier=Modifier.fillMaxWidth()) { Text(kind.label) }
+                Text("يعمل عند الضغط فقط؛ الكتابة اليدوية محفوظة ولا يستبدلها الاقتراح دون اعتمادك.",style=MaterialTheme.typography.labelMedium)
+                if(state.isAssistantWorking) TextButton(onClick=viewModel::cancelAssistant) { Text("إلغاء إعداد الاقتراح") }
+                if(section.id=="research" && state.research.isNotBlank()) OutlinedButton(onClick=viewModel::confirmManualResearch) {Text("تأكيد مراجعتي للبحث اليدوي على المصادر الحالية")}
+                if(section.id=="research" && state.researchNeedsReview) Text("تغيرت المصادر بعد البحث المعتمد؛ راجعه.",color=MaterialTheme.colorScheme.error)
+                if(section.id=="conclusion" && viewModel.conclusionNeedsReview()) Text("تغير البحث أو أدلته بعد النتيجة؛ أعد مراجعتها.",color=MaterialTheme.colorScheme.error)
+            }
+
             if (section.id == "subject") {
                 ReportSectionField(
+                            ReportTextFormat.decode(state.customSectionContents[ReportTextFormat.KEY]),
                     section.title,
                     mapping.first,
                     mapping.second,
@@ -1149,6 +1298,7 @@ private fun ReportTemplateSection(
             } else if (section.id == "statements") {
                 val statements = splitPartyStatements(state.partyStatements)
                 ReportSectionField(
+                            ReportTextFormat.decode(state.customSectionContents[ReportTextFormat.KEY]),
                     "أقوال المدعي",
                     statements.first,
                     { plaintiff -> viewModel.onPartyStatementsChanged(joinPartyStatements(plaintiff, statements.second)) },
@@ -1161,6 +1311,7 @@ private fun ReportTemplateSection(
                 )
                 Spacer(Modifier.height(8.dp))
                 ReportSectionField(
+                            ReportTextFormat.decode(state.customSectionContents[ReportTextFormat.KEY]),
                     "أقوال المدعى عليه",
                     statements.second,
                     { defendant -> viewModel.onPartyStatementsChanged(joinPartyStatements(statements.first, defendant)) },
@@ -1173,23 +1324,30 @@ private fun ReportTemplateSection(
                 )
             } else {
                 ReportSectionField(
+                            ReportTextFormat.decode(state.customSectionContents[ReportTextFormat.KEY]),
                     section.title, mapping.first, mapping.second,
                     if (section.id in setOf("witnesses", "inspection", "documents", "research")) 5 else 4,
                     { onCamera(mapping.third, null) }, { onMic(mapping.third, null) },
                     isExpanded = isExpanded, onExpand = onExpand, expandedHeight = expandedHeight,
-                    enableListTools = section.id in setOf("documents", "research", "conclusion")
+                    enableListTools = section.id in setOf("documents", "research", "conclusion"),
+                    selectedListStyle = ReportListStyle.decode(state.customSectionContents[ReportListStyle.key(section.id)]),
+                    onListStyleChanged = { viewModel.onListStyleChanged(section.id, it) }
                 )
             }
         }
     } else {
         ReportSectionField(
+                            ReportTextFormat.decode(state.customSectionContents[ReportTextFormat.KEY]),
             section.title,
             state.customSectionContents[section.id].orEmpty(),
             { viewModel.onCustomSectionChanged(section.id, it) },
             minLines = 4,
             onCamera = { onCamera(ReportCaptureField.CUSTOM, section.id) },
             onMic = { onMic(ReportCaptureField.CUSTOM, section.id) },
-            isExpanded = isExpanded, onExpand = onExpand, expandedHeight = expandedHeight
+            isExpanded = isExpanded, onExpand = onExpand, expandedHeight = expandedHeight,
+            enableListTools = listOf("بحث", "مستند", "نتيجة").any { section.title.contains(it) },
+            selectedListStyle = ReportListStyle.decode(state.customSectionContents[ReportListStyle.key(section.id)]),
+            onListStyleChanged = { viewModel.onListStyleChanged(section.id, it) }
         )
     }
 }
@@ -1216,78 +1374,43 @@ private fun joinPartyStatements(plaintiff: String, defendant: String): String = 
     append(defendant.trim())
 }.trim()
 
-private enum class ReportCaptureField(val label: String) {
-    PARTIES("الخصوم والصفات"), SUBJECT("الموضوع"), ASSIGNMENT("المأمورية"), PROCEEDINGS("مباشرة المأمورية"), STATEMENTS("أقوال طرفي التداعي"), WITNESSES("سماع الشهود"), INSPECTION("المعاينة على الطبيعة"), DOCUMENTS("بحث المستندات"), FACTS("الوقائع والملاحظات"), RESEARCH("البحث"), CALCULATIONS("الحسابات والجداول"), CONCLUSION("النتيجة النهائية"), ATTACHMENTS("ملاحظات المرفقات"), CUSTOM("البند المضاف");
+internal enum class ReportCaptureField(val label: String) {
+    PARTIES("الخصوم والصفات"), SUBJECT("الموضوع"), ASSIGNMENT("المأمورية"), PROCEEDINGS("مباشرة المأمورية"), STATEMENTS("أقوال طرفي التداعي"), WITNESSES("سماع الشهود"), INSPECTION("المعاينة على الطبيعة"), DOCUMENTS("بحث المستندات"), PLAINTIFF_DOCUMENTS("مستندات المدعين"), DEFENDANT_DOCUMENTS("مستندات المدعى عليهم"), CIVIL_CLAIMANT_DOCUMENTS("مستندات المدعي بالحق المدني"), ACCUSED_DOCUMENTS("مستندات المتهم"), FACTS("الوقائع والملاحظات"), RESEARCH("البحث"), CALCULATIONS("الحسابات والجداول"), CONCLUSION("النتيجة النهائية"), ATTACHMENTS("ملاحظات المرفقات"), CUSTOM("البند المضاف");
+    fun availableFor(caseType:String):Boolean = when(this) {
+        PLAINTIFF_DOCUMENTS,DEFENDANT_DOCUMENTS -> DocumentSide.CLAIMANT in DocumentSide.available(caseType)
+        CIVIL_CLAIMANT_DOCUMENTS,ACCUSED_DOCUMENTS -> DocumentSide.ACCUSED in DocumentSide.available(caseType)
+        else -> true
+    }
+    fun displayLabel(caseType: String): String = when(this) {
+        PLAINTIFF_DOCUMENTS -> DocumentSide.CLAIMANT.label(caseType)
+        DEFENDANT_DOCUMENTS -> DocumentSide.RESPONDENT.label(caseType)
+        CIVIL_CLAIMANT_DOCUMENTS -> DocumentSide.CIVIL_CLAIMANT.label(caseType)
+        ACCUSED_DOCUMENTS -> DocumentSide.ACCUSED.label(caseType)
+        else -> label
+    }
     fun write(vm: ReportViewModel, incoming: String, replace: Boolean = false) {
         val state = vm.uiState.value
         val old = when (this) {
             PARTIES -> state.partiesSummary; SUBJECT -> state.subjectOfCase; ASSIGNMENT -> state.assignment
             PROCEEDINGS -> state.proceedings; STATEMENTS -> state.partyStatements; WITNESSES -> state.witnessStatements
-            INSPECTION -> state.inspection; DOCUMENTS -> state.documentsSubmitted; FACTS -> state.facts
+            INSPECTION -> state.inspection; DOCUMENTS, PLAINTIFF_DOCUMENTS, DEFENDANT_DOCUMENTS, CIVIL_CLAIMANT_DOCUMENTS, ACCUSED_DOCUMENTS -> state.documentsSubmitted; FACTS -> state.facts
             RESEARCH -> state.research; CALCULATIONS -> state.calculationsTable; CONCLUSION -> state.conclusion
             ATTACHMENTS -> state.attachmentsNote; CUSTOM -> ""
         }
-        val value = mergeReportInput(old, incoming, replace)
+        val labeled = when (this) {
+            PLAINTIFF_DOCUMENTS, DEFENDANT_DOCUMENTS, CIVIL_CLAIMANT_DOCUMENTS, ACCUSED_DOCUMENTS -> "${displayLabel(vm.documentCaseType())}:\n$incoming"
+            else -> incoming
+        }
+        val value = mergeReportInput(old, labeled, replace)
         when (this) {
-        PARTIES -> vm.onPartiesSummaryChanged(value); SUBJECT -> vm.onSubjectChanged(value); ASSIGNMENT -> vm.onAssignmentChanged(value); PROCEEDINGS -> vm.onProceedingsChanged(value); STATEMENTS -> vm.onPartyStatementsChanged(value); WITNESSES -> vm.onWitnessStatementsChanged(value); INSPECTION -> vm.onInspectionChanged(value); DOCUMENTS -> vm.onDocumentsChanged(value); FACTS -> vm.onFactsChanged(value); RESEARCH -> vm.onResearchChanged(value); CALCULATIONS -> vm.onCalculationsChanged(value); CONCLUSION -> vm.onConclusionChanged(value); ATTACHMENTS -> vm.onAttachmentsNoteChanged(value); CUSTOM -> Unit
+        PARTIES -> vm.onPartiesSummaryChanged(value); SUBJECT -> vm.onSubjectChanged(value); ASSIGNMENT -> vm.onAssignmentChanged(value); PROCEEDINGS -> vm.onProceedingsChanged(value); STATEMENTS -> vm.onPartyStatementsChanged(value); WITNESSES -> vm.onWitnessStatementsChanged(value); INSPECTION -> vm.onInspectionChanged(value); DOCUMENTS, PLAINTIFF_DOCUMENTS, DEFENDANT_DOCUMENTS, CIVIL_CLAIMANT_DOCUMENTS, ACCUSED_DOCUMENTS -> vm.onDocumentsChanged(value); FACTS -> vm.onFactsChanged(value); RESEARCH -> vm.onResearchChanged(value); CALCULATIONS -> vm.onCalculationsChanged(value); CONCLUSION -> vm.onConclusionChanged(value); ATTACHMENTS -> vm.onAttachmentsNoteChanged(value); CUSTOM -> Unit
         }
     }
-}
-
-private enum class ReportListStyle(val label: String) {
-    WESTERN("1، 2، 3"),
-    ARABIC_INDIC("١، ٢، ٣"),
-    ARABIC_LETTERS("أ، ب، ج"),
-    BULLET("• نقطة"),
-    DASH("– شرطة"),
-    X_MARK("X"),
-    PLAIN("نص عادي")
-}
-
-private fun ensureReportListStarted(text: String, style: ReportListStyle): String {
-    val trimmed = text.trimEnd()
-    if (trimmed.isBlank()) return reportListMarker(style, 1)
-    val lastLine = trimmed.lineSequence().lastOrNull().orEmpty()
-    return if (looksLikeReportListLine(lastLine, style)) text else trimmed + "\n" + reportListMarker(style, 1)
-}
-
-private fun continueReportListOnEnter(oldValue: String, newValue: String, style: ReportListStyle): String {
-    if (newValue.length != oldValue.length + 1 || !newValue.endsWith("\n")) return newValue
-    val completed = oldValue.lineSequence().count { looksLikeReportListLine(it, style) }.coerceAtLeast(1)
-    return newValue + reportListMarker(style, completed + 1)
-}
-
-private fun looksLikeReportListLine(line: String, style: ReportListStyle): Boolean {
-    val v = line.trimStart()
-    return when (style) {
-        ReportListStyle.WESTERN -> Regex("""\d+[.)-]?\s+.*""").matches(v)
-        ReportListStyle.ARABIC_INDIC -> Regex("""[٠-٩]+[.)-]?\s+.*""").matches(v)
-        ReportListStyle.ARABIC_LETTERS -> Regex("""[أبجدهوزحطيكلمنسعفصقرشتثخذضظغ][.)-]?\s+.*""").matches(v)
-        ReportListStyle.BULLET -> v.startsWith("• ")
-        ReportListStyle.DASH -> v.startsWith("– ")
-        ReportListStyle.X_MARK -> v.startsWith("X ")
-        ReportListStyle.PLAIN -> false
-    }
-}
-
-private fun reportListMarker(style: ReportListStyle, index: Int): String = when (style) {
-    ReportListStyle.WESTERN -> "$index. "
-    ReportListStyle.ARABIC_INDIC -> reportArabicIndic(index) + ". "
-    ReportListStyle.ARABIC_LETTERS -> reportArabicLetter(index) + ". "
-    ReportListStyle.BULLET -> "• "
-    ReportListStyle.DASH -> "– "
-    ReportListStyle.X_MARK -> "X "
-    ReportListStyle.PLAIN -> ""
-}
-
-private fun reportArabicIndic(index: Int): String = index.toString().map { ch -> "٠١٢٣٤٥٦٧٨٩"[ch.digitToInt()] }.joinToString("")
-private fun reportArabicLetter(index: Int): String {
-    val letters = listOf("أ", "ب", "ج", "د", "هـ", "و", "ز", "ح", "ط", "ي", "ك", "ل", "م", "ن", "س", "ع", "ف", "ص", "ق", "ر", "ش", "ت", "ث", "خ", "ذ", "ض", "ظ", "غ")
-    return letters[(index - 1).mod(letters.size)]
 }
 
 @Composable
 private fun ReportSectionField(
+    textFormat: ReportTextFormat,
     label: String,
     value: String,
     onChange: (String) -> Unit,
@@ -1297,10 +1420,11 @@ private fun ReportSectionField(
     isExpanded: Boolean = false,
     onExpand: () -> Unit = {},
     expandedHeight: Dp = 480.dp,
-    enableListTools: Boolean = false
+    enableListTools: Boolean = false,
+    selectedListStyle: ReportListStyle = ReportListStyle.PLAIN,
+    onListStyleChanged: (ReportListStyle) -> Unit = {}
 ) {
     var listMenuExpanded by remember(label) { mutableStateOf(false) }
-    var activeListStyle by remember(label) { mutableStateOf<ReportListStyle?>(null) }
     val listIndentTransformation = remember { ArabicListHangingIndentTransformation() }
     KhabirCard(
         contentPadding = PaddingValues(12.dp),
@@ -1335,16 +1459,16 @@ private fun ReportSectionField(
                         FilledTonalButton(onClick = { listMenuExpanded = true }) {
                             Icon(Icons.Filled.FormatListNumbered, contentDescription = null)
                             Spacer(Modifier.width(4.dp))
-                            Text(activeListStyle?.label ?: "اختيار قائمة")
+                            Text(selectedListStyle.label)
                         }
                         DropdownMenu(expanded = listMenuExpanded, onDismissRequest = { listMenuExpanded = false }) {
                             ReportListStyle.entries.forEach { style ->
                                 DropdownMenuItem(
                                     text = { Text(style.label) },
                                     onClick = {
-                                        activeListStyle = style.takeUnless { it == ReportListStyle.PLAIN }
+                                        onListStyleChanged(style)
                                         listMenuExpanded = false
-                                        if (style != ReportListStyle.PLAIN) onChange(ensureReportListStarted(value, style))
+
                                     }
                                 )
                             }
@@ -1356,7 +1480,7 @@ private fun ReportSectionField(
             KhabirTextField(
                 value = value,
                 onValueChange = { incoming ->
-                    onChange(activeListStyle?.let { continueReportListOnEnter(value, incoming, it) } ?: incoming)
+                    onChange(ReportLists.continueOnEnter(value, incoming, selectedListStyle))
                 },
                 modifier = Modifier
                     .onFocusChanged { if (it.isFocused) onExpand() }
@@ -1364,6 +1488,7 @@ private fun ReportSectionField(
                 minLines = minLines,
                 maxLines = if (isExpanded) Int.MAX_VALUE else minLines,
                 visualTransformation = listIndentTransformation,
+                textStyle = reportEditorTextStyle(textFormat),
                 placeholder = { Text("اكتب هنا أو استخدم الكاميرا أو الإملاء الصوتي") }
             )
         }

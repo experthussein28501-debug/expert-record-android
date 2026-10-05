@@ -156,7 +156,7 @@ class WorkMinutesDocxBuilder {
     private fun questionAnswerParagraph(label: String, text: String): String {
         val safeLabel = escape(label)
         val safeText = escape(text.toArabicIndicDigits())
-        return "<w:p><w:pPr><w:bidi/><w:widowControl/><w:jc w:val=\"both\"/><w:ind w:right=\"0\" w:hanging=\"800\"/><w:tabs><w:tab w:val=\"right\" w:pos=\"0\"/></w:tabs><w:spacing w:before=\"0\" w:after=\"8\" w:line=\"360\" w:lineRule=\"auto\"/></w:pPr>" +
+        return "<w:p><w:pPr><w:bidi/><w:widowControl/><w:jc w:val=\"both\"/><w:ind w:right=\"0\" w:hanging=\"800\"/><w:tabs><w:tab w:val=\"right\" w:pos=\"800\"/></w:tabs><w:spacing w:before=\"0\" w:after=\"8\" w:line=\"360\" w:lineRule=\"auto\"/></w:pPr>" +
             "<w:r><w:rPr><w:rtl/><w:b/><w:lang w:val=\"ar-EG\" w:bidi=\"ar-EG\"/><w:rFonts w:ascii=\"Traditional Arabic\" w:hAnsi=\"Traditional Arabic\" w:cs=\"Traditional Arabic\"/><w:sz w:val=\"24\"/><w:szCs w:val=\"24\"/></w:rPr><w:t xml:space=\"preserve\">$safeLabel/ </w:t><w:tab/></w:r>" +
             "<w:r><w:rPr><w:rtl/><w:b/><w:lang w:val=\"ar-EG\" w:bidi=\"ar-EG\"/><w:rFonts w:ascii=\"Traditional Arabic\" w:hAnsi=\"Traditional Arabic\" w:cs=\"Traditional Arabic\"/><w:sz w:val=\"24\"/><w:szCs w:val=\"24\"/></w:rPr><w:t xml:space=\"preserve\">$safeText</w:t></w:r></w:p>"
     }

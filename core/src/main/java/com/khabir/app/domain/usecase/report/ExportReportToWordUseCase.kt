@@ -86,7 +86,8 @@ class ExportReportToWordUseCase @Inject constructor(
             exportRepository.exportReportAsWord(
                 "تقرير_قضية_${safeCaseNo}_${safeCaseYear}",
                 "تقريــــــــــر",
-                coverFields,
+                coverFields + (com.khabir.app.domain.model.ReportTextFormat.KEY to
+                    com.khabir.app.domain.model.ReportCustomSectionCodec.decode(report.customSectionContentsSpec)[com.khabir.app.domain.model.ReportTextFormat.KEY].orEmpty()),
                 sections,
                 File(report.siteSketchPath).takeIf { report.siteSketchPath.isNotBlank() && it.isFile }
             )

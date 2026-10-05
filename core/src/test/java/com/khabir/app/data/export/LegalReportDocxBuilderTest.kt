@@ -133,6 +133,25 @@ class LegalReportDocxBuilderTest {
         }
     }
 
+    @Test
+    fun `saved body typography exports to editable word paragraphs`() {
+        val format = com.khabir.app.domain.model.ReportTextFormat("left", "Arial", 18, true, 200)
+        val bytes = LegalReportDocxBuilder().build("تقرير", listOf(
+            "نمط الغلاف" to "مختصر", "الوزارة" to "وزارة العدل", "الوارد" to "25 لسنة 2026",
+            com.khabir.app.domain.model.ReportTextFormat.KEY to format.encode()
+        ), listOf("الموضوع" to "طلبات المدعي ثم شرح الدعوى"))
+        val xml = unzipEntry(bytes, "word/document.xml")
+        val paragraph = xml.substringBefore("طلبات المدعي ثم شرح الدعوى").substringAfterLast("<w:p>")
+        assertTrue(paragraph.contains("w:val=\"left\""))
+        assertTrue(paragraph.contains("w:ascii=\"Arial\""))
+        assertTrue(paragraph.contains("w:szCs w:val=\"36\""))
+        assertTrue(paragraph.contains("<w:bCs/>"))
+        assertTrue(paragraph.contains("w:line=\"480\""))
+        assertTrue(xml.indexOf("وزارة العدل") < xml.indexOf("وارد ٢٥"))
+        val dir = java.io.File("build/report-fixtures").apply { mkdirs() }
+        java.io.File(dir, "formatted-report.docx").writeBytes(bytes)
+    }
+
     private fun unzipEntry(bytes: ByteArray, path: String): String {
         ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
             while (true) {

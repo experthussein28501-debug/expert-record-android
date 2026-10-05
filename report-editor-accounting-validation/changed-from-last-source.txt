@@ -1,0 +1,7 @@
+RESEARCH-CONCLUSION-IMPLEMENTATION-AR.md
+core/src/main/java/com/khabir/app/domain/model/ReportAiWorkflow.kt
+core/src/main/java/com/khabir/app/domain/model/ReportTemplate.kt
+core/src/test/java/com/khabir/app/domain/model/ReportAiWorkflowTest.kt
+feature-reports/src/main/java/com/khabir/app/presentation/reports/ReportScreen.kt
+feature-reports/src/main/java/com/khabir/app/presentation/reports/ReportViewModel.kt
+scripts/run_full_legal_tests.py

@@ -1,0 +1,10 @@
+REPORT-EDITOR-ACCOUNTING-IMPLEMENTATION-AR.md
+core/src/main/java/com/khabir/app/domain/model/AccountingAssessment.kt
+core/src/test/java/com/khabir/app/domain/model/AccountingAssessmentTest.kt
+feature-reports/src/main/java/com/khabir/app/presentation/reports/AccountingAssessmentDialog.kt
+feature-reports/src/main/java/com/khabir/app/presentation/reports/ReportWritingDialog.kt
+report-editor-accounting-validation/android-build-blocked.txt
+report-editor-accounting-validation/changed-from-last-source.txt
+report-editor-accounting-validation/kotlin-junit.txt
+report-editor-accounting-validation/module-boundaries.txt
+report-editor-accounting-validation/python-tests.txt

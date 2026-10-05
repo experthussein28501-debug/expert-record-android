@@ -23,6 +23,11 @@ class AgendaVault(private val context: Context) {
         .mapValues { (key, value) -> cipher.decrypt(value as String, key) }
     fun put(key: String, value: String) { check(prefs.edit().putString(key, cipher.encrypt(value, key)).commit()) { "تعذر حفظ اليوم" } }
     fun remove(key: String) { check(prefs.edit().remove(key).commit()) { "تعذر حذف اليوم" } }
+    fun putAll(values:Map<String,String?>) {
+        val editor=prefs.edit()
+        values.forEach { (key,value) -> if(value==null) editor.remove(key) else editor.putString(key,cipher.encrypt(value,key)) }
+        check(editor.commit()) {"تعذر حفظ مواعيد الأجندة"}
+    }
     fun exportPortable(): String = JSONObject(all()).toString()
     fun restorePortable(json: String) {
         val source = JSONObject(json)

@@ -1,0 +1,13 @@
+{
+  "baseline": "expert-record-0.9.15-document-examination-and-lists-source-tested.zip",
+  "changed_existing_code": [
+    "core/src/main/java/com/khabir/app/data/ai/ReportDocumentPrompt.kt",
+    "core/src/main/java/com/khabir/app/domain/model/DocumentExamination.kt",
+    "core/src/main/java/com/khabir/app/domain/model/ReportResearch.kt",
+    "core/src/main/java/com/khabir/app/presentation/cases/DocumentExaminationLocalParser.kt",
+    "feature-reports/src/main/java/com/khabir/app/presentation/reports/ReportScreen.kt",
+    "feature-reports/src/main/java/com/khabir/app/presentation/reports/ReportViewModel.kt"
+  ],
+  "unchanged_settings_gradle_signing_version_database_keys": true,
+  "unchanged_word_exporter_and_previous_document_features": true
+}

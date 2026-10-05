@@ -1,0 +1,17 @@
+{
+  "baseline": "expert-record-0.9.15-full-prompt-source-tested.zip",
+  "changed_existing_code": [
+    "core/src/main/java/com/khabir/app/data/ai/GeminiDocumentVisionService.kt",
+    "core/src/main/java/com/khabir/app/data/ai/ReportDocumentPrompt.kt",
+    "core/src/main/java/com/khabir/app/data/backup/EncryptedBackupService.kt",
+    "core/src/main/java/com/khabir/app/data/export/LegalReportDocxBuilder.kt",
+    "core/src/main/java/com/khabir/app/presentation/components/ArabicListHangingIndentTransformation.kt",
+    "feature-reports/src/main/java/com/khabir/app/presentation/reports/ReportDocumentRequest.kt",
+    "feature-reports/src/main/java/com/khabir/app/presentation/reports/ReportDocumentRequestDialog.kt",
+    "feature-reports/src/main/java/com/khabir/app/presentation/reports/ReportScreen.kt",
+    "feature-reports/src/main/java/com/khabir/app/presentation/reports/ReportViewModel.kt"
+  ],
+  "unchanged_settings_and_build_files": true,
+  "unchanged_case_database_and_intake": true,
+  "unchanged_ai_key_encryption_and_provider_settings": true
+}
