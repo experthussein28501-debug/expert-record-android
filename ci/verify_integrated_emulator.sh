@@ -188,6 +188,31 @@ adb shell uiautomator dump /sdcard/khabir-notifications.xml
 adb pull /sdcard/khabir-notifications.xml "$review_dir/notifications.xml"
 grep -q 'الإخطارات وسركي الإخطارات' "$review_dir/notifications.xml"
 
+# Cold-start expiry regression: expired guest data disappears and account files survive.
+adb shell am force-stop "$pkg"
+adb shell "run-as $pkg sh -c 'mkdir -p files/guest_workspace; echo guest > files/guest_workspace/expiry-marker; echo account > files/account-marker'"
+python3 - <<'EXPIRY' > /tmp/guest-expired.xml
+import time
+now=int(time.time()*1000)
+print(f'<map><long name="started" value="{now-7*24*60*60*1000-1000}"/><long name="last_seen" value="{now}"/><int name="boot" value="-2"/><boolean name="guest_mode" value="true"/></map>')
+EXPIRY
+adb push /tmp/guest-expired.xml /data/local/tmp/guest-expired.xml >/dev/null
+adb shell "run-as $pkg sh -c 'cat /data/local/tmp/guest-expired.xml > shared_prefs/khabir_guest_trial_control.xml'"
+adb shell am start -W -n "$pkg/com.khabir.app.MainActivity"
+sleep 3
+adb shell uiautomator dump /sdcard/guest-expired-ui.xml >/dev/null
+adb pull /sdcard/guest-expired-ui.xml "$review_dir/guest-expired-ui.xml" >/dev/null
+python3 - <<'EXPIRED_UI'
+from pathlib import Path
+s=Path('release-output/integration-review-0.9.0/guest-expired-ui.xml').read_text()
+assert 'تسجيل الدخول باستخدام Google' in s
+assert 'انتهت تجربة الأسبوع' in s
+assert 'تجربة بدون حساب — ٧ أيام' not in s
+assert 'العودة للتجربة الحالية' not in s
+EXPIRED_UI
+adb shell "run-as $pkg sh -c 'test ! -e files/guest_workspace/expiry-marker; test ! -e databases/guest_khabir.db; test -e files/account-marker'"
+adb exec-out screencap -p > "$review_dir/guest-expired-login.png"
+
 # Finally run the bundled Arabic OCR instrumented test.
 ./gradlew --no-daemon -PKHABIR_TEST_BUILD_TYPE=debug :app:connectedCombinedDebugAndroidTest --stacktrace
 
