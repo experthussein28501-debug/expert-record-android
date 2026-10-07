@@ -6,6 +6,34 @@ import org.junit.Test
 
 class DocumentReviewParserTest {
     @Test
+    fun `three sources form one case with unique parties and complementary subject and mission`() {
+        val documents = DocumentReviewParser.parse("""
+            [[DOCUMENT 1]]
+            الصفحات: 1
+            نوع المستند: عريضة دعوى
+            الخصم: أحمد محمد علي | العنوان: أسوان | الصفة: مدعي | الدعوى: أصلية
+            موضوع الدعوى: المطالبة بملكية الأرض
+            [[END DOCUMENT]]
+            [[DOCUMENT 2]]
+            الصفحات: 2
+            نوع المستند: حكم تمهيدي
+            الدعوى رقم 105 لسنة 2025 مدني كلي أسوان
+            الخصم: أحمد محمد علي | العنوان: أسوان | الصفة: مدعي | الدعوى: أصلية
+            مأمورية الحكم التمهيدي: معاينة الأرض
+            [[END DOCUMENT]]
+            [[DOCUMENT 3]]
+            الصفحات: 3
+            نوع المستند: مستند إضافي
+            الخصم: أحمد محمد علي | العنوان: أسوان | الصفة: مدعي | الدعوى: أصلية
+            [[END DOCUMENT]]
+        """.trimIndent())
+        val combined = DocumentReviewParser.combinedText(documents)
+        assertTrue(combined.contains("رقم الدعوى: 105"))
+        assertTrue(combined.contains("المطالبة بملكية الأرض"))
+        assertTrue(combined.contains("معاينة الأرض"))
+        assertEquals(1, Regex("الخصم: أحمد محمد علي").findAll(combined).count())
+    }
+    @Test
     fun `matches petition and judgment and isolates different judgment`() {
         val documents = DocumentReviewParser.parse(
             """
@@ -36,7 +64,7 @@ class DocumentReviewParserTest {
     }
 
     @Test
-    fun `matches incomplete identity when party confidence exceeds threshold`() {
+    fun `incomplete identity requires review even with similar parties`() {
         val documents = DocumentReviewParser.parse(
             """
             [[DOCUMENT 1]]
@@ -51,7 +79,26 @@ class DocumentReviewParserTest {
             [[END DOCUMENT]]
             """.trimIndent()
         )
-        assertEquals(DocumentMatchStatus.MATCHED, documents[1].status)
-        assertTrue(documents[1].reason.contains("نسبة"))
+        assertEquals(DocumentMatchStatus.UNCERTAIN, documents[1].status)
+        assertTrue(documents[1].reason.contains("يلزم"))
+    }
+
+    @Test fun `unified subject survives review and reparse without repeating requests`() {
+        val documents = DocumentReviewParser.parse("""
+            [[DOCUMENT 1]]
+            نوع المستند: صحيفة دعوى
+            موضوع الدعوى: الطالب يمتلك ١٩ قيراطًا و٧ أسهم بناحية أرمنا.
+            الطلبات الختامية: الحكم بالتسليم وإلزامهم بالمصاريف.
+            [[END DOCUMENT]]
+        """.trimIndent())
+        val combined = DocumentReviewParser.combinedText(documents)
+        val parsed = PetitionIntakeParser.parse(combined)
+        val subject = IntakeNarrative.subject(parsed.subjectOfCase, parsed.finalRequests)
+        assertEquals(1, Regex("الحكم بالتسليم").findAll(subject).count())
+        assertTrue(subject.contains("١٩ قيراطًا و٧ أسهم"))
+        assertTrue(subject.indexOf("الحكم بالتسليم") < subject.indexOf("وحيث قال"))
+    }
+    @Test fun `empty selection is safe`() {
+        assertEquals("", DocumentReviewParser.combinedText(emptyList()))
     }
 }

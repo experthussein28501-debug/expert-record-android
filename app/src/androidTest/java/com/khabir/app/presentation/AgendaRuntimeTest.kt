@@ -5,7 +5,6 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.khabir.app.MainActivity
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -13,14 +12,12 @@ import java.io.File
 
 @RunWith(AndroidJUnit4::class)
 class AgendaRuntimeTest {
-    @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+    @get:Rule val compose = createAndroidComposeRule<AgendaTestActivity>()
 
     @Test fun fullPageWritingSavesAndReopensOnDevice() {
         InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand("am force-stop com.android.launcher3").close()
         compose.onNodeWithText("كود التفعيل").assertDoesNotExist()
-        snapshot("01-login")
-        compose.onNodeWithText("فتح النسخة التجريبية").performClick()
-        compose.onNodeWithText("الأجندة").performScrollTo().performClick()
+        snapshot("01-agenda")
         compose.onNodeWithContentDescription("اليوم").performClick()
         snapshot("02-agenda-day")
         compose.onNodeWithText("اضغط للكتابة في صفحة كاملة").performClick()

@@ -17,7 +17,9 @@ data class WorkMinutesEntry(
     /** وقت الموعد القادم بصيغة حرة مثل 9 صباحًا أو 09:00. */
     val scheduledFollowUpTime: String = "",
     /** مكان الموعد القادم: المكتب أو المحكمة أو أي مكان آخر يكتبه المستخدم. */
-    val scheduledFollowUpLocation: String = ""
+    val scheduledFollowUpLocation: String = "",
+    val automaticSourceKey: String = "",
+    val automaticSnapshot: String = ""
 )
 
 /**
@@ -44,7 +46,7 @@ data class WorkMinutesRecord(
  * بنفس أسلوب [ReportTemplateCodec]: كل حقل نصي base64، الحقول بينها tab،
  * والمحاضر بينها سطر جديد.
  *
- * أُضيف الوقت والمكان في نهاية السطر فقط للحفاظ على التوافق مع البيانات القديمة:
+ * أُضيف الوقت والمكان ثم مفتاح المصدر الآلي وبصمته في نهاية السطر فقط للحفاظ على التوافق مع البيانات القديمة:
  * السجلات القديمة التي تحتوي 7 أعمدة تظل قابلة للقراءة كما هي.
  */
 object WorkMinutesCodec {
@@ -61,7 +63,9 @@ object WorkMinutesCodec {
             encodeText(entry.expertName),
             entry.scheduledFollowUpDate?.toEpochDay()?.toString().orEmpty(),
             encodeText(entry.scheduledFollowUpTime),
-            encodeText(entry.scheduledFollowUpLocation)
+            encodeText(entry.scheduledFollowUpLocation),
+            encodeText(entry.automaticSourceKey),
+            encodeText(entry.automaticSnapshot)
         ).joinToString("\t")
     }
 
@@ -77,7 +81,9 @@ object WorkMinutesCodec {
                 expertName = parts.getOrNull(5)?.let(::decodeText).orEmpty(),
                 scheduledFollowUpDate = parts.getOrNull(6)?.takeIf(String::isNotBlank)?.toLongOrNull()?.let(LocalDate::ofEpochDay),
                 scheduledFollowUpTime = parts.getOrNull(7)?.let(::decodeText).orEmpty(),
-                scheduledFollowUpLocation = parts.getOrNull(8)?.let(::decodeText).orEmpty()
+                scheduledFollowUpLocation = parts.getOrNull(8)?.let(::decodeText).orEmpty(),
+                automaticSourceKey = parts.getOrNull(9)?.let(::decodeText).orEmpty(),
+                automaticSnapshot = parts.getOrNull(10)?.let(::decodeText).orEmpty()
             )
         }
     }.getOrElse { emptyList() }

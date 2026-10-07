@@ -21,6 +21,7 @@ class MultiPageDocumentReader @Inject constructor(
     private val localOcr: ArabicPetitionOcrService,
     private val aiVision: GeminiDocumentVisionService
 ) {
+    private val pageCache = com.khabir.app.domain.model.ExtractionResultCache()
     data class Result(
         val text: String,
         val pagesRead: Int,
@@ -35,7 +36,8 @@ class MultiPageDocumentReader @Inject constructor(
         useAi: Boolean,
         fallbackToLocal: Boolean = true,
         deleteAfterRead: Boolean = true,
-        detectMultipleDocuments: Boolean = false
+        detectMultipleDocuments: Boolean = false,
+        onProgress: (Int, Int) -> Unit = { _, _ -> }
     ): Result {
         val pages = mutableListOf<String>()
         val warnings = mutableListOf<String>()
@@ -61,6 +63,12 @@ class MultiPageDocumentReader @Inject constructor(
             if (!effectiveUseAi) {
                 files.forEachIndexed { offset, file ->
                     val pageNumber = firstPage + offset
+                    val localCacheKey = runCatching { com.khabir.app.domain.model.ExtractionResultCache.key(listOf(file.readBytes()),"local-ocr","","case-session") }.getOrNull()
+                    val cached = localCacheKey?.let(pageCache::get)
+                    if(cached != null) {
+                        pages += "[الصفحة $pageNumber]\n$cached"; pagesRead++; onProgress(pagesRead,pageFiles.size)
+                        return@forEachIndexed
+                    }
                     val bitmap = decodeCameraBitmap(context, Uri.fromFile(file), MAX_ANALYSIS_EDGE)
                     if (bitmap == null) {
                         warnings += "تعذر قراءة الصفحة $pageNumber"
@@ -69,6 +77,7 @@ class MultiPageDocumentReader @Inject constructor(
                             when (val local = localOcr.recognize(bitmap)) {
                                 is ArabicPetitionOcrService.Result.Success -> {
                                     pages += "[الصفحة $pageNumber]\n${local.text.trim()}"
+                                    localCacheKey?.let { pageCache.put(it,local.text.trim()) }
                                     pagesRead++
                                 }
                                 is ArabicPetitionOcrService.Result.Failure -> warnings += "الصفحة $pageNumber: ${local.message}"
@@ -77,6 +86,7 @@ class MultiPageDocumentReader @Inject constructor(
                             if (!bitmap.isRecycled) bitmap.recycle()
                         }
                     }
+                    onProgress(pagesRead,pageFiles.size)
                     yield()
                 }
                 return@batchLoop
@@ -98,6 +108,7 @@ class MultiPageDocumentReader @Inject constructor(
                     is GeminiDocumentVisionService.Result.Success -> {
                         pages += "[الصفحات $firstPage-${firstPage + bitmaps.size - 1}]\n${result.text.trim()}"
                         pagesRead += bitmaps.size
+                        onProgress(pagesRead,pageFiles.size)
                     }
                     is GeminiDocumentVisionService.Result.Unavailable,
                     is GeminiDocumentVisionService.Result.Failure -> {

@@ -9,8 +9,7 @@ object ReportCaseSnapshot {
     )
     private fun summary(case: Case, plaintiff: Boolean): String {
         val parties = case.parties.filter { if (plaintiff) it.role.isPlaintiff else it.role.isDefendant }
-        return if (ReportCoverFields.isEstateOrGuardianship(case.caseType, case.court)) ReportCoverFields.fullPartySummary(parties)
-            else ReportCoverFields.coverPartySummary(parties)
+        return if (plaintiff && PartySummaries.misdemeanor(case.caseType)) "النيابة العامة" else PartySummaries.side(parties)
     }
     fun cover(report: Report, case: Case, profile: ExpertProfile): ReportCoverFields {
         val metadata = ReportCustomSectionCodec.decode(report.customSectionContentsSpec)

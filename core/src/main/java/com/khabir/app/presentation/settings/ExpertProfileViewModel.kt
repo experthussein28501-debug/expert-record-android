@@ -83,25 +83,31 @@ class ExpertProfileViewModel @Inject constructor(
     fun onJobTitleChanged(v: String) = changed { copy(jobTitle = v) }
     fun onAttendancePhraseChanged(v: String) = changed { copy(attendancePhrase = v) }
 
-    private fun invalidateKey() {
+    private fun invalidatePendingKeyTest() {
         keyRevision++
-        personalAiKeyStore.clear()
     }
 
+    private fun hasSavedKeyFor(provider: AiProvider): Boolean =
+        personalAiKeyStore.readProvider() == provider && personalAiKeyStore.read().isNotBlank()
+
     fun onPersonalAiKeyChanged(v: String) {
-        invalidateKey()
-        changed { copy(personalAiKey = v, hasPersonalAiKey = false) }
+        invalidatePendingKeyTest()
+        changed { copy(personalAiKey = v, hasPersonalAiKey = hasSavedKeyFor(aiProvider)) }
     }
 
     fun onAiProviderChanged(v: AiProvider) {
-        invalidateKey()
-        changed { copy(aiProvider = v, hasPersonalAiKey = false) }
+        if (v == _uiState.value.aiProvider) return
+        invalidatePendingKeyTest()
+        // Provider/key edits are drafts. Keep the working pair until its replacement
+        // passes validation, and never submit another provider's unfinished draft.
+        changed { copy(aiProvider = v, personalAiKey = "", hasPersonalAiKey = hasSavedKeyFor(v)) }
     }
 
     fun onAiInstructionsChanged(v: String) = changed { copy(aiInstructions = v) }
 
     fun clearPersonalAiKey() {
-        invalidateKey()
+        invalidatePendingKeyTest()
+        personalAiKeyStore.clear()
         _uiState.update {
             it.copy(
                 personalAiKey = "",
@@ -199,7 +205,7 @@ class ExpertProfileViewModel @Inject constructor(
                 )
             )
             _uiState.update {
-                it.copy(isSaving = false, savedJustNow = true, hasPersonalAiKey = personalAiKeyStore.read().isNotBlank())
+                it.copy(isSaving = false, savedJustNow = true, hasPersonalAiKey = hasSavedKeyFor(it.aiProvider))
             }
         }
     }

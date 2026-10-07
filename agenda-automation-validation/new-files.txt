@@ -1,0 +1,14 @@
+AGENDA-AUTOMATIC-MINUTES-IMPLEMENTATION-AR.md
+agenda-automation-validation/android-build-blocked.txt
+agenda-automation-validation/kotlin-junit.txt
+agenda-automation-validation/module-boundaries.txt
+agenda-automation-validation/python-tests.txt
+core/src/main/java/com/khabir/app/domain/model/AutomaticWorkMinutes.kt
+core/src/test/java/com/khabir/app/domain/model/AutomaticWorkMinutesTest.kt
+core/src/test/java/com/khabir/app/domain/usecase/workminutes/AutomaticReceiptLoadTest.kt
+feature-agenda/src/main/java/com/khabir/agenda/AgendaDayCodec.kt
+feature-agenda/src/main/java/com/khabir/agenda/AgendaNoteAppointments.kt
+feature-agenda/src/main/java/com/khabir/agenda/AgendaNotesReviewDialog.kt
+feature-agenda/src/main/java/com/khabir/agenda/AgendaSourceEvents.kt
+feature-agenda/src/test/java/com/khabir/agenda/AgendaNoteAppointmentsTest.kt
+feature-agenda/src/test/java/com/khabir/agenda/AgendaSourceEventsTest.kt

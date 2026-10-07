@@ -25,18 +25,18 @@ class SubjectContinuityTest {
     @Test fun counterclaimFollowsOriginalWithNamesRequestsAndExplanation() {
         val result = subject(counter, original)
         assertTrue(result.indexOf("مما حدا به") < result.indexOf("وأثناء سير الدعوى"))
-        assertTrue(result.contains("قام حسن علي بإقامة دعوى فرعية"))
+        assertTrue(result, result.contains("أقام حسن علي دعوى فرعية"))
         assertTrue(result.contains("إلزام المدعي أصليًا بالتعويض"))
-        assertTrue(result.contains("وقال شرحًا لها: يطلب التعويض عن أرض مساحتها فدان وحدها البحري طريق"))
-        assertTrue(result.indexOf("إلزام المدعي أصليًا بالتعويض") < result.indexOf("وقال شرحًا لها"))
+        assertTrue(result, result.contains("وعلى سند من القول:\nيطلب التعويض عن أرض مساحتها فدان وحدها البحري طريق"))
+        assertTrue(result.indexOf("إلزام المدعي أصليًا بالتعويض") < result.lastIndexOf("وعلى سند من القول"))
         assertEquals(1, Regex("أقام المدعي دعواه").findAll(result).count())
     }
 
     @Test fun incidentalRequestKeepsItsTypeAndWorksWithoutSummary() {
         val request = document(2, "صحيفة طلب عارض", "الخصم: محمود سالم | العنوان: دراو | الصفة: مدعي | الدعوى: طلب عارض\nالطلبات الختامية: إلزام الخصم بتقديم المستندات")
         val result = subject(original, request)
-        assertTrue(result.contains("قام محمود سالم بتقديم طلب عارض"))
-        assertFalse(result.contains("بإقامة دعوى فرعية"))
+        assertTrue(result, result.contains("قدم محمود سالم طلبًا عارضًا"))
+        assertFalse(result.contains("دعوى فرعية"))
     }
 
     @Test fun returnedHistoryWorksWithAndWithoutCounterclaim() {

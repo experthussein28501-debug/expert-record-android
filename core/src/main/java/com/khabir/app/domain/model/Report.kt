@@ -79,7 +79,7 @@ data class ReportCoverFields(
         fun from(case: Case, profile: ExpertProfile): ReportCoverFields {
             val plaintiffs = case.parties.filter { it.role.isPlaintiff }
             val defendants = case.parties.filter { it.role.isDefendant }
-            val estateOrGuardianship = isEstateOrGuardianship(case.caseType, case.court)
+            val isCriminal = PartySummaries.misdemeanor(case.caseType)
 
             return ReportCoverFields(
                 court = case.court,
@@ -90,9 +90,9 @@ data class ReportCoverFields(
                 expertName = profile.expertName,
                 ministryOrSector = profile.ministryOrSector,
                 department = profile.department,
-                plaintiffsSummary = if (estateOrGuardianship) fullPartySummary(plaintiffs) else coverPartySummary(plaintiffs),
-                defendantsSummary = if (estateOrGuardianship) fullPartySummary(defendants) else coverPartySummary(defendants),
-                partiesSummary = case.parties.filter { it.role != PartyRole.LAWYER }.joinToString("، ") { "${it.reportDisplayName} (${it.role.arabicLabel})" },
+                plaintiffsSummary = if (isCriminal) "النيابة العامة" else coverPartySummary(plaintiffs),
+                defendantsSummary = coverPartySummary(defendants),
+                partiesSummary = PartySummaries.report(case),
                 caseType = case.caseType,
                 manualHeader = ""
             )
@@ -103,11 +103,7 @@ data class ReportCoverFields(
          * إذا كان أول اسم فقط «بصفته» تظهر بعد اسمه. صفة أي اسم تالٍ لا تظهر في الغلاف.
          */
         internal fun coverPartySummary(parties: List<Party>): String {
-            val ordered = parties.sortedBy { it.orderIndex }.filter { it.fullName.isNotBlank() }
-            if (ordered.isEmpty()) return ""
-            val first = ordered.first().reportDisplayName
-            if (ordered.size == 1 || first.contains("وآخرين")) return first
-            return "$first وآخرين"
+            return PartySummaries.side(parties)
         }
 
         /** Estate/guardianship covers keep their specific all-names behavior. */

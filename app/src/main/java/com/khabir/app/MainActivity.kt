@@ -20,6 +20,9 @@ import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(com.khabir.app.data.auth.WorkspaceStorageContext.forProcess(newBase))
+    }
     private lateinit var monetization: com.khabir.app.monetization.MonetizationController
     override fun onResume() { super.onResume(); if (::monetization.isInitialized) monetization.onResume() }
     override fun onPause() { if (::monetization.isInitialized) monetization.onPause(); super.onPause() }
@@ -28,6 +31,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.khabir.app.data.auth.GuestTrialStore(this).recordGuestProcess(android.os.Process.myPid())
         window.decorView.layoutDirection = View.LAYOUT_DIRECTION_RTL
         monetization = com.khabir.app.monetization.MonetizationController(this)
         setContent {
