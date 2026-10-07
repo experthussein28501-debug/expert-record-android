@@ -33,8 +33,18 @@ object IntakeNarrative {
             ?: Regex("بعد\\s+مطالعة\\s+أوراق\\s+الدعوى").find(text)
             ?: return null
         val body = text.substring(if (start.value.startsWith("بعد")) start.range.first else start.range.last + 1)
+        return boundMission(body)
+    }
+
+    internal fun boundMission(body: String): String? {
         val end = Regex("(?:و?تحقيق\\s+كافة\\s+عناصر\\s+الدعوى|بذات\\s+الأمانة\\s+السابقة|بأمانة\\s+تكميلية)").find(body)
-        return (if (end == null) body else body.substring(0, end.range.last + 1)).trim().takeIf(String::isNotBlank)
+        val administrative = Regex("(?:وألزمت|والزمت|قدرت\\s+أمانة|وقدرت\\s+أمانة|وحددت\\s+جلسة|أمانة\\s+[0-9٠-٩])").find(body)
+        val boundary = when {
+            end != null && (administrative == null || end.range.first < administrative.range.first) -> end.range.last + 1
+            administrative != null -> administrative.range.first
+            else -> body.length
+        }
+        return body.substring(0, boundary).trim().takeIf(String::isNotBlank)
     }
 
     fun mission(body: String?, date: LocalDate?): String {

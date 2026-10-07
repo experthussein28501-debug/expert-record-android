@@ -85,7 +85,7 @@ object DocumentReviewParser {
         val history = IntakeNarrative.returnedHistory(evidence("دليل إعادة الدعوى"),
             evidence("دليل التقرير السابق"), evidence("دليل تداول الدعوى"))
         val subject = listOf(assembly.subject,history).filter(String::isNotBlank).joinToString("\n\n")
-        val mission = judgments.mapNotNull { (_, data) -> data.preliminaryMission?.let {
+        val mission = parsed.mapNotNull { (_, data) -> data.preliminaryMission?.let {
             IntakeNarrative.mission(it, data.preliminaryJudgmentDate)
         } }.joinToString("\n\n")
         return buildString {
