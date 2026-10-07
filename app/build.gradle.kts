@@ -82,7 +82,7 @@ android {
         }
         create("hardened") {
             initWith(getByName("debug"))
-            applicationIdSuffix = ".preview.v0918"
+            applicationIdSuffix = ".preview.v0919"
             versionNameSuffix = "-preview"
             manifestPlaceholders["appLabel"] = "سجل الخبير — تجربة 0.9.19"
             isDebuggable = false
