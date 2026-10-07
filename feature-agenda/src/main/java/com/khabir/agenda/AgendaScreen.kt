@@ -105,7 +105,7 @@ fun AgendaScreen(
                 title = {
                     Column {
                         Text("الأجندة", fontWeight = FontWeight.Bold)
-                        Text(arabicMonth(state.month), style = MaterialTheme.typography.labelMedium)
+
                     }
                 },
                 navigationIcon = {
@@ -144,6 +144,9 @@ fun AgendaScreen(
                 },
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            Text(arabicMonth(state.month), modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Bold,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             WeekHeader()
             MonthGrid(
                 month = state.month,
@@ -230,7 +233,7 @@ private fun AgendaDayCell(summary: AgendaDaySummary, onClick: (LocalDate) -> Uni
         )
     ) {
         Column(Modifier.fillMaxSize().padding(5.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(summary.date.dayOfMonth.toString(), fontWeight = FontWeight.Bold)
+            Text(summary.date.dayOfMonth.toString(), fontSize = 22.sp, fontWeight = FontWeight.Bold)
             summary.holiday?.let {
                 Text(it.name, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
@@ -374,7 +377,7 @@ internal fun AgendaDayDialog(
                     Icon(Icons.Filled.CalendarMonth, null)
                     Spacer(Modifier.width(8.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(formatDate(summary.date), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text(formatDate(summary.date), fontSize = 26.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold)
                         summary.holiday?.let { Text(it.name, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold) }
                     }
                     InlineHelp("ملاحظات اليوم", "اضغط على الورقة لفتح الكتابة بالكيبورد. استخدم القلم في المساحة السفلية، وافتح أدواته من أسفل. زر حفظ اليوم يحفظ النص والقلم والصور معًا.")
@@ -904,3 +907,4 @@ private fun decodeAgendaImage(path: String, maxSide: Int): Bitmap? {
     options.inJustDecodeBounds = false
     return BitmapFactory.decodeFile(path, options)
 }
+

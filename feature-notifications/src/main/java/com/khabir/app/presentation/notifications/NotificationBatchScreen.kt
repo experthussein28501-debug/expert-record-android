@@ -9,6 +9,7 @@ import android.net.Uri
 import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -45,6 +46,9 @@ import com.khabir.app.presentation.common.ExplicitDialogTitle
 import com.khabir.app.presentation.components.KhabirCard
 import com.khabir.app.presentation.components.KhabirTextField
 import java.io.File
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import com.khabir.app.domain.model.NotificationBatch
 import java.time.Instant
 import java.time.ZoneId
 
@@ -95,7 +99,9 @@ fun NotificationBatchScreen(onBack: () -> Unit, viewModel: NotificationBatchView
                     onClear = viewModel::onClearPastBatchSelection,
                     onExport = viewModel::onExportSelected,
                     onDelete = viewModel::onDeletePastBatch,
-                    onEdit = viewModel::onEditPastBatch
+                    onEdit = viewModel::onEditPastBatch,
+                    onFilter = viewModel::onSessionFilterChanged,
+                    onAddSession = viewModel::onAddSession
                 )
                 NotificationScreenUiState.Mode.BuildingNew -> NewBatchSection(state, viewModel)
             }
@@ -111,9 +117,16 @@ private fun BatchListSection(
     onClear: () -> Unit,
     onExport: (ExportNotificationBatchToWordUseCase.OutputType) -> Unit,
     onDelete: (Long) -> Unit,
-    onEdit: (Long) -> Unit
+    onEdit: (Long) -> Unit,
+    onFilter: (LocalDate?) -> Unit,
+    onAddSession: (Long, List<com.khabir.app.domain.model.NotificationRecipient>, LocalDate, String) -> Unit
 ) {
-    val batches = state.pastBatches
+    val batches = state.pastBatches.filter { state.sessionFilter == null || it.appointmentDate == state.sessionFilter }
+    var filterMenu by remember { mutableStateOf(false) }
+    var addingSession by remember { mutableStateOf<NotificationBatch?>(null) }
+    addingSession?.let { source ->
+        AddSessionDialog(source, state, onDismiss = { addingSession = null }, onSave = onAddSession)
+    }
     var pendingDeleteBatchId by remember { mutableStateOf<Long?>(null) }
     pendingDeleteBatchId?.let { batchId ->
         AlertDialog(
@@ -124,7 +137,7 @@ private fun BatchListSection(
             dismissButton = { TextButton(onClick = { pendingDeleteBatchId = null }) { Text("إلغاء") } }
         )
     }
-    if (batches.isEmpty()) {
+    if (state.pastBatches.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("لا توجد دفعات إخطارات بعد") }
         return
     }
@@ -135,27 +148,48 @@ private fun BatchListSection(
             if (state.selectedPastBatchIds.isNotEmpty()) TextButton(onClick = onClear) { Text("إلغاء") }
         }
         Text("تم تحديد ${state.selectedPastBatchIds.size} من ${batches.size}", style = MaterialTheme.typography.bodySmall)
-        LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant), verticalAlignment = Alignment.CenterVertically) {
+            Text("القضايا والمحكمة", Modifier.weight(1.3f).padding(6.dp), fontWeight = FontWeight.Bold)
+            Text("آخر جلسة محددة", Modifier.weight(1f).padding(6.dp), fontWeight = FontWeight.Bold)
+            Box(Modifier.weight(1f)) {
+                TextButton(onClick = { filterMenu = true }) { Text(state.sessionFilter?.let(::sessionDateLabel) ?: "اختيار جلسة ▾") }
+                DropdownMenu(expanded = filterMenu, onDismissRequest = { filterMenu = false }) {
+                    DropdownMenuItem(text = { Text("كل الجلسات") }, onClick = { onFilter(null); filterMenu = false })
+                    state.pastBatches.map { it.appointmentDate }.distinct().sortedDescending().forEach { date ->
+                        DropdownMenuItem(text = { Text(sessionDateLabel(date)) }, onClick = { onFilter(date); filterMenu = false })
+                    }
+                }
+            }
+        }
+        LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(bottom = 80.dp)) {
+            if (batches.isEmpty()) item { Text("لا توجد إخطارات في هذا التاريخ") }
             items(batches, key = { it.id }) { batch ->
-                val caseLabels = batch.recipients.map { "${it.caseNo}/${it.caseYear}" }.distinct().joinToString("، ")
-                KhabirCard(contentPadding = PaddingValues(0.dp)) {
-                    Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = batch.id in state.selectedPastBatchIds,
-                            onCheckedChange = { onToggle(batch.id) }
-                        )
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Text("قضية $caseLabels", fontWeight = FontWeight.Bold)
-                            Text("موعد ${batch.appointmentDate} — ${batch.appointmentTime}", style = MaterialTheme.typography.bodySmall)
+                Column(Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1.3f).padding(6.dp)) {
+                            batch.recipients.distinctBy(::notificationCaseKey).forEach { recipient ->
+                                Text("دعوى ${recipient.caseNo} لسنة ${recipient.caseYear}", fontWeight = FontWeight.Bold)
+                                Text(recipient.court, style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        Column(Modifier.weight(1f).padding(6.dp)) {
+                            batch.recipients.distinctBy(::notificationCaseKey).forEach { recipient ->
+                                val latest = state.pastBatches.filter { b -> b.recipients.any { notificationCaseKey(it) == notificationCaseKey(recipient) } }
+                                    .maxOfOrNull { it.appointmentDate }
+                                Text(latest?.let(::sessionDateLabel).orEmpty())
+                            }
+                        }
+                        Column(Modifier.weight(1f).padding(6.dp)) {
+                            Text(sessionDateLabel(batch.appointmentDate))
+                            Text(batch.appointmentTime, style = MaterialTheme.typography.bodySmall)
                             Text("${batch.recipients.size} مُخطَر", style = MaterialTheme.typography.bodySmall)
+                            Checkbox(checked = batch.id in state.selectedPastBatchIds, onCheckedChange = { onToggle(batch.id) })
                         }
-                        if (batch.isReprint) AssistChip(onClick = {}, label = { Text("مُعاد") })
-                        IconButton(onClick = { onEdit(batch.id) }) {
-                            Icon(Icons.Filled.Edit, contentDescription = "تعديل دفعة الإخطارات")
-                        }
-                        IconButton(onClick = { pendingDeleteBatchId = batch.id }) {
-                            Icon(Icons.Filled.Delete, contentDescription = "إزالة دفعة الإخطارات")
-                        }
+                    }
+                    FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(onClick = { addingSession = batch }, enabled = !state.isCreating) { Text("إضافة إخطار") }
+                        TextButton(onClick = { onEdit(batch.id) }) { Text("تعديل الدفعة") }
+                        TextButton(onClick = { pendingDeleteBatchId = batch.id }) { Text("مسح الدفعة") }
                     }
                 }
             }
@@ -171,6 +205,61 @@ private fun BatchListSection(
             OutputButton("حافظة البريد", state.isExporting && state.exportingType == ExportNotificationBatchToWordUseCase.OutputType.MAIL_COVER, !state.isExporting && state.selectedPastBatchIds.isNotEmpty(), { onExport(ExportNotificationBatchToWordUseCase.OutputType.MAIL_COVER) }, Modifier.weight(1f))
         }
     }
+}
+
+private fun sessionDateLabel(date: LocalDate): String = date.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+
+@Composable
+private fun AddSessionDialog(
+    source: NotificationBatch,
+    state: NotificationScreenUiState,
+    onDismiss: () -> Unit,
+    onSave: (Long, List<com.khabir.app.domain.model.NotificationRecipient>, LocalDate, String) -> Unit
+) {
+    val context = LocalContext.current
+    val cases = source.recipients.filterNot { it.isAuthorityNotice }.distinctBy(::notificationCaseKey)
+    var caseKey by remember(source.id) { mutableStateOf(cases.firstOrNull()?.let(::notificationCaseKey).orEmpty()) }
+    val recipients = remember(state.pastBatches, caseKey) { sessionRecipients(state.pastBatches, caseKey) }
+    var selected by remember(source.id, caseKey, recipients) { mutableStateOf(setOf<Int>()) }
+    var date by remember(source.id) { mutableStateOf(LocalDate.now()) }
+    var time by remember(source.id) { mutableStateOf(source.appointmentTime) }
+    var submitted by remember { mutableStateOf(false) }
+    LaunchedEffect(state.isCreating, state.lastCreatedBatchId) {
+        if (submitted && !state.isCreating && state.errorMessage == null) onDismiss()
+    }
+    AlertDialog(
+        onDismissRequest = { if (!state.isCreating) onDismiss() },
+        title = { Text("إضافة موعد وإخطار جديد") },
+        text = {
+            Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("اختر الدعوى والخصوم المطلوب إعادة إخطارهم. المواعيد السابقة تظل محفوظة.")
+                cases.forEach { r ->
+                    FilterChip(selected = caseKey == notificationCaseKey(r), onClick = { if (!state.isCreating) caseKey = notificationCaseKey(r) },
+                        label = { Text("${r.caseNo}/${r.caseYear} — ${r.court}") })
+                }
+                recipients.forEachIndexed { index, r ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = index in selected, enabled = !state.isCreating,
+                            onCheckedChange = { selected = if (it) selected + index else selected - index })
+                        Column { Text(r.fullName); Text(r.partyAddress, style = MaterialTheme.typography.bodySmall) }
+                    }
+                }
+                OutlinedButton(enabled = !state.isCreating, onClick = {
+                    android.app.DatePickerDialog(context, { _, year, month, day -> date = LocalDate.of(year, month + 1, day) }, date.year, date.monthValue - 1, date.dayOfMonth).show()
+                }) { Text("الجلسة الجديدة: ${sessionDateLabel(date)}") }
+                OutlinedTextField(value = time, onValueChange = { time = it }, enabled = !state.isCreating,
+                    label = { Text("الساعة صباحًا / مساءً") }, modifier = Modifier.fillMaxWidth())
+                state.errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = {
+            Button(enabled = !state.isCreating && selected.isNotEmpty() && time.isNotBlank(), onClick = {
+                submitted = true
+                onSave(source.id, recipients.filterIndexed { i, _ -> i in selected }, date, time)
+            }) { Text(if (state.isCreating) "جارٍ الحفظ…" else "حفظ الإخطار الجديد") }
+        },
+        dismissButton = { TextButton(enabled = !state.isCreating, onClick = onDismiss) { Text("إلغاء") } }
+    )
 }
 
 @Composable
@@ -735,3 +824,4 @@ private fun copyNotificationImageToCache(context: android.content.Context, uri: 
     } ?: error("تعذر فتح الصورة")
     destination
 }.getOrNull()
+
