@@ -798,8 +798,13 @@ private fun DocumentGroupsReviewDialog(
                                 document.court?.let { "المحكمة: $it" }
                             ).forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Button(onClick = { onUse(document.id) }, modifier = Modifier.weight(1f)) {
-                                    Text("مراجعة هذه القضية ومستنداتها المطابقة")
+                                Button(onClick = {
+                                    if (selectedIds.isEmpty()) onUse(document.id)
+                                    else if (conflicting) confirmConflict = true
+                                    else onUseSelected(selectedIds)
+                                }, modifier = Modifier.weight(1f)) {
+                                    Text(if (selectedIds.isEmpty()) "مراجعة هذه القضية ومستنداتها المطابقة"
+                                        else "مراجعة المستندات المحددة (${selectedIds.size})")
                                 }
                                 OutlinedButton(onClick = { onExclude(document.id) }, modifier = Modifier.weight(1f)) {
                                     Text("استبعاد")
