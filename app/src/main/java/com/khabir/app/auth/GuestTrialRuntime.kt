@@ -9,7 +9,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.os.Process
-import android.os.SystemClock
 import com.khabir.app.MainActivity
 import com.khabir.app.data.auth.GuestTrialStore
 import com.khabir.app.data.auth.WorkspaceStorageContext
@@ -19,41 +18,27 @@ object GuestTrialRuntime {
         (context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).runningAppProcesses
             ?.any { it.pid == Process.myPid() && it.processName == context.packageName } == true
     fun schedule(context: Context) {
-        val store = GuestTrialStore(context)
-        if (store.startedAt == 0L || store.cleanupComplete) return
-        val delay = if (store.isExpired()) 15L * 60 * 1000 else store.remainingMillis().coerceAtLeast(1000)
+        // Cancel the exact PendingIntent used by pre-0.9.19 expiry alarms.
         val intent = Intent(context, GuestExpiryReceiver::class.java)
-        val pending = PendingIntent.getBroadcast(context, 7017, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        (context.getSystemService(Context.ALARM_SERVICE) as AlarmManager)
-            .setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + delay, pending)
+        val pending = PendingIntent.getBroadcast(context, 7017, intent,
+            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE)
+        if (pending != null) {
+            (context.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(pending)
+            pending.cancel()
+        }
     }
     fun restart(context: Context) {
         context.startActivity(Intent(context, WorkspaceRestartActivity::class.java)
             .putExtra("old_pid", Process.myPid()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
-    fun cleanupExpired(context: Context, oldPid: Int = -1) {
-        val store = GuestTrialStore(context)
-        if (!store.isExpired()) return
-        store.markExpired()
-        run {
-            val pid = if (oldPid > 0) oldPid else store.guestProcess()
-            val processes = (context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).runningAppProcesses
-            if (pid > 0 && pid != Process.myPid() && processes?.any { it.pid == pid && it.processName == context.packageName } == true) Process.killProcess(pid)
-        }
-        store.deleteExpiredData()
-        schedule(context)
-    }
+    @Suppress("UNUSED_PARAMETER")
+    fun cleanupExpired(context: Context, oldPid: Int = -1) { schedule(context) }
+
 }
 
-/** Runs outside the UI/Room process, so no guest writer survives deletion. */
+/** Retained so broadcasts queued by older installations are harmless. */
 class GuestExpiryReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) {
-        val result = goAsync()
-        Thread {
-            try { runCatching { if (GuestTrialStore(context).isExpired()) GuestTrialRuntime.cleanupExpired(context) else GuestTrialRuntime.schedule(context) } }
-            finally { GuestTrialRuntime.schedule(context); result.finish() }
-        }.start()
-    }
+    override fun onReceive(context: Context, intent: Intent) { GuestTrialRuntime.schedule(context) }
 }
 
 /** Scope switches must recreate Hilt singletons; an Activity recreation is insufficient. */

@@ -11,11 +11,11 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class GuestLoginRuntimeTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
-    @Test fun freshTrialNeedsExplicitDeletionAcknowledgmentAndCannotBypassLoginOnCancel() {
+    @Test fun localModeExplainsPersistenceAndCanBeCancelled() {
         compose.onNodeWithText("تسجيل الدخول باستخدام Google").assertIsDisplayed()
         compose.onNodeWithText("فتح النسخة التجريبية").assertDoesNotExist()
-        compose.onNodeWithText("تجربة بدون حساب — ٧ أيام").performClick()
-        compose.onNodeWithText("تجربة مؤقتة لمدة أسبوع").assertIsDisplayed()
+        compose.onNodeWithText("استخدام بدون حساب — بدون مدة انتهاء").performClick()
+        compose.onNodeWithText("استخدام محلي بدون حساب").assertIsDisplayed()
         compose.onNodeWithText("إلغاء").performClick()
         compose.onNodeWithText("تسجيل الدخول باستخدام Google").assertIsDisplayed()
         compose.onNodeWithText("القضايا").assertDoesNotExist()

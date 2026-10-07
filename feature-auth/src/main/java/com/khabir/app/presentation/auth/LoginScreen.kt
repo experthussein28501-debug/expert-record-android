@@ -70,17 +70,16 @@ fun LoginScreen(logoRes: Int, onGoogleSuccess: () -> Unit, onGuestTrial: (() -> 
             else Text("تسجيل الدخول باستخدام Google", fontWeight = FontWeight.Medium)
         }
         message?.let { Text(it, color = Color(0xFFFFB4AB), modifier = Modifier.padding(top = 16.dp)) }
-        InlineHelp("تسجيل الدخول", "سجل بحساب Google للاستمرار. بيانات العمل تبقى على الجهاز؛ تسجيل الدخول وحده لا ينشئ نسخة سحابية منها.")
-        if (trialExpired) Text("انتهت تجربة الأسبوع وحُجبت بياناتها. سجل الدخول بحساب Google للاستمرار.", color = LoginGold)
+        InlineHelp("تسجيل الدخول", "يمكنك استخدام التطبيق بدون حساب أو تسجيل الدخول بحساب Google. بيانات العمل تبقى على الجهاز؛ تسجيل الدخول وحده لا ينشئ نسخة سحابية منها.")
         onGuestTrial?.let {
-            TextButton(onClick = { confirmTrial = true }, enabled = !busy) { Text("تجربة بدون حساب — ٧ أيام", color = LoginGold) }
+            TextButton(onClick = { confirmTrial = true }, enabled = !busy) { Text("استخدام بدون حساب — بدون مدة انتهاء", color = LoginGold) }
         }
-        onReturnToTrial?.let { action -> TextButton(onClick = action) { Text("العودة للتجربة الحالية", color = LoginGold) } }
+        onReturnToTrial?.let { action -> TextButton(onClick = action) { Text("العودة لبياناتي المحلية", color = LoginGold) } }
     }
     if (confirmTrial) AlertDialog(onDismissRequest = { confirmTrial = false },
-        title = { Text("تجربة مؤقتة لمدة أسبوع") },
-        text = { Text("ستُحذف بيانات الخبير والقضايا والتقارير والمحاضر والأجندة ومرفقات التجربة من التطبيق بعد ٧ أيام. بعدها يلزم تسجيل Google وإدخال بيانات العمل من جديد. التجربة لا تتكرر على هذا التثبيت، ولا تنتقل بياناتها تلقائيًا للحساب. الملفات التي تصدّرها خارج التطبيق تبقى عندك.") },
-        confirmButton = { Button(onClick = { confirmTrial = false; onGuestTrial?.invoke() }) { Text("أوافق — ابدأ التجربة") } },
+        title = { Text("استخدام محلي بدون حساب") },
+        text = { Text("يمكنك استخدام التطبيق بدون مدة انتهاء. بيانات القضايا والتقارير والمحاضر والأجندة تبقى على هذا الجهاز ولا تُحذف بسبب مرور الوقت. احتفظ بنسخة احتياطية؛ تسجيل Google لا ينقل البيانات المحلية تلقائيًا إلى الحساب.") },
+        confirmButton = { Button(onClick = { confirmTrial = false; onGuestTrial?.invoke() }) { Text("ابدأ الاستخدام") } },
         dismissButton = { TextButton(onClick = { confirmTrial = false }) { Text("إلغاء") } })
 }
 

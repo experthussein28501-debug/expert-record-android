@@ -4,16 +4,17 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class GuestTrialPolicyTest {
-    @Test fun sevenCompleteDaysAreAllowedButTheBoundaryExpires() {
+    @Test fun localUseContinuesAtSevenDaysAndAfterManyYears() {
         val start = 1_000_000L
         assertFalse(GuestTrialPolicy.expired(start, start + GuestTrialPolicy.DURATION_MILLIS - 1))
-        assertTrue(GuestTrialPolicy.expired(start, start + GuestTrialPolicy.DURATION_MILLIS))
-        assertEquals(0L, GuestTrialPolicy.remaining(start, start + GuestTrialPolicy.DURATION_MILLIS))
+        assertFalse(GuestTrialPolicy.expired(start, start + GuestTrialPolicy.DURATION_MILLIS))
+        assertFalse(GuestTrialPolicy.expired(start, Long.MAX_VALUE))
+        assertEquals(Long.MAX_VALUE, GuestTrialPolicy.remaining(start, start + GuestTrialPolicy.DURATION_MILLIS))
     }
-    @Test fun expiredTrialCannotBeStartedOrRevivedByChangingTheClock() {
-        assertFalse(GuestTrialPolicy.mayStart(123, false))
-        assertFalse(GuestTrialPolicy.mayStart(0, true))
-        assertTrue(GuestTrialPolicy.expired(123, 1, true))
+    @Test fun legacyExpiryDoesNotBlockUnlimitedLocalUse() {
+        assertTrue(GuestTrialPolicy.mayStart(123, false))
+        assertTrue(GuestTrialPolicy.mayStart(0, true))
+        assertFalse(GuestTrialPolicy.expired(123, 1, true))
         assertTrue(GuestTrialPolicy.mayStart(0, false))
     }
     @Test fun onlyAuthenticatedNonAnonymousGoogleUsersAreAccepted() {

@@ -109,8 +109,7 @@ fun KhabirNavHost() {
     key(if (guest) "guest" else auth?.currentUser?.uid.orEmpty()) {
         Column(Modifier.fillMaxSize()) {
             if (guest) TextButton(onClick = { showLogin = true }, modifier = Modifier.fillMaxWidth()) {
-                val days = (trial.remainingMillis() + 86_400_000 - 1) / 86_400_000
-                Text("تجربة مؤقتة — باقي $days يوم؛ البيانات تُحذف عند انتهائها. تسجيل Google")
+                Text("استخدام محلي بدون مدة انتهاء — تسجيل Google")
             }
             Box(Modifier.weight(1f)) { AuthorizedNavHost(onSignOut = { entryGate.showGateAgain(); showLogin = true; refresh() }) }
         }

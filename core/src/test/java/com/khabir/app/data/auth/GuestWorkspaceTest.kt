@@ -23,7 +23,7 @@ class GuestWorkspaceTest {
         now = 1_700_000_000_000L
     }
     private fun store() = GuestTrialStore(raw) { now }
-    @Test fun expiryDeletesEveryGuestStoreAndPreservesAccountAndTrialHistory() {
+    @Test fun timeAndLegacyCleanupPreserveAllGuestAndAccountStores() {
         val guest = WorkspaceStorageContext(raw, true)
         val account = WorkspaceStorageContext(raw, false)
         store().start()
@@ -36,18 +36,18 @@ class GuestWorkspaceTest {
         guest.getSharedPreferences("secure_ai_preferences", Context.MODE_PRIVATE).edit().putString("key", "guest-key").commit()
         account.getSharedPreferences("secure_ai_preferences", Context.MODE_PRIVATE).edit().putString("key", "account-key").commit()
         now += GuestTrialPolicy.DURATION_MILLIS
-        assertTrue(store().deleteExpiredData())
-        assertFalse(File(raw.filesDir, "guest_workspace/source.jpg").exists())
-        assertFalse(File(raw.cacheDir, "guest_workspace/temporary.jpg").exists())
-        assertFalse(File(raw.noBackupFilesDir, "guest_workspace/draft").exists())
-        assertFalse(raw.getDatabasePath(WorkspaceStorageContext.GUEST_DATABASE).exists())
+        assertFalse(store().deleteExpiredData())
+        assertTrue(File(raw.filesDir, "guest_workspace/source.jpg").exists())
+        assertTrue(File(raw.cacheDir, "guest_workspace/temporary.jpg").exists())
+        assertTrue(File(raw.noBackupFilesDir, "guest_workspace/draft").exists())
+        assertTrue(raw.getDatabasePath(WorkspaceStorageContext.GUEST_DATABASE).exists())
         assertTrue(raw.getDatabasePath(AppDatabase.DB_NAME).exists())
         assertEquals("account", File(account.filesDir, "account.jpg").readText())
         assertEquals("account-key", account.getSharedPreferences("secure_ai_preferences", Context.MODE_PRIVATE).getString("key", null))
-        assertNull(raw.getSharedPreferences("guest_secure_ai_preferences", Context.MODE_PRIVATE).getString("key", null))
+        assertEquals("guest-key", raw.getSharedPreferences("guest_secure_ai_preferences", Context.MODE_PRIVATE).getString("key", null))
         assertFalse(store().canStart)
-        assertFalse(store().isActive())
-        assertTrue(store().cleanupComplete)
+        assertTrue(store().isActive())
+        assertFalse(store().cleanupComplete)
     }
     @Test fun guestAndAccountHaveIndependentPathsAndPreferences() {
         val guest = WorkspaceStorageContext(raw, true)
@@ -59,19 +59,21 @@ class GuestWorkspaceTest {
         guest.getSharedPreferences("khabir_agenda_days_v1", 0).edit().putString("1", "guest").commit()
         assertNull(raw.getSharedPreferences("khabir_agenda_days_v1", 0).getString("1", null))
     }
-    @Test fun signingInDoesNotResetTheDeadlineOrDeleteTheAccountFiles() {
+    @Test fun localWorkspaceCanBeReopenedAfterAccountMode() {
         store().start()
         val started = store().startedAt
         store().useGoogleAccount()
         assertFalse(store().isActive())
-        assertFalse(store().canStart)
+        assertTrue(store().canStart)
+        store().start()
+        assertTrue(store().isActive())
         assertEquals(started, store().startedAt)
         now += GuestTrialPolicy.DURATION_MILLIS
-        assertTrue(store().isExpired())
+        assertFalse(store().isExpired())
     }
-    @Test fun earlyDeletionIsRejected() {
+    @Test fun legacyDeletionIsAlwaysHarmless() {
         store().start()
-        assertThrows(IllegalStateException::class.java) { store().deleteExpiredData() }
+        assertFalse(store().deleteExpiredData())
         assertTrue(store().isActive())
     }
     @Test fun legacyUnlimitedPreviewFlagNeverOpensTheApplication() {
@@ -96,10 +98,10 @@ class GuestWorkspaceTest {
         assertFalse(cleanup.inGuestMode)
         now += GuestTrialPolicy.DURATION_MILLIS
         cleanup.markExpired()
-        assertFalse(ui.canStart)
+        assertTrue(ui.canStart)
         assertFalse(ui.isActive())
     }
-    @Test fun activityScopeStaysWithItsApplicationWhenTheTrialEndsDuringLaunch() {
+    @Test fun activityScopeAndAccessSurviveOldExpiryCallback() {
         val application = object : ContextWrapper(raw), WorkspaceStorageOwner {
             override val storageScope = WorkspaceStorageContext(raw, true)
             override fun getApplicationContext(): Context = this
@@ -107,8 +109,25 @@ class GuestWorkspaceTest {
         store().start()
         now += GuestTrialPolicy.DURATION_MILLIS
         store().markExpired()
-        assertFalse(store().isActive())
+        assertTrue(store().isActive())
         assertTrue(WorkspaceStorageContext.forProcess(application).guest)
         assertTrue(WorkspaceStorageContext.isGuest(application))
     }
+    @Test fun upgradeFromTerminalTrialReopensExistingData() {
+        store().start()
+        val guest = WorkspaceStorageContext(raw, true)
+        File(guest.filesDir, "upgrade-marker").writeText("saved case")
+        val started = store().startedAt
+        raw.openOrCreateDatabase(GuestTrialStore.CONTROL_DATABASE, 0, null).use {
+            it.execSQL("UPDATE trial_state SET value=1 WHERE name='expired'")
+            it.execSQL("UPDATE trial_state SET value=0 WHERE name='guest_mode'")
+        }
+        assertFalse(store().isExpired())
+        assertTrue(store().canStart)
+        store().start()
+        assertTrue(store().isActive())
+        assertEquals(started, store().startedAt)
+        assertEquals("saved case", File(guest.filesDir, "upgrade-marker").readText())
+    }
+
 }

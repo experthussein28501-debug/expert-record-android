@@ -16,7 +16,7 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class GuestExpiryReceiverRuntimeTest {
-    @Test fun secondaryProcessDeletesGuestDataAndPreservesAccountAndExpiryHistory() {
+    @Test fun legacyExpiryBroadcastPreservesLocalDataAndAccess() {
         val raw = WorkspaceStorageContext.raw(InstrumentationRegistry.getInstrumentation().targetContext)
         raw.deleteDatabase(GuestTrialStore.CONTROL_DATABASE)
         val guest = WorkspaceStorageContext(raw, true)
@@ -27,14 +27,16 @@ class GuestExpiryReceiverRuntimeTest {
             guest.openOrCreateDatabase(WorkspaceStorageContext.GUEST_DATABASE, Context.MODE_PRIVATE, null).close()
             GuestTrialStore(raw) { System.currentTimeMillis() - GuestTrialPolicy.DURATION_MILLIS - 1000 }.start()
             raw.sendBroadcast(Intent(raw, GuestExpiryReceiver::class.java))
-            val deadline = SystemClock.elapsedRealtime() + 10_000
-            while (!GuestTrialStore(raw).cleanupComplete && SystemClock.elapsedRealtime() < deadline) SystemClock.sleep(50)
-            assertTrue("Expiry receiver did not finish cleanup", GuestTrialStore(raw).cleanupComplete)
-            assertFalse(File(raw.filesDir, "guest_workspace/receiver-guest-marker").exists())
-            assertFalse(raw.getDatabasePath(WorkspaceStorageContext.GUEST_DATABASE).exists())
+            // Exercise the callback synchronously as well as delivery to the legacy process.
+            GuestExpiryReceiver().onReceive(raw, Intent(raw, GuestExpiryReceiver::class.java))
+            SystemClock.sleep(500)
+            assertFalse(GuestTrialStore(raw).cleanupComplete)
+            assertTrue(File(raw.filesDir, "guest_workspace/receiver-guest-marker").exists())
+            assertTrue(raw.getDatabasePath(WorkspaceStorageContext.GUEST_DATABASE).exists())
             assertEquals("account", marker.readText())
             assertFalse(GuestTrialStore(raw).canStart)
-            assertTrue(GuestTrialStore(raw).isExpired())
+            assertFalse(GuestTrialStore(raw).isExpired())
+            assertTrue(GuestTrialStore(raw).isActive())
         } finally {
             marker.delete()
             raw.deleteDatabase(GuestTrialStore.CONTROL_DATABASE)
