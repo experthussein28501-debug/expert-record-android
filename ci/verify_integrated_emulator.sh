@@ -30,7 +30,7 @@ adb pull /sdcard/khabir-ui.xml /tmp/khabir-ui.xml >/dev/null
 python3 - <<'PY' > /tmp/tap.txt
 import re, xml.etree.ElementTree as ET
 root=ET.parse("/tmp/khabir-ui.xml").getroot()
-labels=("تجربة بدون حساب — ٧ أيام",)
+labels=("استخدام بدون حساب — بدون مدة انتهاء",)
 for label in labels:
     for n in root.iter("node"):
         if n.attrib.get("text","") == label:
@@ -47,10 +47,10 @@ adb pull /sdcard/guest-consent.xml /tmp/guest-consent.xml >/dev/null
 python3 - <<'CONSENT' > /tmp/tap-consent.txt
 import re, xml.etree.ElementTree as ET
 for n in ET.parse('/tmp/guest-consent.xml').getroot().iter('node'):
-    if n.attrib.get('text') == 'أوافق — ابدأ التجربة':
+    if n.attrib.get('text') == 'ابدأ الاستخدام':
         x1,y1,x2,y2=map(int,re.findall(r'\d+',n.attrib['bounds']))
         print((x1+x2)//2,(y1+y2)//2);break
-else: raise SystemExit('Trial deletion consent missing')
+else: raise SystemExit('Local use confirmation missing')
 CONSENT
 read -r x y < /tmp/tap-consent.txt
 adb shell input tap "$x" "$y"
@@ -188,7 +188,7 @@ adb shell uiautomator dump /sdcard/khabir-notifications.xml
 adb pull /sdcard/khabir-notifications.xml "$review_dir/notifications.xml"
 grep -q 'الإخطارات وسركي الإخطارات' "$review_dir/notifications.xml"
 
-# Cold-start expiry regression: expired guest data disappears and account files survive.
+# Cold start after the legacy deadline must keep local access and every data store.
 adb shell am force-stop "$pkg"
 adb shell "run-as $pkg sh -c 'mkdir -p files/guest_workspace; echo guest > files/guest_workspace/expiry-marker; echo account > files/account-marker'"
 python3 - <<'EXPIRY'
@@ -210,12 +210,12 @@ adb pull /sdcard/guest-expired-ui.xml "$review_dir/guest-expired-ui.xml" >/dev/n
 python3 - <<'EXPIRED_UI'
 from pathlib import Path
 s=Path('release-output/integration-review-0.9.0/guest-expired-ui.xml').read_text()
-assert 'تسجيل الدخول باستخدام Google' in s
-assert 'انتهت تجربة الأسبوع' in s
+assert 'القضايا' in s
+assert 'استخدام محلي بدون مدة انتهاء' in s
+assert 'انتهت تجربة الأسبوع' not in s
 assert 'تجربة بدون حساب — ٧ أيام' not in s
-assert 'العودة للتجربة الحالية' not in s
 EXPIRED_UI
-adb shell "run-as $pkg sh -c 'set -e; test ! -e files/guest_workspace/expiry-marker; test ! -e databases/guest_khabir.db; test -e files/account-marker'"
+adb shell "run-as $pkg sh -c 'set -e; test -e files/guest_workspace/expiry-marker; test -e databases/guest_khabir.db; test -e files/account-marker'"
 adb exec-out screencap -p > "$review_dir/guest-expired-login.png"
 
 # Finally run the bundled Arabic OCR instrumented test.
