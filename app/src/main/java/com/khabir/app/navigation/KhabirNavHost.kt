@@ -1,7 +1,19 @@
 package com.khabir.app.navigation
 
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.Modifier
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.google.firebase.auth.FirebaseAuth
+import com.khabir.app.auth.GuestTrialRuntime
+import com.khabir.app.data.auth.GuestTrialStore
+import com.khabir.app.data.auth.GoogleSession
+import com.khabir.app.data.auth.WorkspaceStorageContext
+import kotlinx.coroutines.delay
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -50,32 +62,69 @@ private object Routes {
 
 @Composable
 fun KhabirNavHost() {
-    val navController = rememberNavController()
     val context = LocalContext.current
     val entryGate = remember(context) { EntryGateStore(context.applicationContext) }
+    val trial = remember(context) { GuestTrialStore(context) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val auth = remember(context) { GoogleSession.auth(context) }
+    var revision by remember { mutableIntStateOf(0) }
+    var showLogin by remember { mutableStateOf(false) }
+    var restarting by remember { mutableStateOf(false) }
+    fun refresh() {
+        val google = entryGate.hasGoogleAccount()
+        if ((trial.isExpired() || google) && WorkspaceStorageContext.isGuest(context) && !restarting) {
+            if (google) trial.useGoogleAccount()
+            restarting = true
+            GuestTrialRuntime.restart(context)
+        }
+        revision++
+    }
+    DisposableEffect(auth, lifecycle) {
+        val listener = FirebaseAuth.AuthStateListener { refresh() }
+        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) refresh() }
+        auth?.addAuthStateListener(listener)
+        lifecycle.addObserver(observer)
+        onDispose { auth?.removeAuthStateListener(listener); lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(Unit) { while (true) { delay(30_000); refresh() } }
+    // The entire NavHost stays uncomposed after logout/expiry, including restored back stacks.
+    val allowed = remember(revision) { entryGate.hasPassedGate() }
+    val guest = remember(revision) { trial.isActive() && !entryGate.hasGoogleAccount() }
+    // Firebase can restore a session after a crash before the sign-in callback switched scope.
+    val pendingGoogleScope = WorkspaceStorageContext.isGuest(context) && entryGate.hasGoogleAccount()
+    LaunchedEffect(pendingGoogleScope) { if (pendingGoogleScope) refresh() }
+    if (!allowed || showLogin || restarting || pendingGoogleScope) {
+        LoginScreen(logoRes = com.khabir.app.R.drawable.ic_launcher,
+            onGoogleSuccess = {
+                entryGate.markGoogleSignedIn()
+                trial.useGoogleAccount()
+                if (WorkspaceStorageContext.isGuest(context)) { restarting = true; GuestTrialRuntime.restart(context) }
+                else { showLogin = false; refresh() }
+            },
+            onGuestTrial = if (trial.canStart && !restarting) ({ trial.start(); GuestTrialRuntime.schedule(context); restarting = true; GuestTrialRuntime.restart(context) }) else null,
+            trialExpired = trial.isExpired(),
+            onReturnToTrial = if (guest && !restarting) ({ showLogin = false }) else null)
+        return
+    }
+    key(if (guest) "guest" else auth?.currentUser?.uid.orEmpty()) {
+        Column(Modifier.fillMaxSize()) {
+            if (guest) TextButton(onClick = { showLogin = true }, modifier = Modifier.fillMaxWidth()) {
+                val days = (trial.remainingMillis() + 86_400_000 - 1) / 86_400_000
+                Text("تجربة مؤقتة — باقي $days يوم؛ البيانات تُحذف عند انتهائها. تسجيل Google")
+            }
+            Box(Modifier.weight(1f)) { AuthorizedNavHost(onSignOut = { entryGate.showGateAgain(); showLogin = true; refresh() }) }
+        }
+    }
+}
+
+@Composable
+private fun AuthorizedNavHost(onSignOut: () -> Unit) {
+    val navController = rememberNavController()
     val moduleMode = BuildConfig.MODULE_MODE
     val archiveOnly = moduleMode == "ARCHIVE"
     val notificationsEnabled = notificationsEnabledFor(moduleMode)
     val reportsEnabled = reportsEnabledFor(moduleMode)
-    val startDestination = remember { if (entryGate.hasPassedGate(allowPreview = BuildConfig.BUILD_TYPE != "release")) Routes.HOME else Routes.LOGIN }
-
-    fun enterApp(markPassed: () -> Unit) {
-        markPassed()
-        navController.navigate(Routes.HOME) {
-            popUpTo(Routes.LOGIN) { inclusive = true }
-            launchSingleTop = true
-        }
-    }
-
-    NavHost(navController = navController, startDestination = startDestination) {
-        composable(Routes.LOGIN) {
-            LoginScreen(
-                logoRes = com.khabir.app.R.drawable.ic_launcher,
-                onGoogleSuccess = { enterApp(entryGate::markGoogleSignedIn) },
-                onPreview = if (BuildConfig.BUILD_TYPE != "release") ({ enterApp(entryGate::markSkipped) }) else null
-            )
-        }
-
+    NavHost(navController = navController, startDestination = Routes.HOME) {
         composable(Routes.HOME) {
             if (archiveOnly) {
                 ArchiveHomeScreen(
@@ -92,7 +141,6 @@ fun KhabirNavHost() {
                     onOpenReports = { navController.navigate(Routes.REPORTS_HUB) },
                     onOpenRegisters = { navController.navigate(Routes.REGISTERS) },
                     onOpenWorkMinutes = { navController.navigate(Routes.WORK_MINUTES_HUB) },
-                    onOpenBenefits = { navController.navigate(Routes.BENEFITS) },
                     onOpenAgenda = { navController.navigate(Routes.AGENDA) },
                     onOpenExpertProfile = { navController.navigate(Routes.EXPERT_PROFILE) },
                     onOpenBackup = { navController.navigate(Routes.BACKUP) },
@@ -138,20 +186,19 @@ fun KhabirNavHost() {
         composable(Routes.EXPERT_PROFILE) {
             ExpertProfileScreen(
                 onBack = { navController.popBackStack() },
-                onShowLoginAgain = {
-                    entryGate.showGateAgain()
-                    navController.navigate(Routes.LOGIN) {
-                        popUpTo(Routes.HOME) { inclusive = true }
-                        launchSingleTop = true
-                    }
-                }
+                onShowLoginAgain = onSignOut
             )
         }
 
-        composable(Routes.BENEFITS) { com.khabir.app.monetization.BenefitsScreen(onBack = { navController.popBackStack() }, onAccountDeleted = {
-            entryGate.showGateAgain()
-            navController.navigate(Routes.LOGIN) { popUpTo(Routes.HOME) { inclusive = true } }
-        }) }
+        // Also close a restored legacy benefits route; no plans or prices are rendered.
+        composable(Routes.BENEFITS) {
+            androidx.compose.runtime.LaunchedEffect(Unit) {
+                navController.navigate(Routes.HOME) {
+                    popUpTo(Routes.BENEFITS) { inclusive = true }
+                    launchSingleTop = true
+                }
+            }
+        }
 
         composable(Routes.BACKUP) { BackupScreen(onBack = { navController.popBackStack() }) }
         composable(Routes.REGISTERS) { RegisterScreen(onBack = { navController.popBackStack() }) }

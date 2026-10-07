@@ -1,0 +1,3 @@
+scripts/test_*.py: 17 tests passed
+tools/check_module_boundaries.py: 5 tests passed
+git diff --check: passed

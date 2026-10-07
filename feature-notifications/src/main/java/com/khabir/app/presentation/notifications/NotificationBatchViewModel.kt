@@ -40,6 +40,7 @@ data class NotificationScreenUiState(
     val caseSource: CaseSource = CaseSource.NEW_CASE,
     val pastBatches: List<NotificationBatch> = emptyList(),
     val selectedPastBatchIds: Set<Long> = emptySet(),
+    val sessionFilter: LocalDate? = null,
     val caseSearchQuery: String = "",
     val caseSearchResults: List<Case> = emptyList(),
     val selectedRegisteredCaseId: Long? = null,
@@ -280,6 +281,31 @@ class NotificationBatchViewModel @Inject constructor(
         state.copy(selectedParties = state.selectedParties.filterNot { it.case.id == caseId })
     }
 
+    fun onSessionFilterChanged(date: LocalDate?) = _uiState.update {
+        it.copy(sessionFilter = date, selectedPastBatchIds = emptySet())
+    }
+
+    fun onAddSession(sourceId: Long, recipients: List<com.khabir.app.domain.model.NotificationRecipient>, date: LocalDate, time: String) {
+        val state = _uiState.value
+        if (state.isCreating) return
+        val source = state.pastBatches.firstOrNull { it.id == sourceId } ?: return
+        if (recipients.isEmpty() || time.isBlank()) {
+            _uiState.update { it.copy(errorMessage = "اختر الخصوم وحدد ساعة الجلسة") }
+            return
+        }
+        _uiState.update { it.copy(isCreating = true, errorMessage = null) }
+        viewModelScope.launch {
+            try {
+                val id = batchRepository.save(newSessionBatch(source, recipients, date, time))
+                _uiState.update { it.copy(isCreating = false, lastCreatedBatchId = id,
+                    selectedPastBatchIds = setOf(id), sessionFilter = date) }
+            } catch (error: Exception) {
+                if (error is kotlinx.coroutines.CancellationException) throw error
+                _uiState.update { it.copy(isCreating = false, errorMessage = "تعذر حفظ الموعد الجديد؛ حاول مرة أخرى") }
+            }
+        }
+    }
+
     fun onTogglePastBatch(batchId: Long) = _uiState.update { state ->
         state.copy(
             selectedPastBatchIds = if (batchId in state.selectedPastBatchIds) {
@@ -292,7 +318,7 @@ class NotificationBatchViewModel @Inject constructor(
     }
 
     fun onSelectAllPastBatches() = _uiState.update { state ->
-        state.copy(selectedPastBatchIds = state.pastBatches.map { it.id }.toSet(), errorMessage = null)
+        state.copy(selectedPastBatchIds = state.pastBatches.filter { state.sessionFilter == null || it.appointmentDate == state.sessionFilter }.map { it.id }.toSet(), errorMessage = null)
     }
 
     fun onClearPastBatchSelection() = _uiState.update {
@@ -515,6 +541,7 @@ class NotificationBatchViewModel @Inject constructor(
                         isCreating = false,
                         lastCreatedBatchId = result.batchId,
                         selectedPastBatchIds = setOf(result.batchId),
+                        sessionFilter = state.appointmentDate,
                         mode = NotificationScreenUiState.Mode.BrowsingBatches,
                         selectedRegisteredCaseId = null,
                         selectedParties = emptyList(),
@@ -567,3 +594,4 @@ class NotificationBatchViewModel @Inject constructor(
 
     fun onExportEventConsumed() = _uiState.update { it.copy(exportedFileUri = null) }
 }
+

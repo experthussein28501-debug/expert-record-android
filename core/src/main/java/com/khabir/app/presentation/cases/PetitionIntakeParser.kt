@@ -31,7 +31,9 @@ object PetitionIntakeParser {
         val preliminaryMission: String? = null,
         val parties: List<ParsedParty> = emptyList(),
         val lawyerContact: String? = null,
-        val notes: String? = null
+        val notes: String? = null,
+        val subjectWarnings: List<String> = emptyList(),
+        val sourceAudit: String = ""
     )
 
     private data class CaseHeading(
@@ -45,13 +47,14 @@ object PetitionIntakeParser {
     )
 
     private const val ADDRESS_LABEL =
-        "(?:عنوانها|عنوانه|العنوان|المقيم(?:ة|ين|ون)?(?:\\s+(?:في|فى|ب|بـ))?|المقيم(?:ة|ين|ون)?\\s+بناحية|" +
+        "(?:عنوانها|عنوانه|العنوان|و?المقيم(?:ة|ين|ون|ان)?(?:\\s+(?:في|فى|ب|بـ))?|المقيم(?:ة|ين|ون|ان)?\\s+بناحية|" +
         "موطنه|موطنها|مقره|مقرها)"
 
     fun parse(raw: String): Result {
         val originalText = normalize(raw)
-        val lawyerContact = Regex("(?:و?محل(?:هم|ها|ه) المختار)[^\\n]*?(?=ضد|أنا المحضر|انا المحضر|\\n|$)(?:\\n[^\\n]*المحامي[^\\n]*)?").find(originalText)?.value
-        val text = originalText.replace(Regex("(?:و?محل(?:هم|ها|ه) المختار)[^\\n]*?(?=ضد|أنا المحضر|انا المحضر|\\n|$)"), "")
+        val chosenOffice = Regex("(?:و?محل(?:هم|هما|ها|ه) المختار)[\\s\\S]*?(?=ضد|(?:أنا|انا)\\s+[^\\n]*?محضر|انتقلت|(?:\\n|^)\\s*(?:الموضوع|الوقائع|بناء عليه|الطلبات|نوع المستند|رقم الدعوى)|$)")
+        val lawyerContact = chosenOffice.find(originalText)?.value?.trim()
+        val text = originalText.replace(chosenOffice, "")
             .replace(Regex("مخاطب[ًااً]*\\s+مع[^\\n]*"), "")
         if (text.isBlank()) return Result(parties = LawyerIntakeParser.parse(originalText), lawyerContact = lawyerContact)
 
@@ -67,21 +70,14 @@ object PetitionIntakeParser {
         val incomingDate = captureDate(text, "تاريخ الوارد", "تاريخ الإحالة", "تاريخ الاحالة", "أحيلت بتاريخ", "احيلت بتاريخ")
         val receiptDate = captureDate(text, "تاريخ الاستلام", "استلمت بتاريخ", "تاريخ استلام", "تاريخ استلام القضية")
         val preliminaryDate = captureDate(text, "تاريخ الحكم التمهيدي", "الحكم التمهيدي بتاريخ", "جلسة الحكم التمهيدي", "حكم الإحالة بجلسة", "بجلسة")
-        val subjectOfCase = captureLegalSection(
-            text = text,
-            starts = listOf("موضوع الدعوى", "موضوع القضية", "الموضوع", "وأعلنته بالآتي", "واعلنته بالاتي"),
-            stops = listOf("الطلبات الختامية", "الطلبات", "بناء عليه", "بناءً عليه", "المأمورية", "مأمورية الحكم التمهيدي")
-        )
-        val finalRequests = captureLegalSection(
-            text = text,
-            starts = listOf("الطلبات الختامية", "الطلبات", "لذلك يلتمس", "بناء عليه", "بناءً عليه"),
-            stops = listOf("مأمورية الحكم التمهيدي", "المأمورية", "وتفضلوا", "تحريراً", "تحريرا")
-        )
+        val subjectParts = com.khabir.app.domain.model.PetitionSubjectExtraction.extract(raw)
+        val subjectOfCase = subjectParts.explanation.takeIf(String::isNotBlank)
+        val finalRequests = subjectParts.requests.takeIf(String::isNotBlank)
         val preliminaryMission = captureLegalSection(
-            text = text,
+            text = raw.replace("\r\n","\n"),
             starts = listOf("مأمورية الحكم التمهيدي", "المأمورية", "تكون مهمته", "تكون مهمتها"),
             stops = listOf("مباشرة المأمورية", "النتيجة النهائية")
-        )?.let { if (it.startsWith("يقضي حكم الإحالة") || it.startsWith("قضى حكم الإحالة")) it else IntakeNarrative.missionBody(it) ?: it } ?: IntakeNarrative.missionBody(text) ?: captureJudgmentMission(text)
+        )?.takeUnless { it.trim() in setOf("غير مذكور", "غير موجود", "لا يوجد", "غير واضح", "[غير واضح]", "...") }?.let { if (it.startsWith("يقضي حكم الإحالة") || it.startsWith("قضى حكم الإحالة")) it else IntakeNarrative.missionBody(it) ?: IntakeNarrative.boundMission(it) } ?: IntakeNarrative.missionBody(raw) ?: captureJudgmentMission(raw)
 
         val plaintiffLabels = listOf(
             "المرفوعة من", "المرفوعه من", "المقامة من", "المقامه من", "مقامة من", "مرفوعة من",
@@ -92,7 +88,7 @@ object PetitionIntakeParser {
             "المستأنف ضده", "المطعون ضده"
         )
         val sectionStops = listOf(
-                "الموضوع", "المأمورية", "مباشرة المأمورية", "الأقوال", "المعاينة", "بحث المستندات", "تحريراً", "تحريرا", "وتفضلوا", "أنا المحضر", "انتقلت في تاريخه",
+                "الموضوع", "المأمورية", "مباشرة المأمورية", "الأقوال", "المعاينة", "بحث المستندات", "تحريراً", "تحريرا", "وتفضلوا", "أنا المحضر", "انا المحضر", "أنا محضر", "انا محضر", "انتقلت في تاريخه",
             "النتيجة", "النتيجة النهائية", "الطلبات", "الوقائع", "بناء عليه", "لذلك", "المطعون ضده", "المستأنف ضده",
             "المخاطبون والعناوين", "المخاطبون", "المخاطبين", "العناوين"
         )
@@ -146,7 +142,9 @@ object PetitionIntakeParser {
             preliminaryMission = preliminaryMission,
             parties = parties,
             lawyerContact = lawyerContact ?: captureValue(text, "مخاطبة المحامي"),
-            notes = captureValue(text, "ملاحظات", "ملاحظة")?.cleanField()
+            notes = captureValue(text, "ملاحظات", "ملاحظة")?.cleanField(),
+            subjectWarnings = subjectParts.warnings,
+            sourceAudit = captureValue(raw, com.khabir.app.domain.model.LegalSourceAudit.LABEL).orEmpty()
         )
     }
 
@@ -162,14 +160,25 @@ object PetitionIntakeParser {
     }
 
     private fun parseServiceParties(text: String): List<ParsedParty> {
-        val marker = Regex("(?:أنا|انا)\\s+[^\\n]*?المحضر[^\\n]*?(?:إلى|الى)\\s+ناحية\\s+([^\\n]+)")
+        // OCR may wrap the bailiff introduction, transition and address over several lines.
+        // Every transition starts its own group; a later group must not reuse the first address.
+        val marker = Regex("انتقلت[^\\n]{0,100}?(?:إلى|الى)\\s+(?:ناحية\\s+)?([^\\n]+)")
         val matches = marker.findAll(text).toList()
         return matches.flatMapIndexed { index, match ->
             val end = matches.getOrNull(index + 1)?.range?.first ?: text.length
-            val block = text.substring(match.range.last + 1, end)
-                .substringBefore("وأعلنته").substringBefore("الموضوع").substringBefore("بناء عليه")
+            val addressLine = match.groupValues[1]
+            val inlineNames = Regex("حيث\\s+(?:وجود|إقامة|اقامة)(?:\\s+كل\\s+من)?\\s*[:：]?").find(addressLine)
+            val address = addressLine.substring(0, inlineNames?.range?.first ?: addressLine.length).trim()
+            val inlineBlock = inlineNames?.let { addressLine.substring(it.range.last + 1) }.orEmpty()
+            val block = (inlineBlock + "\n" + text.substring(match.range.last + 1, end))
+                .substringBefore("وأعلنته").substringBefore("وأعلنتهم")
+                .substringBefore("أنا المحضر").substringBefore("انا المحضر")
+                .substringBefore("أنا محضر").substringBefore("انا محضر")
+                .substringBefore("الموضوع").substringBefore("بناء عليه")
+                .replace(Regex("(?m)^\\s*حيث\\s+(?:وجود|إقامة|اقامة)(?:\\s+كل\\s+من)?\\s*[:：]?"), "")
+                .replace(Regex("(?m)^\\s*(?:ثم|و)?\\s*$"), "")
             parseSideParties("ضد\n$block", listOf("ضد"), PartyRole.DEFENDANT, listOf("الوقائع", "الطلبات"))
-                .map { it.copy(address = it.address.ifBlank { match.groupValues[1].trim() }) }
+                .map { it.copy(address = it.address.ifBlank { address }) }
         }
     }
 
@@ -268,7 +277,7 @@ object PetitionIntakeParser {
             val rawName = cleanPartyName(split.firstOrNull().orEmpty())
             if (rawName.isBlank() || looksLikeSectionHeading(rawName)) return@forEach
 
-            if (Regex("المقيم(?:ون|ين)").containsMatchIn(line) && split.size > 1) {
+            if (Regex("المقيم(?:ون|ين|ان)").containsMatchIn(line) && split.size > 1) {
                 val sharedAddress = cleanAddress(split[1])
                 result.indices.forEach { index ->
                     if (result[index].address.isBlank()) result[index] = result[index].copy(address = sharedAddress)
@@ -314,7 +323,7 @@ object PetitionIntakeParser {
             .find(text) ?: return null
         val tail = text.substring(start.range.last + 1)
         if (tail.isBlank()) return null
-        val stopPattern = (stops + listOf("الخصم:", "المدعي:", "المدعى عليه:", "ملاحظات:", "مخاطبة المحامي:", "تاريخ الحكم التمهيدي:", "رقم الدعوى:", "نوع المستند:", "دليل إعادة الدعوى:", "دليل التقرير السابق:", "دليل تداول الدعوى:")).joinToString("|") { Regex.escape(it) }
+        val stopPattern = (stops + listOf("الخصم:", "المدعي:", "المدعى عليه:", "ملاحظات:", "مخاطبة المحامي:", "تاريخ الحكم التمهيدي:", "رقم الدعوى:", "نوع المستند:", "دليل إعادة الدعوى:", "دليل التقرير السابق:", "دليل تداول الدعوى:", "مرجع المأمورية:", "مرجع الموضوع:", "مرجع الطلبات:", "سجل مصادر الاستخراج:", "تاريخ الإجراء:", "تاريخ الإعلان:", "تاريخ الحكم:", "منطوق الحكم:", "دليل الإحالة:")).joinToString("|") { Regex.escape(it) }
         val stop = Regex("(?:^|\\n)(?:$stopPattern)\\s*[:：/\\-]?", setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE))
             .find(tail)
         return (if (stop == null) tail else tail.substring(0, stop.range.first))
@@ -413,6 +422,7 @@ object PetitionIntakeParser {
         .replace(Regex("^(?:في|فى)\\s+", RegexOption.IGNORE_CASE), "")
         .trim()
     private fun cleanPartyName(value: String): String = value
+        .replace(Regex("^[0-9٠-٩]+\\s*[.)/\\-]\\s*"), "")
         .replace(Regex("^(?:السيد(?:ة)?|السادة)\\s*/?\\s*"), "")
         .replace(Regex("\\s+(?:وآخرين|واخرين)$"), "")
         .trim(' ', '/', '-', ':', '：')

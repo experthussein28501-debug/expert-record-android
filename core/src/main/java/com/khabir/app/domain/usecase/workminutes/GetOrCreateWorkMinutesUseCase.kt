@@ -1,6 +1,5 @@
 package com.khabir.app.domain.usecase.workminutes
 
-import com.khabir.app.domain.model.ReportCoverFields
 import com.khabir.app.domain.model.WorkMinutesRecord
 import com.khabir.app.domain.repository.CaseRepository
 import com.khabir.app.domain.repository.WorkMinutesRepository
@@ -11,25 +10,18 @@ class GetOrCreateWorkMinutesUseCase @Inject constructor(
     private val caseRepository: CaseRepository
 ) {
     suspend operator fun invoke(recordId: Long, caseId: Long?): WorkMinutesRecord {
-        if (recordId > 0L) {
-            workMinutesRepository.getById(recordId)?.let { return it }
-        }
-        if (caseId != null && caseId > 0L) {
-            workMinutesRepository.getForCase(caseId)?.let { return it }
-            val case = caseRepository.getById(caseId)
-            if (case != null) {
-                val plaintiffs = case.parties.filter { it.role.isPlaintiff }
-                val defendants = case.parties.filter { it.role.isDefendant }
-                return WorkMinutesRecord(
-                    caseId = case.id,
-                    caseNo = case.caseNo,
-                    caseYear = case.caseYear,
-                    court = listOf(case.caseType, case.court).filter { it.isNotBlank() }.distinct().joinToString(" "),
-                    plaintiffsSummary = ReportCoverFields.coverPartySummary(plaintiffs),
-                    defendantsSummary = ReportCoverFields.coverPartySummary(defendants)
-                )
+        val selected=recordId.takeIf {it>0L}?.let {workMinutesRepository.getById(it)}
+        if(selected!=null && selected.caseId==null) return selected
+        val linkedId=selected?.caseId ?: caseId
+        if(linkedId!=null && linkedId>0L) {
+            val existing=selected ?: workMinutesRepository.getForCase(linkedId)
+            val case=caseRepository.getById(linkedId) ?: return existing ?: WorkMinutesRecord()
+            val generated=com.khabir.app.domain.model.AutomaticWorkMinutes.receipt(case,existing)
+            if(generated!=existing && (existing!=null || generated.entries.isNotEmpty())) {
+                return generated.copy(id=workMinutesRepository.save(generated))
             }
+            return generated
         }
-        return WorkMinutesRecord()
+        return selected ?: WorkMinutesRecord()
     }
 }

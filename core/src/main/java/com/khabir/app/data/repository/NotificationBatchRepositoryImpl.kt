@@ -15,9 +15,16 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import java.time.LocalDate
 import javax.inject.Inject
+import androidx.room.withTransaction
+import com.khabir.app.data.local.AppDatabase
+import com.khabir.app.domain.repository.WorkMinutesRepository
+import com.khabir.app.domain.repository.CaseRepository
+import com.khabir.app.domain.model.AutomaticWorkMinutes
+import java.time.Instant
+import java.time.ZoneId
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class NotificationBatchRepositoryImpl @Inject constructor(private val dao: NotificationBatchDao) : NotificationBatchRepository {
+class NotificationBatchRepositoryImpl @Inject constructor(private val dao: NotificationBatchDao, private val database: AppDatabase, private val workMinutes: WorkMinutesRepository, private val cases: CaseRepository) : NotificationBatchRepository {
     override fun observeAll(): Flow<List<NotificationBatch>> = dao.observeAllBatches().flatMapLatest { batches ->
         if (batches.isEmpty()) return@flatMapLatest flowOf(emptyList())
         combine(batches.map { b -> dao.observeRecipients(b.id).map { rs -> b.toDomain(rs.map { it.toDomain() }) } }) {
@@ -32,7 +39,7 @@ class NotificationBatchRepositoryImpl @Inject constructor(private val dao: Notif
 
     override suspend fun delete(batchId: Long) = dao.deleteBatch(batchId)
 
-    override suspend fun save(batch: NotificationBatch): Long {
+    override suspend fun save(batch: NotificationBatch): Long = database.withTransaction {
         val existing = batch.id.takeIf { it > 0L }?.let { dao.getBatch(it) }
         if (existing != null) dao.deleteRecipients(existing.id)
         val batchId = dao.insertBatch(
@@ -74,7 +81,14 @@ class NotificationBatchRepositoryImpl @Inject constructor(private val dao: Notif
                 orderInBatch = index
             )
         })
-        return batchId
+        val createdAt=existing?.createdAtEpochMillis ?: batch.createdAt.takeIf { it>0L } ?: System.currentTimeMillis()
+        batch.recipients.filterNot {it.isAuthorityNotice || batch.isReprint}.mapNotNull {it.caseId}.distinct().forEach {caseId ->
+            val case=cases.getById(caseId) ?: return@forEach
+            val record=AutomaticWorkMinutes.receipt(case,workMinutes.getForCase(caseId))
+            val generated=AutomaticWorkMinutes.scheduling(record,batch.copy(id=batchId),Instant.ofEpochMilli(createdAt).atZone(ZoneId.systemDefault()).toLocalDate())
+            if(generated!=workMinutes.getForCase(caseId)) workMinutes.save(generated)
+        }
+        batchId
     }
 }
 

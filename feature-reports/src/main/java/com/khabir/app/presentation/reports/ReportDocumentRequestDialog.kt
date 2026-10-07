@@ -19,18 +19,21 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 @Composable
-internal fun ReportDocumentRequestDialog(pages: List<File>, busy: Boolean, error: String?, onCancel: () -> Unit, onAnalyze: (List<ReportDocumentRequest>) -> Unit) {
-    var joins by rememberSaveable(pages.map { it.path }) { mutableStateOf(List(pages.size) { false }) }
-    var tasks by rememberSaveable(pages.map { it.path }) { mutableStateOf(List(pages.size) { ReportDocumentTask.SUMMARY }) }
+internal fun ReportDocumentRequestDialog(pages: List<File>, busy: Boolean, error: String?, defaultTask: ReportDocumentTask = ReportDocumentTask.SUMMARY, defaultDestination: String? = null, caseType: String = "", onCancel: () -> Unit, onAnalyze: (List<ReportDocumentRequest>) -> Unit) {
+    var groupIds by rememberSaveable(pages.map { it.path }) { mutableStateOf(pages.indices.toList()) }
+    var tasks by rememberSaveable(pages.map { it.path }, defaultTask) { mutableStateOf(List(pages.size) { defaultTask }) }
+    var destinations by rememberSaveable(pages.map { it.path }) {
+        mutableStateOf(List(pages.size) { defaultDestination ?: ReportCaptureField.DOCUMENTS.name })
+    }
     var requests by rememberSaveable(pages.map { it.path }) {
-        mutableStateOf(List(pages.size) { ReportDocumentTask.SUMMARY.defaultInstruction })
+        mutableStateOf(List(pages.size) { defaultTask.defaultInstruction })
     }
     Dialog(onDismissRequest = { if (!busy) onCancel() }, properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false)) {
         Surface(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
             Column(Modifier.padding(16.dp)) {
                 Row {
                     Text("المطلوب من المستندات", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                    InlineHelp("تعليمات كل مستند", "كل صورة تبدأ مستندًا مستقلًا. لو الصورة صفحة مكملة، اختر تابع للمستند السابق. اكتب طلبك لكل مستند ثم راجع النتائج قبل إضافتها للتقرير.")
+                    InlineHelp("تعليمات كل مستند", "حدد مجموعة لأي صور تخص مستندًا واحدًا ولو لم تكن متجاورة، واختر بند التقرير لكل مجموعة. ستراجع نتيجة كل مجموعة قبل اعتمادها.")
                 }
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     pages.forEachIndexed { index, file ->
@@ -38,11 +41,29 @@ internal fun ReportDocumentRequestDialog(pages: List<File>, busy: Boolean, error
                             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text("الصورة ${index + 1}")
                                 ReportPageThumbnail(file)
-                                if (index > 0) Row {
-                                    Checkbox(joins[index], { checked -> joins = joins.toMutableList().also { it[index] = checked } }, enabled = !busy)
-                                    Text("تابع للمستند السابق", Modifier.padding(top = 12.dp))
+                                var groupMenu by remember(file.path) { mutableStateOf(false) }
+                                Box {
+                                    OutlinedButton(onClick = { groupMenu = true }, enabled = !busy) {
+                                        Text("ضم إلى مجموعة ${groupIds[index] + 1} ▾")
+                                    }
+                                    DropdownMenu(expanded = groupMenu, onDismissRequest = { groupMenu = false }) {
+                                        pages.indices.forEach { group ->
+                                            DropdownMenuItem(text = { Text("المجموعة ${group + 1}") }, onClick = {
+                                                val next = reassignReportPageGroup(
+                                                    ReportPageGroupingState(groupIds, requests, tasks, destinations),
+                                                    index,
+                                                    group
+                                                )
+                                                groupIds = next.groupIds
+                                                requests = next.instructions
+                                                tasks = next.tasks
+                                                destinations = next.destinations
+                                                groupMenu = false
+                                            })
+                                        }
+                                    }
                                 }
-                                if (!joins[index] || index == 0) {
+                                if (groupIds.indexOf(groupIds[index]) == index) {
                                     Text("اختر المطلوب", style = MaterialTheme.typography.labelLarge)
                                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                                         FilterChip(
@@ -50,6 +71,7 @@ internal fun ReportDocumentRequestDialog(pages: List<File>, busy: Boolean, error
                                             onClick = {
                                                 tasks = tasks.toMutableList().also { it[index] = ReportDocumentTask.SUBJECT }
                                                 requests = requests.toMutableList().also { it[index] = ReportDocumentTask.SUBJECT.defaultInstruction }
+                                                destinations = destinations.toMutableList().also { it[index] = ReportCaptureField.SUBJECT.name }
                                             },
                                             label = { Text("موضوع") },
                                             enabled = !busy
@@ -59,6 +81,7 @@ internal fun ReportDocumentRequestDialog(pages: List<File>, busy: Boolean, error
                                             onClick = {
                                                 tasks = tasks.toMutableList().also { it[index] = ReportDocumentTask.ASSIGNMENT }
                                                 requests = requests.toMutableList().also { it[index] = ReportDocumentTask.ASSIGNMENT.defaultInstruction }
+                                                destinations = destinations.toMutableList().also { it[index] = ReportCaptureField.ASSIGNMENT.name }
                                             },
                                             label = { Text("مأمورية") },
                                             enabled = !busy
@@ -68,6 +91,7 @@ internal fun ReportDocumentRequestDialog(pages: List<File>, busy: Boolean, error
                                             onClick = {
                                                 tasks = tasks.toMutableList().also { it[index] = ReportDocumentTask.RESEARCH }
                                                 requests = requests.toMutableList().also { it[index] = ReportDocumentTask.RESEARCH.defaultInstruction }
+                                                destinations = destinations.toMutableList().also { it[index] = ReportCaptureField.DOCUMENTS.name }
                                             },
                                             label = { Text("بحث مستند") },
                                             enabled = !busy
@@ -88,10 +112,35 @@ internal fun ReportDocumentRequestDialog(pages: List<File>, busy: Boolean, error
                                             onClick = {
                                                 tasks = tasks.toMutableList().also { it[index] = ReportDocumentTask.CONCLUSION }
                                                 requests = requests.toMutableList().also { it[index] = ReportDocumentTask.CONCLUSION.defaultInstruction }
+                                                destinations = destinations.toMutableList().also { it[index] = ReportCaptureField.CONCLUSION.name }
                                             },
                                             label = { Text("نتيجة") },
                                             enabled = !busy
                                         )
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                                        listOf(ReportCaptureField.PLAINTIFF_DOCUMENTS, ReportCaptureField.DEFENDANT_DOCUMENTS, ReportCaptureField.CIVIL_CLAIMANT_DOCUMENTS, ReportCaptureField.ACCUSED_DOCUMENTS).filter { it.availableFor(caseType) }.map { it to ReportDocumentTask.RESEARCH.defaultInstruction }.forEach { (field, prompt) ->
+                                            FilterChip(selected = destinations[index] == field.name, onClick = {
+                                                tasks = tasks.toMutableList().also { it[index] = ReportDocumentTask.RESEARCH }
+                                                requests = requests.toMutableList().also { it[index] = prompt }
+                                                destinations = destinations.toMutableList().also { it[index] = field.name }
+                                            }, label = { Text(field.displayLabel(caseType)) }, enabled = !busy)
+                                        }
+                                    }
+                                    var destinationMenu by remember(file.path) { mutableStateOf(false) }
+                                    Box {
+                                        val chosen = ReportCaptureField.entries.firstOrNull { it.name == destinations[index] }
+                                        OutlinedButton(onClick = { destinationMenu = true }, enabled = !busy) {
+                                            Text("مكان الإضافة: ${chosen?.displayLabel(caseType) ?: "بحث المستندات"} ▾")
+                                        }
+                                        DropdownMenu(expanded = destinationMenu, onDismissRequest = { destinationMenu = false }) {
+                                            ReportCaptureField.entries.filter { (it != ReportCaptureField.CUSTOM || defaultDestination == it.name) && it.availableFor(caseType) }.forEach { field ->
+                                                DropdownMenuItem(text = { Text(field.displayLabel(caseType)) }, onClick = {
+                                                    destinations = destinations.toMutableList().also { it[index] = field.name }
+                                                    destinationMenu = false
+                                                })
+                                            }
+                                        }
                                     }
                                     OutlinedTextField(
                                         requests[index],
@@ -115,8 +164,8 @@ internal fun ReportDocumentRequestDialog(pages: List<File>, busy: Boolean, error
                 if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = onCancel, enabled = !busy) { Text("إلغاء") }
-                    Button(onClick = { onAnalyze(groupReportPages(pages, joins, requests, tasks)) },
-                        enabled = !busy && pages.indices.all { (it > 0 && joins[it]) || requests[it].isNotBlank() }, modifier = Modifier.weight(1f)) { Text(if (busy) "جارٍ التحليل…" else "تحليل المستندات") }
+                    Button(onClick = { onAnalyze(groupReportPagesBySelection(pages, groupIds, requests, tasks, destinations)) },
+                        enabled = !busy && pages.indices.all { groupIds.indexOf(groupIds[it]) != it || requests[it].isNotBlank() }, modifier = Modifier.weight(1f)) { Text(if (busy) "جارٍ التحليل…" else "تحليل المستندات") }
                 }
             }
         }
@@ -134,5 +183,6 @@ private fun ReportPageThumbnail(file: File) {
         }
     }
     bitmap?.let { Image(it.asImageBitmap(), "معاينة المستند", Modifier.fillMaxWidth().height(110.dp)) }
-    DisposableEffect(bitmap) { onDispose { bitmap?.recycle() } }
+    // Compose may still draw the last frame after disposal. Let GC release
+    // this bounded thumbnail rather than recycling a bitmap used by RenderThread.
 }

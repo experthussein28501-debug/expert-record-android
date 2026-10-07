@@ -1,0 +1,14 @@
+Baseline: 6b020aa
+Changed original files: 11
+Protected files unchanged: 20
+core/src/main/java/com/khabir/app/data/ai/GeminiDocumentVisionService.kt
+core/src/main/java/com/khabir/app/domain/model/CaseDocumentFields.kt
+core/src/main/java/com/khabir/app/domain/model/UnifiedCaseSubject.kt
+core/src/main/java/com/khabir/app/presentation/cases/DocumentReviewParser.kt
+core/src/main/java/com/khabir/app/presentation/cases/IntakeNarrative.kt
+core/src/main/java/com/khabir/app/presentation/cases/PetitionIntakeParser.kt
+core/src/test/java/com/khabir/app/presentation/cases/DocumentReviewParserTest.kt
+core/src/test/java/com/khabir/app/presentation/cases/IntakeNarrativeTest.kt
+feature-cases/src/main/java/com/khabir/app/presentation/cases/CaseFormScreen.kt
+feature-reports/src/main/java/com/khabir/app/presentation/reports/CaseSubjectFormatter.kt
+feature-reports/src/test/java/com/khabir/app/presentation/reports/CaseSubjectFormatterTest.kt

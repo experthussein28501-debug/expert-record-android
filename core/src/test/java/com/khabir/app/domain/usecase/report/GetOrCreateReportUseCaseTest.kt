@@ -56,6 +56,19 @@ class GetOrCreateReportUseCaseTest {
         assertEquals("drive_misdemeanor", report.templateId)
     }
 
+
+    @Test fun `opening an existing report retains the experts text despite changed case`() = runBlocking {
+        val saved = Report(id=4,caseId=7,subjectOfCase="صياغة الخبير المعدلة",assignment="مأمورية محفوظة")
+        val repo = object: ReportRepository {
+            override fun observeForCase(caseId:Long):Flow<Report?> = flowOf(saved)
+            override fun observeAll():Flow<List<Report>> = flowOf(listOf(saved))
+            override suspend fun getById(reportId:Long):Report? = saved
+            override suspend fun getForCase(caseId:Long):Report? = saved
+            override suspend fun save(report:Report):Long = report.id
+        }
+        val changed=Case(id=7,incomingNo="1",incomingDate=LocalDate.of(2026,1,1),caseNo="9",caseYear="2026",court="أسوان",caseType="مدني",subjectOfCase="موضوع جديد")
+        assertEquals(saved,GetOrCreateReportUseCase(repo,SingleCaseRepository(changed))(4,7))
+    }
     private class EmptyReportRepository : ReportRepository {
         override fun observeForCase(caseId: Long): Flow<Report?> = flowOf(null)
         override fun observeAll(): Flow<List<Report>> = flowOf(emptyList())

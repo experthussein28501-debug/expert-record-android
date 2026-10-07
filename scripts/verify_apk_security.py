@@ -13,6 +13,7 @@ assert app is not None
 assert app.get(a + 'debuggable', 'false') == 'false', 'APK permits debugging'
 assert app.get(a + 'allowBackup') == 'false', 'Backup must be disabled'
 assert app.get(a + 'usesCleartextTraffic') == 'false', 'Cleartext traffic enabled'
+assert all('AgendaTestActivity' not in item.get(a + 'name', '') for item in app.findall('activity')), 'Instrumentation host must never ship'
 for provider in app.findall('provider'):
     assert provider.get(a + 'exported', 'false') == 'false', 'Exported provider'
 rules = mapping.read_text()

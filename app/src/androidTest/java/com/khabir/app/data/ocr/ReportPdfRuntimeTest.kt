@@ -18,7 +18,7 @@ class ReportPdfRuntimeTest {
     @Test fun longArabicReportPaginatesAndRendersEveryPage() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val file = LegalReportPdfBuilder().buildToFile(File(context.cacheDir, "report-regression.pdf"), "تقرير تجريبي",
-            listOf("الوزارة" to "وزارة العدل", "الإدارة" to "إدارة خبراء أسوان", "رقم الدعوى" to "100 لسنة 2026", "المحكمة" to "مدني جزئي كوم أمبو", "المرفوعة من" to "اسم أول تجريبي", "ضد" to "اسم ثان تجريبي"),
+            listOf(com.khabir.app.domain.model.ReportTextFormat.KEY to com.khabir.app.domain.model.ReportTextFormat(size = 16).encode(), "رأس التقرير" to "تقرير الدعوى رقم ١٠٠ لسنة ٢٠٢٦", "الوزارة" to "وزارة العدل", "الإدارة" to "إدارة خبراء أسوان", "رقم الدعوى" to "100 لسنة 2026", "المحكمة" to "مدني جزئي كوم أمبو", "المرفوعة من" to "اسم أول تجريبي", "ضد" to "اسم ثان تجريبي"),
             listOf("بحث المستندات" to (1..55).joinToString("\n") { "المستند رقم $it: تمت مطابقة بيانات المستند مع الأوراق المقدمة وتسجيل الملاحظات دون تغيير مضمون المستند. هذه بيانات اختبار لتدقيق التفاف السطور العربية واستمرارها بين الصفحات." }, "النتيجة النهائية" to "نهاية التقرير التجريبي"))
         PdfRenderer(ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)).use { renderer ->
             assertTrue(renderer.pageCount >= 3)

@@ -232,7 +232,17 @@ object ReportTemplateCatalog {
         name = "مدني مختصر — من تقارير الخبير",
         sections = detailedCivil.sections.filter { it.id in setOf("subject", "assignment", "proceedings", "statements", "conclusion") }.reindex()
     )
-    val all: List<ReportTemplate> = listOf(civil, detailedCivil, conciseCivil, family, misdemeanor, appeal, highAppeal, free)
+    val accounting: List<ReportTemplate> = listOf("عمالي", "ضرائب", "كشف حساب", "أحوال شخصية", "حسابي آخر").mapIndexed { index, name ->
+        ReportTemplate("built_in_accounting_$index", "حسابي — $name", ReportTemplateKind.CUSTOM,
+            commonLegalSections().map { section ->
+                when(section.id) {
+                    "calculations", "facts" -> section.copy(enabled=true)
+                    "inspection", "witnesses" -> section.copy(enabled=false)
+                    else -> section
+                }
+            }, true, false, "هيكل أولي قابل للتعديل؛ قرارات ومعدلات الحساب تعتمد من المستندات")
+    }
+    val all: List<ReportTemplate> = listOf(civil, detailedCivil, conciseCivil, family, misdemeanor, appeal, highAppeal, free) + accounting
 
     fun suggestFor(caseType: String, court: String): ReportTemplate {
         val source = "$caseType $court"
