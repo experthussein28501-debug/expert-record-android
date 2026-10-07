@@ -35,6 +35,8 @@ sealed interface FeatureGateState {
 object FutureFeatureGates {
     val TASKS = TimedPaidFeatureGate(
         featureId = "tasks",
+        // The dashboard may show the tile, but the feature gate itself remains
+        // unavailable until a future release explicitly enables it.
         visible = false,
         unlockAfterDays = 0,
         requiredProductId = "khabir_ad_free"

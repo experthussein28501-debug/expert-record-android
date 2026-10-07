@@ -48,6 +48,8 @@ data class CaseFormUiState(
     val parties: List<PartyDraft> = emptyList(),
     val partyEntry: PartyDraft = PartyDraft(localId = 0L),
     val adminNotes: String = "",
+    val archivedSourcePages: List<String> = emptyList(),
+    val archivedSourceText: String = "",
     val isSaving: Boolean = false,
     val validationErrors: List<CaseValidationError> = emptyList(),
     val savedSuccessfully: Boolean = false,
@@ -65,6 +67,7 @@ data class CaseFormUiState(
 
 @HiltViewModel
 class CaseFormViewModel @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
     private val getCase: GetCaseUseCase,
     private val saveCase: SaveCaseUseCase,
     private val arabicOcr: ArabicPetitionOcrService,
@@ -74,7 +77,9 @@ class CaseFormViewModel @Inject constructor(
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(CaseFormUiState())
     val uiState: StateFlow<CaseFormUiState> = _uiState.asStateFlow()
+    private var acceptedSourceText: String = ""
     private var nextId = 1L
+    private val sourceArchive = CaseSourceArchive(File(context.filesDir,"case-source-pages"))
 
     init {
         val id: Long = savedStateHandle.get<Long>("caseId") ?: 0L
@@ -96,7 +101,9 @@ class CaseFormViewModel @Inject constructor(
                     hearingDate = c.hearingDate,
                     hearingTime = c.hearingTime,
                     parties = c.parties.map { p -> PartyDraft(nextId++, p.firstName, p.restName, p.role, p.withCapacity, p.address, p.claimKind) },
-                    adminNotes = c.adminNotes
+                    adminNotes = c.adminNotes,
+                    archivedSourcePages = sourceArchive.pages(c.id).map { it.absolutePath },
+                    archivedSourceText = sourceArchive.text(c.id)
                 )
             }
         }
@@ -108,14 +115,14 @@ class CaseFormViewModel @Inject constructor(
     fun onCaseYearChanged(v: String) = _uiState.update { it.copy(caseYear = v) }
     fun onCourtChanged(v: String) = _uiState.update { it.copy(court = v) }
     fun onCaseTypeChanged(v: String) = _uiState.update { it.copy(caseType = v) }
-    fun onSubjectOfCaseChanged(v: String) = _uiState.update { it.copy(subjectOfCase = v) }
+    fun onSubjectOfCaseChanged(v: String) = _uiState.update { it.copy(subjectOfCase = v, finalRequests = "") }
     fun onFinalRequestsChanged(v: String) = _uiState.update { it.copy(finalRequests = v) }
     fun onPreliminaryMissionChanged(v: String) = _uiState.update { it.copy(preliminaryMission = v) }
     fun onReceiptDateChanged(v: LocalDate?) = _uiState.update { it.copy(receiptDate = v) }
     fun onPreliminaryJudgmentDateChanged(v: LocalDate?) = _uiState.update { it.copy(preliminaryJudgmentDate = v) }
     fun onHearingDateChanged(v: LocalDate?) = _uiState.update { it.copy(hearingDate = v) }
     fun onHearingTimeChanged(v: String) = _uiState.update { it.copy(hearingTime = v) }
-    fun onAdminNotesChanged(v: String) = _uiState.update { it.copy(adminNotes = v) }
+    fun onAdminNotesChanged(v: String) = _uiState.update { it.copy(adminNotes = com.khabir.app.domain.model.LegalSourceAudit.withUserNotes(it.adminNotes, v)) }
 
     fun updatePartyEntry(fn: (PartyDraft) -> PartyDraft) = _uiState.update { state ->
         state.copy(partyEntry = fn(state.partyEntry))
@@ -252,13 +259,17 @@ class CaseFormViewModel @Inject constructor(
                 useAi = true,
                 fallbackToLocal = false,
                 deleteAfterRead = false,
-                detectMultipleDocuments = true
+                detectMultipleDocuments = true,
+                onProgress = { read,total -> _uiState.update { it.copy(ocrMessage = "تمت قراءة $read من $total صفحة؛ التحليل للمراجعة") } }
             )
             _uiState.update {
                 if (result.text.isBlank()) it.copy(
                     isOcrProcessing = false,
                     aiFailureMessage = result.aiError ?: result.warnings.joinToString("\n").takeIf(String::isNotBlank) ?: "لم يتم استخراج نص من الصور",
                     ocrMessage = null
+                ) else if(result.usedLocalFallback) it.copy(
+                    isOcrProcessing = false,voiceReviewText = result.text,reviewSourceLabel = "OCR محلي — يحتاج مراجعة",
+                    aiFailureMessage = result.aiError,ocrMessage = "تم الاحتفاظ بالقراءة المحلية للمراجعة؛ لم يكتمل تحليل AI"
                 ) else it.copy(
                     isOcrProcessing = false,
                     documentReview = DocumentReviewParser.parse(result.text),
@@ -303,6 +314,13 @@ class CaseFormViewModel @Inject constructor(
         val state = _uiState.value
         val document = state.documentReview.firstOrNull { it.id == documentId } ?: return
         val group = DocumentReviewParser.matchingGroup(state.documentReview, document)
+        useReviewedDocuments(group.map { it.id }.toSet())
+    }
+
+    fun useReviewedDocuments(documentIds: Set<Int>) {
+        val state = _uiState.value
+        val group = state.documentReview.filter { it.id in documentIds }
+        if (group.isEmpty() || group.size != documentIds.size) return
         _uiState.update {
             it.copy(
                 voiceReviewText = DocumentReviewParser.combinedText(group),
@@ -315,8 +333,9 @@ class CaseFormViewModel @Inject constructor(
 
     fun editReviewedDocument(documentId: Int, text: String) {
         val parsed = PetitionIntakeParser.parse(text)
+        val record = LegalProcedureParser.parse(documentId, emptyList(),text)
         _uiState.update { state -> state.copy(documentReview = state.documentReview.map { doc ->
-            if (doc.id != documentId) doc else doc.copy(rawText = text, caseNo = parsed.caseNo,
+            if (doc.id != documentId) doc else doc.copy(rawText = text, type = LegalProcedureParser.field(text,"نوع المستند").ifBlank { doc.type }, record = record.copy(pages = doc.pageNumbers), caseNo = parsed.caseNo,
                 caseYear = parsed.caseYear, court = parsed.court,
                 primaryPartyNames = parsed.parties.map { it.name },
                 status = DocumentMatchStatus.UNCERTAIN, reason = "تم تعديل البيانات؛ ستعاد المطابقة عند اختيار القضية")
@@ -374,6 +393,7 @@ class CaseFormViewModel @Inject constructor(
     ) {
         val current = _uiState.value
         val parsed = PetitionIntakeParser.parse(editedText)
+        acceptedSourceText = editedText
         val acceptedParties = reviewedParties ?: parsed.parties
         val newParties = acceptedParties.map { item ->
             val parts = item.name.trim().split(Regex("\\s+"), limit = 2)
@@ -416,8 +436,8 @@ class CaseFormViewModel @Inject constructor(
             receiptDate = parsed.receiptDate ?: current.receiptDate,
             preliminaryJudgmentDate = parsed.preliminaryJudgmentDate ?: current.preliminaryJudgmentDate,
             parties = merged.parties,
-            adminNotes = listOfNotNull(parsed.notes).joinToString("\n").takeIf(String::isNotBlank)?.let { note ->
-                if (current.adminNotes.isBlank()) note else current.adminNotes + "\n" + note
+            adminNotes = listOfNotNull(parsed.notes, parsed.sourceAudit.takeIf(String::isNotBlank)?.let { "${com.khabir.app.domain.model.LegalSourceAudit.LABEL}: $it" }).joinToString("\n").takeIf(String::isNotBlank)?.let { note ->
+                if (current.adminNotes.contains(note)) current.adminNotes else if (current.adminNotes.isBlank()) note else current.adminNotes + "\n" + note
             } ?: current.adminNotes,
             voiceReviewText = null,
             voiceAppliedMessage = if (changed.isEmpty()) {
@@ -468,6 +488,16 @@ class CaseFormViewModel @Inject constructor(
             _uiState.update { it.copy(isSaving = true) }
             when (val r = saveCase(c)) {
                 is SaveCaseUseCase.Result.Success -> {
+                    try {
+                        val selectedRecords = s.documentReview.filter { it.id in s.selectedDocumentIds }.map { doc ->
+                            LegalProcedureParser.parse(doc.id,doc.pageNumbers,doc.rawText,doc.type) }
+                        val records = selectedRecords.ifEmpty { if(s.pendingPagePaths.isNotEmpty()) listOf(LegalDocumentRecord(1,(1..s.pendingPagePaths.size).toList(),LegalProcedureType.UNKNOWN,rawText=acceptedSourceText)) else emptyList() }
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { sourceArchive.archive(r.caseId,records,s.pendingPagePaths.map(::File)) }
+                    } catch(cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                    catch(error: Exception) {
+                        _uiState.update { it.copy(caseId = r.caseId,isSaving = false,ocrMessage = "تم حفظ القضية وتعذر حفظ بعض صور المصادر؛ الصور المؤقتة محفوظة لإعادة المحاولة: ${error.message}") }
+                        return@launch
+                    }
                     _uiState.update { it.copy(caseId = r.caseId, isSaving = false, savedSuccessfully = true, validationErrors = emptyList()) }
                     if (s.selectedDocumentIds.isNotEmpty()) removeReviewedDocuments(s.selectedDocumentIds)
                     val remaining = _uiState.value

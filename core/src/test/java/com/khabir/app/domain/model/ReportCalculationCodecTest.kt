@@ -8,6 +8,27 @@ import org.junit.Test
 class ReportCalculationCodecTest {
 
     @Test
+    fun legacyNumericLabelDoesNotShiftAmountsOrLoseNotes() {
+        val legacy = "2024\t2\t150.5\tجنيه\tمستند رقم 7"
+        val row = ReportCalculationCodec.decode(legacy).single()
+        assertEquals("2024", row.label)
+        assertEquals("2", row.quantity)
+        assertEquals("150.5", row.unitValue)
+        assertEquals("جنيه", row.unit)
+        assertEquals("مستند رقم 7", row.notes)
+        assertEquals(BigDecimal("301.00"), ReportCalculationCodec.total(legacy))
+        assertEquals(row, ReportCalculationCodec.decode(ReportCalculationCodec.encode(listOf(row))).single())
+    }
+
+    @Test
+    fun currentNumericLabelWithEmptyNotesKeepsIdAndTotal() {
+        val row = ReportCalculationRow(41L, "2024", "2", "150.5", "جنيه", "")
+        val encoded = ReportCalculationCodec.encode(listOf(row))
+        assertEquals(row, ReportCalculationCodec.decode(encoded).single())
+        assertEquals(BigDecimal("301.00"), ReportCalculationCodec.total(encoded))
+    }
+
+    @Test
     fun number_acceptsArabicDigitsAndSeparators() {
         assertEquals(BigDecimal("1234.50"), ReportCalculationCodec.number("١٬٢٣٤٫٥٠"))
     }
@@ -41,4 +62,3 @@ class ReportCalculationCodecTest {
         assertTrue(ReportCalculationCodec.exportText(encoded).contains("الإجمالي: 33.00"))
     }
 }
-

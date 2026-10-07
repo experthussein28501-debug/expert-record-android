@@ -75,6 +75,14 @@ jobs:
       - name: Security gate regression tests
         run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
 
+      - name: Reproduce review defects on the delivered source
+        if: github.head_ref == 'codex/0.9.17-seven-day-trial'
+        run: python3 scripts/reproduce_review_regressions.py
+
+      - name: Reproduce reported intake defects on reviewed 0.9.17
+        if: github.head_ref == 'codex/0.9.18-intake-fixes'
+        run: python3 scripts/reproduce_intake_regressions.py
+
       - name: Functional unit tests
         shell: bash
         run: |
@@ -94,7 +102,10 @@ jobs:
           sudo apt-get install -y -qq libreoffice-writer fonts-hosny-amiri poppler-utils
           mkdir -p document-evidence
           libreoffice -env:UserInstallation=file:///tmp/expert-word-render --headless --convert-to pdf --outdir document-evidence core/build/visual-evidence/work-minutes-long.docx
-          pdftoppm -scale-to 1400 -png document-evidence/work-minutes-long.pdf document-evidence/minutes
+          libreoffice -env:UserInstallation=file:///tmp/expert-report-render --headless --convert-to pdf --outdir document-evidence core/build/report-fixtures/civil-report-rtl.docx core/build/report-fixtures/formatted-report.docx core/build/notice-fixtures/ordinary-notices.docx
+          NOTICE_PAGES="$(pdfinfo document-evidence/ordinary-notices.pdf | awk '/^Pages:/ {print $2}')"
+          test "$NOTICE_PAGES" = "1"
+          for pdf in document-evidence/*.pdf; do pdftoppm -scale-to 1400 -png "$pdf" "${pdf%.pdf}"; done
       - name: Upload functional and document evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -103,7 +114,10 @@ jobs:
           path: |
             **/build/test-results/
             core/build/visual-evidence/
+            core/build/report-fixtures/
+            core/build/notice-fixtures/
             document-evidence/
+            review-regression-evidence/
           retention-days: 7
 
   apk:
@@ -154,6 +168,9 @@ jobs:
           APK="$(find app/build/outputs/apk/combined/hardened -name '*.apk' | head -n 1)"
           ANALYZER="$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer"
           "$ANALYZER" manifest print "$APK" > /tmp/khabir-manifest.xml
+          APP_ID="$("$ANALYZER" manifest application-id "$APK")"
+          test "$APP_ID" = "com.khabir.app.combined.preview.v0919"
+          test "$APP_ID" != "com.khabir.app.combined.preview.v0914"
           python3 scripts/verify_apk_security.py "$APK" /tmp/khabir-manifest.xml app/build/outputs/mapping/combinedHardened/mapping.txt
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify "$APK"
           python3 scripts/verify_play_assets.py "$APK"
@@ -161,7 +178,7 @@ jobs:
 
       - name: Export exact source and evidence
         run: |
-          git archive --format=zip --prefix=expert-record-0.9.10/ --output=expert-record-0.9.10-source.zip HEAD
+          git archive --format=zip --prefix=expert-record-0.9.19/ --output=expert-record-0.9.19-source.zip HEAD
           cp /tmp/khabir-manifest.xml release-manifest.xml
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$(find app/build/outputs/apk/combined/hardened -name '*.apk' | head -n 1)" > signing-fingerprint.txt
 
@@ -171,15 +188,15 @@ jobs:
           set -euo pipefail
           APK="$(find app/build/outputs/apk -type f -name '*.apk' | head -n 1)"
           test -n "$APK"
-          cp "$APK" expert-record-0.9.10-hardened.apk
+          cp "$APK" expert-record-0.9.19-hardened.apk
 
       - name: Upload APK for chat transfer
         uses: actions/upload-artifact@v4
         with:
           name: expert-record-chat-download
           path: |
-            expert-record-0.9.10-hardened.apk
-            expert-record-0.9.10-source.zip
+            expert-record-0.9.19-hardened.apk
+            expert-record-0.9.19-source.zip
             release-manifest.xml
             signing-fingerprint.txt
           if-no-files-found: error

@@ -16,7 +16,8 @@ data class ReviewedDocument(
     val court: String?,
     val primaryPartyNames: List<String>,
     val status: DocumentMatchStatus,
-    val reason: String
+    val reason: String,
+    val record: com.khabir.app.domain.model.LegalDocumentRecord? = null
 )
 
 object DocumentReviewParser {
@@ -30,7 +31,7 @@ object DocumentReviewParser {
             val (declaredId, raw) = pair
             val parsed = PetitionIntakeParser.parse(raw)
             ReviewedDocument(
-                id = index + 1,
+                id = declaredId.takeIf { id -> blocks.count { it.first == id } == 1 } ?: index + 1,
                 pageNumbers = parsePages(raw).ifEmpty { listOf(index + 1) },
                 type = captureLine(raw, "نوع المستند") ?: "مستند غير معروف",
                 rawText = raw.trim(),
@@ -39,10 +40,11 @@ object DocumentReviewParser {
                 court = parsed.court,
                 primaryPartyNames = parsed.parties.map { it.name }.filter(String::isNotBlank),
                 status = DocumentMatchStatus.UNCERTAIN,
-                reason = "لم تُحسب المطابقة بعد"
+                reason = "لم تُحسب المطابقة بعد",
+                record = LegalProcedureParser.parse(declaredId, parsePages(raw).ifEmpty { listOf(index + 1) },raw)
             )
         }
-        val primary = provisional.firstOrNull { it.type.contains("عريضة") } ?: provisional.first()
+        val primary = provisional.firstOrNull { it.record?.type == com.khabir.app.domain.model.LegalProcedureType.ORIGINAL } ?: provisional.first()
         return provisional.map { document ->
             if (document.id == primary.id) {
                 document.copy(status = DocumentMatchStatus.UNCERTAIN, reason = "مستند مرجعي؛ راجع بياناته واعتمدها")
@@ -53,6 +55,9 @@ object DocumentReviewParser {
         }
     }
 
+    fun normalizedExtraction(text:String):String =
+        if(text.contains("[[DOCUMENT") || LegalProcedureParser.field(text,"نوع المستند").isNotBlank()) combinedText(parse(text)) else text
+
     fun matchingGroup(documents: List<ReviewedDocument>, selected: ReviewedDocument): List<ReviewedDocument> {
         val group = mutableListOf(selected)
         documents.filter { it.id != selected.id }.forEach { candidate ->
@@ -62,31 +67,32 @@ object DocumentReviewParser {
     }
 
     fun combinedText(documents: List<ReviewedDocument>): String {
+        if (documents.isEmpty()) return ""
         val parsed = documents.map { it to PetitionIntakeParser.parse(it.rawText) }
-        val base = parsed.firstOrNull { !it.second.caseNo.isNullOrBlank() }?.second ?: parsed.first().second
-        fun isCounterclaim(doc: ReviewedDocument) = doc.type.contains("فرعية") || doc.type.contains("طلب عارض")
-        val petitions = parsed.filter { it.first.type.contains("عريضة") || it.first.type.contains("صحيفة") || isCounterclaim(it.first) }
+        val assembly = LegalCaseAssembly.assemble(documents.map { doc ->
+            LegalProcedureParser.parse(doc.id,doc.pageNumbers,doc.rawText,doc.type)
+        }, parsed.firstNotNullOfOrNull { it.second.caseType }.orEmpty(),
+            parsed.flatMap { it.second.parties }.filter { it.role.isDefendant }.map { it.name })
+        val identity = assembly.current
+        val base = parsed.firstOrNull { it.second.caseNo == identity?.number && it.second.caseYear == identity?.year }?.second
+            ?: PetitionIntakeParser.Result()
+        fun isCounterclaim(doc: ReviewedDocument) = com.khabir.app.domain.model.LegalProcedureType.classify(doc.type).subsidiary
+        val petitions = parsed.filter { com.khabir.app.domain.model.LegalProcedureType.classify(it.first.type).let { kind ->
+            kind == com.khabir.app.domain.model.LegalProcedureType.ORIGINAL || kind.subsidiary } }
         val judgments = parsed.filter { it.first.type.contains("حكم") }
-        val originalSubject = petitions.filterNot { isCounterclaim(it.first) }.mapNotNull { (_, data) ->
-            data.subjectOfCase?.let { IntakeNarrative.subject(it, data.finalRequests) }
-        }.joinToString("\n\n")
-        val counterSubjects = petitions.filter { isCounterclaim(it.first) }.map { (doc, data) ->
-            IntakeNarrative.counterclaim(data.parties.filter { it.role.isPlaintiff }.map { it.name },
-                data.finalRequests, doc.type.contains("طلب عارض"), data.subjectOfCase)
-        }.distinct()
         fun evidence(label: String): String? = judgments.mapNotNull { captureLine(it.first.rawText, label) }
             .firstOrNull { it !in listOf("غير مذكور", "غير موجود", "لا", "...", "[غير واضح]") }
         val history = IntakeNarrative.returnedHistory(evidence("دليل إعادة الدعوى"),
             evidence("دليل التقرير السابق"), evidence("دليل تداول الدعوى"))
-        val subject = (listOf(originalSubject) + counterSubjects + history).filter(String::isNotBlank).joinToString("\n\n")
-        val mission = judgments.mapNotNull { (_, data) -> data.preliminaryMission?.let {
+        val subject = listOf(assembly.subject,history).filter(String::isNotBlank).joinToString("\n\n")
+        val mission = parsed.mapNotNull { (_, data) -> data.preliminaryMission?.let {
             IntakeNarrative.mission(it, data.preliminaryJudgmentDate)
         } }.joinToString("\n\n")
         return buildString {
-            appendLine("رقم الدعوى: ${base.caseNo.orEmpty()}")
-            appendLine("سنة الدعوى: ${base.caseYear.orEmpty()}")
-            appendLine("المحكمة: ${base.court.orEmpty()}")
-            appendLine("نوع الدعوى: ${base.caseType.orEmpty()}")
+            appendLine("رقم الدعوى: ${identity?.number.orEmpty()}")
+            appendLine("سنة الدعوى: ${identity?.year.orEmpty()}")
+            appendLine("المحكمة: ${identity?.court.orEmpty()}")
+            appendLine("نوع الدعوى: ${identity?.type?.takeIf(String::isNotBlank) ?: base.caseType.orEmpty()}")
             parsed.forEach { (_, data) ->
                 data.incomingNo?.let { appendLine("رقم الوارد: $it") }
                 data.incomingDate?.let { appendLine("تاريخ الوارد: $it") }
@@ -95,7 +101,7 @@ object DocumentReviewParser {
             }
             val mergedParties = linkedMapOf<String, PetitionIntakeParser.ParsedParty>()
             parsed.flatMap { (doc, data) -> data.parties.map { party ->
-                if (isCounterclaim(doc)) party.copy(claimKind = if (doc.type.contains("طلب عارض")) "طلب عارض" else "فرعية") else party
+                if (isCounterclaim(doc)) party.copy(claimKind = com.khabir.app.domain.model.LegalProcedureType.classify(doc.type).label) else party
             } }.forEach { party ->
                 val key = listOf(party.role.name, normalize(party.name), party.claimKind).joinToString("|")
                 val existing = mergedParties[key]
@@ -110,9 +116,13 @@ object DocumentReviewParser {
                 appendLine("الخصم: ${party.name} | العنوان: ${party.address} | الصفة: ${party.role.arabicLabel}${if (party.withCapacity) " بصفته" else ""} | الدعوى: ${party.claimKind}")
             }
             appendLine("موضوع الدعوى: $subject")
-            appendLine("الطلبات الختامية: " + petitions.mapNotNull { it.second.finalRequests }.joinToString("\n"))
+            // Each procedure already carries its requests inside the unified subject.
+            appendLine("الطلبات الختامية:")
             appendLine("مأمورية الحكم التمهيدي: $mission")
-            appendLine("ملاحظات: " + parsed.mapNotNull { it.second.notes }.joinToString("\n"))
+            appendLine("ملاحظات: " + (parsed.mapNotNull { it.second.notes } + petitions.flatMap { (doc, data) ->
+                data.subjectWarnings.map { "المستند ${doc.id}: $it" }
+            } + assembly.warnings).distinct().joinToString("؛ "))
+            appendLine("${com.khabir.app.domain.model.LegalSourceAudit.LABEL}: ${com.khabir.app.domain.model.LegalSourceAudit.encode(assembly.records)}")
         }
     }
 
@@ -140,6 +150,12 @@ object DocumentReviewParser {
     ).find(text)?.groupValues?.getOrNull(1)?.trim()?.takeIf(String::isNotBlank)
 
     fun compare(primary: ReviewedDocument, other: ReviewedDocument): Pair<DocumentMatchStatus, String> {
+        val a = LegalProcedureParser.parse(primary.id,primary.pageNumbers,primary.rawText,primary.type)
+        val b = LegalProcedureParser.parse(other.id,other.pageNumbers,other.rawText,other.type)
+        fun linked(ref: com.khabir.app.domain.model.LegalDocumentRecord, candidate: com.khabir.app.domain.model.LegalDocumentRecord): Boolean =
+            ref.provenReferral && listOfNotNull(ref.previousIdentity,ref.currentIdentity).any { identity ->
+                candidate.identity?.let(identity::matches) == true || candidate.currentIdentity?.let(identity::matches) == true }
+        if(linked(a,b) || linked(b,a)) return DocumentMatchStatus.MATCHED to "ربط مثبت بحكم الإحالة بين هوية الدعوى السابقة والحالية؛ راجع النص المصدر"
         if (!primary.caseNo.isNullOrBlank() && !other.caseNo.isNullOrBlank() && normalize(primary.caseNo) != normalize(other.caseNo)) {
             return DocumentMatchStatus.DIFFERENT to "رقم الدعوى مختلف: ${primary.caseNo} مقابل ${other.caseNo}"
         }
@@ -172,13 +188,18 @@ object DocumentReviewParser {
         val addressScore = overlap(primaryAddresses, otherAddresses)
         val confidence = (nameScore * 0.8 + addressScore * 0.2).toInt().coerceIn(0, 100)
         return when {
-            confidence >= 70 -> DocumentMatchStatus.MATCHED to "تطابق الخصوم والعناوين بنسبة $confidence% رغم عدم اكتمال رقم الدعوى"
-            nameScore > 0 -> DocumentMatchStatus.UNCERTAIN to "يوجد تشابه في الخصوم بنسبة $confidence%؛ راجع المستندين قبل الدمج"
+            primaryAddresses.isNotEmpty() && otherAddresses.isNotEmpty() && addressScore == 0 ->
+                DocumentMatchStatus.UNCERTAIN to "الأسماء متشابهة لكن العناوين مختلفة؛ راجع يدويًا"
+            confidence >= 70 -> DocumentMatchStatus.UNCERTAIN to "الخصوم والعناوين متشابهة لكن رقم الدعوى ناقص؛ التشابه لا يثبت الربط ويلزم قرار المستخدم"
+            nameScore > 0 -> DocumentMatchStatus.UNCERTAIN to "يوجد تشابه في الخصوم؛ راجع المستندين قبل الدمج"
             else -> DocumentMatchStatus.UNCERTAIN to "البيانات غير كافية لإثبات المطابقة؛ يلزم قرار المستخدم"
         }
     }
 
-    private fun normalize(value: String): String = value.toWesternDigits().trim().lowercase().replace(Regex("\\s+"), " ")
+    private fun normalize(value: String): String = value.toWesternDigits().trim().lowercase()
+        .replace(Regex("[\\u064B-\\u065F\\u0670]"), "")
+        .replace(Regex("[أإآ]"), "ا").replace('ى', 'ي').replace('ة', 'ه')
+        .replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim().replace(Regex("\\s+"), " ")
 
     private fun String.toWesternDigits(): String = map { char ->
         when (char) {

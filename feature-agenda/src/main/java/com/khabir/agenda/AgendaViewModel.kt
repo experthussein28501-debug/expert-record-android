@@ -51,42 +51,7 @@ class AgendaViewModel @Inject constructor(
         val (workMinutes, batches, cases) = sources
         val holidayMap = holidays.holidaysFor(currentMonth.year).associateBy { it.date }
         val eventMap = buildList {
-            cases.mapNotNull { it.toHearingAgendaEventOrNull() }.forEach { add(it) }
-            batches.forEach { batch ->
-                batch.recipients
-                    .map { Triple(it.caseNo, it.caseYear, it.court) }
-                    .filter { it.first.isNotBlank() || it.second.isNotBlank() || it.third.isNotBlank() }
-                    .distinct()
-                    .forEach { (caseNo, caseYear, court) ->
-                        add(
-                            AgendaEvent(
-                                date = batch.appointmentDate,
-                                title = caseLabel(caseNo, caseYear),
-                                time = batch.appointmentTime,
-                                location = batch.appointmentLocation,
-                                details = listOf(court, batch.requestedDocuments.takeIf(String::isNotBlank)?.let { "مستندات: $it" })
-                                    .filterNotNull().filter(String::isNotBlank).joinToString(" — "),
-                                source = AgendaEventSource.NOTIFICATION_APPOINTMENT
-                            )
-                        )
-                    }
-            }
-            workMinutes.forEach { record ->
-                record.entries.forEach { entry ->
-                    entry.scheduledFollowUpDate?.let { date ->
-                        add(
-                            AgendaEvent(
-                                date = date,
-                                title = caseLabel(record.caseNo, record.caseYear),
-                                time = entry.scheduledFollowUpTime,
-                                location = entry.scheduledFollowUpLocation.ifBlank { record.court },
-                                details = "موعد تالٍ مثبت بمحضر الأعمال رقم ${entry.number}",
-                                source = AgendaEventSource.WORK_MINUTES
-                            )
-                        )
-                    }
-                }
-            }
+            addAll(AgendaSourceEvents.from(cases,batches,workMinutes))
             manualNotes.values.forEach { note ->
                 note.manualAppointments.forEach { appointment ->
                     add(
@@ -101,8 +66,8 @@ class AgendaViewModel @Inject constructor(
                     )
                 }
             }
-        }.distinctBy { listOf(it.date.toString(), it.title, it.time, it.location, it.source.name).joinToString("|") }
-            .groupBy { it.date }
+        }.distinctBy { it.importKey() }.groupBy { it.date }
+
 
         val first = currentMonth.atDay(1)
         val last = currentMonth.atEndOfMonth()
@@ -111,7 +76,8 @@ class AgendaViewModel @Inject constructor(
                 AgendaDaySummary(
                     date = date,
                     holiday = holidayMap[date],
-                    events = eventMap[date].orEmpty(),
+                    events = eventMap[date].orEmpty().filterNot {it.source!=AgendaEventSource.MANUAL && it.isHidden(manualNotes[date.toEpochDay()]?.hiddenImportedKeys.orEmpty())},
+                    hiddenEvents = eventMap[date].orEmpty().filter {it.source!=AgendaEventSource.MANUAL && it.isHidden(manualNotes[date.toEpochDay()]?.hiddenImportedKeys.orEmpty())},
                     note = manualNotes[date.toEpochDay()]
                 )
             }
@@ -142,18 +108,21 @@ class AgendaViewModel @Inject constructor(
     ) {
         if (isSaving.value) return
         isSaving.value = true
+        val transfers = draft?.noteTransfers?.toList().orEmpty()
+        val hiddenImported = draft?.hiddenImportedKeys?.toSet().orEmpty()
         viewModelScope.launch {
         try {
-        withContext(Dispatchers.IO) { store.save(
-            AgendaDayNote(
+        withContext(Dispatchers.IO) {
+            val primary = AgendaDayNote(
                 date = date,
                 text = text.trim(),
                 strokes = strokes,
                 imagePaths = imagePaths,
                 manualAppointments = manualAppointments,
+                hiddenImportedKeys = hiddenImported,
                 updatedAt = System.currentTimeMillis()
             )
-        )
+            store.saveAll(AgendaNoteAppointments.transferRecords(primary,store.records.value,transfers))
         }
         selectedDate.value = null
         draft = null

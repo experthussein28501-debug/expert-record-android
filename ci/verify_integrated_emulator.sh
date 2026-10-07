@@ -30,7 +30,7 @@ adb pull /sdcard/khabir-ui.xml /tmp/khabir-ui.xml >/dev/null
 python3 - <<'PY' > /tmp/tap.txt
 import re, xml.etree.ElementTree as ET
 root=ET.parse("/tmp/khabir-ui.xml").getroot()
-labels=("فتح النسخة التجريبية","تخطي","تخطي والدخول للتجربة")
+labels=("استخدام بدون حساب — بدون مدة انتهاء",)
 for label in labels:
     for n in root.iter("node"):
         if n.attrib.get("text","") == label:
@@ -41,7 +41,20 @@ raise SystemExit("No supported trial entry button found")
 PY
 read -r x y < /tmp/tap.txt
 adb shell input tap "$x" "$y"
-sleep 3
+sleep 1
+adb shell uiautomator dump /sdcard/guest-consent.xml >/dev/null
+adb pull /sdcard/guest-consent.xml /tmp/guest-consent.xml >/dev/null
+python3 - <<'CONSENT' > /tmp/tap-consent.txt
+import re, xml.etree.ElementTree as ET
+for n in ET.parse('/tmp/guest-consent.xml').getroot().iter('node'):
+    if n.attrib.get('text') == 'ابدأ الاستخدام':
+        x1,y1,x2,y2=map(int,re.findall(r'\d+',n.attrib['bounds']))
+        print((x1+x2)//2,(y1+y2)//2);break
+else: raise SystemExit('Local use confirmation missing')
+CONSENT
+read -r x y < /tmp/tap-consent.txt
+adb shell input tap "$x" "$y"
+sleep 5
 
 adb shell uiautomator dump /sdcard/khabir-home.xml
 adb pull /sdcard/khabir-home.xml "$review_dir/home.xml"
@@ -175,10 +188,39 @@ adb shell uiautomator dump /sdcard/khabir-notifications.xml
 adb pull /sdcard/khabir-notifications.xml "$review_dir/notifications.xml"
 grep -q 'الإخطارات وسركي الإخطارات' "$review_dir/notifications.xml"
 
+# Cold start after the legacy deadline must keep local access and every data store.
+adb shell am force-stop "$pkg"
+adb shell "run-as $pkg sh -c 'mkdir -p files/guest_workspace; echo guest > files/guest_workspace/expiry-marker; echo account > files/account-marker'"
+python3 - <<'EXPIRY'
+import time, sqlite3
+from pathlib import Path
+path=Path('/tmp/guest-expired.db')
+path.unlink(missing_ok=True)
+now=int(time.time()*1000)
+with sqlite3.connect(path) as db:
+    db.execute('CREATE TABLE trial_state (name TEXT PRIMARY KEY, value INTEGER NOT NULL)')
+    db.executemany('INSERT INTO trial_state VALUES (?, ?)', [('started',now-7*24*60*60*1000-1000),('last_seen',now),('boot',-2),('guest_mode',1)])
+EXPIRY
+adb push /tmp/guest-expired.db /data/local/tmp/guest-expired.db >/dev/null
+adb shell "run-as $pkg sh -c 'cat /data/local/tmp/guest-expired.db > databases/khabir_guest_trial_control.db'"
+adb shell am start -W -n "$pkg/com.khabir.app.MainActivity"
+sleep 3
+adb shell uiautomator dump /sdcard/guest-expired-ui.xml >/dev/null
+adb pull /sdcard/guest-expired-ui.xml "$review_dir/guest-expired-ui.xml" >/dev/null
+python3 - <<'EXPIRED_UI'
+from pathlib import Path
+s=Path('release-output/integration-review-0.9.0/guest-expired-ui.xml').read_text()
+assert 'القضايا' in s
+assert 'استخدام محلي بدون مدة انتهاء' in s
+assert 'انتهت تجربة الأسبوع' not in s
+assert 'تجربة بدون حساب — ٧ أيام' not in s
+EXPIRED_UI
+adb shell "run-as $pkg sh -c 'set -e; test -e files/guest_workspace/expiry-marker; test -e databases/guest_khabir.db; test -e files/account-marker'"
+adb exec-out screencap -p > "$review_dir/guest-expired-login.png"
+
 # Finally run the bundled Arabic OCR instrumented test.
 ./gradlew --no-daemon -PKHABIR_TEST_BUILD_TYPE=debug :app:connectedCombinedDebugAndroidTest --stacktrace
 
 cmp "$trial_apk" "$review_dir/verified-optimized.apk"
 "$(dirname "$AAPT")/apksigner" verify --verbose "$review_dir/verified-optimized.apk" > "$review_dir/signature-verification.txt"
 echo "Integrated optimized app UI + Arabic OCR verification passed."
-
